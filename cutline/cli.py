@@ -126,6 +126,41 @@ def command_doctor(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def command_kit(args: argparse.Namespace) -> int:
+    from .kit import build_kit
+    from .settings import PROJECTS_DIR
+    from .store import ProjectStore
+
+    store = ProjectStore(PROJECTS_DIR)
+    project_id = args.project
+    if not project_id:
+        projects = sorted(store.list(), key=lambda item: item.get("updated") or "", reverse=True)
+        ready = [item for item in projects if item.get("status") == "done"]
+        if not ready:
+            print("No finished cuts yet. Build one in the studio first.")
+            return 1
+        project_id = ready[0]["id"]
+        print(f"Using the most recent cut: {ready[0].get('name') or project_id}")
+    if not store.exists(project_id):
+        print(f"No project with id {project_id}.")
+        return 1
+    try:
+        result = build_kit(store, project_id, dst_dir=args.out)
+    except FileNotFoundError as exc:
+        print(str(exc))
+        return 1
+    data = result.summary()
+    print("─" * 58)
+    print(f"  Test kit:  {data['zip']}")
+    print(f"  Size:      {data['bytes'] / 1e6:.1f} MB")
+    print(f"  Media:     {data['copied']} copied, {data['linked']} linked, {data['missing'] or 'nothing'} missing")
+    print("─" * 58)
+    print("  Unzip it, then File → Import → Timeline in Resolve.")
+    if not result.portable:
+        print("  Some media was too large to copy and stayed linked — see READ-ME-FIRST.md.")
+    return 0
+
+
 def command_clean(args: argparse.Namespace) -> int:
     from .settings import DATA_DIR, PROJECTS_DIR, DEMO_DIR
 
@@ -168,6 +203,11 @@ def main(argv: list[str] | None = None) -> int:
 
     doctor = sub.add_parser("doctor", help="Check the local install")
     doctor.set_defaults(func=command_doctor)
+
+    kit = sub.add_parser("kit", help="Package a cut for a Resolve import on another machine")
+    kit.add_argument("project", nargs="?", help="Project id (defaults to the newest finished cut)")
+    kit.add_argument("--out", type=str, default=None, help="Folder to write the kit into")
+    kit.set_defaults(func=command_kit)
 
     clean = sub.add_parser("clean", help="Remove generated files")
     clean.add_argument("--uploads", action="store_true", help="Delete uploaded media copies")

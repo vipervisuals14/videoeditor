@@ -4,6 +4,7 @@ import io
 import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -128,3 +129,41 @@ def test_create_project_validation(client):
 def test_unknown_project_returns_404(client):
     assert client.get("/api/projects/abcdef123456").status_code == 404
     assert client.get("/api/projects/../../etc").status_code in (400, 404)
+
+
+@pytest.fixture(scope="module")
+def finished_project(client):
+    """One real build, reused by the kit test."""
+    folder = Path(tempfile.mkdtemp(prefix="cutline-kit-"))
+    clip = folder / "take.mp4"
+    proc = subprocess.run([
+        ffmpeg_exe(), "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30:duration=3",
+        "-f", "lavfi", "-i", "sine=frequency=220:duration=3",
+        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-shortest", str(clip),
+    ], capture_output=True)
+    assert proc.returncode == 0, proc.stderr.decode()[-400:]
+    created = client.post("/api/projects", json={
+        "mode": "social", "sources": [{"path": str(clip), "name": "take.mp4"}],
+        "config": {"silence": {"enabled": True}, "captions": {"enabled": False}},
+    })
+    assert created.status_code == 200, created.text
+    project_id = created.json()["data"]["id"]
+    for _ in range(240):
+        payload = client.get(f"/api/projects/{project_id}").json()["data"]
+        if payload["status"] == "done" and not payload.get("running"):
+            return project_id
+        if payload["status"] == "failed":
+            pytest.fail(payload.get("error") or "build failed")
+        time.sleep(0.25)
+    pytest.fail("the build never finished")
+
+
+def test_kit_endpoint_returns_a_zip(client, finished_project):
+    response = client.get(f"/api/projects/{finished_project}/kit")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert response.content[:2] == b"PK"
+    assert len(response.content) > 1000
+    assert client.get("/api/projects/abcdef123456/kit").status_code == 404

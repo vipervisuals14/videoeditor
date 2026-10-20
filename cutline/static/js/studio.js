@@ -1569,6 +1569,41 @@ function openResult(project) {
       el("span", { class: "arrow", text: "↓" }),
     ]));
   });
+  const kitButton = el("button", { class: "download", type: "button" }, [
+    el("span", { class: "file-ico", text: "ZIP" }),
+    el("div", {}, [
+      el("b", { text: "Resolve test kit" }),
+      el("span", { text: "Timeline + every clip it uses, ready to import anywhere" }),
+    ]),
+    el("span", { class: "arrow", text: "↓" }),
+  ]);
+  kitButton.addEventListener("click", async () => {
+    const label = kitButton.querySelector("b");
+    const original = label.textContent;
+    label.textContent = "Packing…";
+    kitButton.disabled = true;
+    try {
+      const response = await fetch(`/api/projects/${id}/kit`);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "The kit could not be built.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = el("a", { href: url, download: "cutline-test-kit.zip" });
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      toast("Test kit packed — unzip it, then File → Import → Timeline.", "ok", 7000);
+    } catch (error) {
+      toast(error.message, "error");
+    } finally {
+      kitButton.disabled = false;
+      label.textContent = original;
+    }
+  });
+  downloads.append(kitButton);
   const folderButton = el("button", { class: "download", type: "button" }, [
     el("span", { class: "file-ico", text: "DIR" }),
     el("div", {}, [el("b", { text: "Project folder" }), el("span", { text: project.paths?.folder || "" })]),

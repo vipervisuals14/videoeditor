@@ -33,6 +33,7 @@ from .ffmpeg import (
     thumbnail,
     waveform_image,
 )
+from .kit import build_kit
 from .pipeline import run_build, run_recaption
 from .settings import (
     ASPECTS,
@@ -701,6 +702,30 @@ def project_asset(project_id: str, name: str, download: bool = False):
     if download:
         headers["Content-Disposition"] = f'attachment; filename="cutline-{safe_filename(candidate.name)}"'
     return FileResponse(candidate, media_type=media_types.get(candidate.suffix.lower(), "application/octet-stream"), headers=headers)
+
+
+@app.get("/api/projects/{project_id}/kit")
+def project_kit(project_id: str):
+    try:
+        store.load(project_id)
+    except Exception:
+        raise HTTPException(404)
+    try:
+        result = build_kit(store, project_id)
+    except FileNotFoundError as exc:
+        return _fail(str(exc), 404)
+    except Exception as exc:
+        return _fail(f"The test kit could not be built: {str(exc)[:300]}", 500)
+    project_name = store.load(project_id).get("name") or "cutline"
+    if "test kit" in project_name.lower():
+        name = safe_filename(project_name) + ".zip"
+    else:
+        name = safe_filename(f"{project_name} test kit") + ".zip"
+    return FileResponse(
+        result.zip_path,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 @app.get("/api/projects/{project_id}/manifest")

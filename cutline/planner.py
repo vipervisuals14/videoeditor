@@ -302,17 +302,18 @@ def _collage_spec(plan: EditPlan) -> dict | None:
 
 
 def _add_vlog_hud(plan: EditPlan, config: dict) -> None:
+    """HUD and collage are independent switches, not just viewfinder defaults."""
     vlog = config.get("vlog", {})
-    if plan.mode != "vlog" or vlog.get("look") != "viewfinder":
+    if plan.mode != "vlog":
         return
-    if vlog.get("hud", True):
+    if vlog.get("hud"):
         location = str(vlog.get("location") or "").strip()
         plan.hud = {
             "location": location or "A CUTLINE FILM",
             "label": "REC",
             "grid": True,
         }
-    if vlog.get("collage", True):
+    if vlog.get("collage"):
         plan.collage = _collage_spec(plan)
 
 

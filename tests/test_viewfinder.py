@@ -154,3 +154,87 @@ def test_viewfinder_build_writes_the_two_overlay_tracks(tmp_path, media):
     summary = json.loads((folder / "manifest.json").read_text())["summary"]
     assert summary["mode"] == "vlog"
     assert not summary["titles"]
+
+
+def test_kit_is_portable_and_keeps_every_track(tmp_path):
+    """A kit unzips anywhere: relative media paths, all layers present."""
+    import zipfile
+
+    from cutline.kit import build_kit
+    from cutline.pipeline import run_build
+    from cutline.store import ProjectStore
+
+    data = tmp_path / "data"
+    store = ProjectStore(data)
+    config = normalize_config({
+        "mode": "vlog",
+        "silence": {"enabled": False},
+        "captions": {"enabled": False},
+        "vlog": {"look": "journal", "title": "Test film", "hud": True, "collage": True},
+    }, "vlog")
+    project = store.create(
+        config,
+        [{"id": "s01", "path": str(_clip(tmp_path)), "name": "take.mp4", "duration": 3.0,
+          "width": 320, "height": 180, "fps": 30.0, "has_audio": False, "has_video": True}],
+        name="Kit cut",
+    )
+    run_build(store, project["id"])
+
+    result = build_kit(store, project["id"], dst_dir=tmp_path / "kit")
+    assert result.portable
+    assert result.zip_path.exists()
+
+    archive = zipfile.ZipFile(result.zip_path)
+    names = archive.namelist()
+    assert any(name.endswith("timeline.otio") for name in names)
+    assert any(name.endswith("READ-ME-FIRST.md") for name in names)
+    assert any("media/" in name and name.endswith(".mp4") for name in names)
+
+    unpacked = tmp_path / "unpacked"
+    archive.extractall(unpacked)
+    root = unpacked / "cutline-test-kit"
+    timeline = adapters.read_from_file(str(root / "timeline.otio"))
+    for track in timeline.tracks:
+        for item in track:
+            if isinstance(item, schema.Clip):
+                url = item.media_reference.target_url
+                assert not url.startswith("/"), f"absolute path leaked: {url}"
+                assert (root / url).exists(), f"missing media: {url}"
+    # The synthetic take has no audio, so A1 is correctly absent. Titles and the
+    # viewfinder layers coexist: the switches are independent of the look.
+    assert [track.name.split(" ")[0] for track in timeline.tracks] == ["V1", "V4", "V5", "V6"]
+    assert "Import → Timeline" in (root / "READ-ME-FIRST.md").read_text()
+
+
+def test_kit_falls_back_to_linking_when_media_is_too_large(tmp_path):
+    from cutline.kit import build_kit
+    from cutline.pipeline import run_build
+    from cutline.store import ProjectStore
+
+    store = ProjectStore(tmp_path / "data")
+    config = normalize_config({"mode": "vlog", "silence": {"enabled": False},
+                               "captions": {"enabled": False}}, "vlog")
+    project = store.create(
+        config,
+        [{"id": "s01", "path": str(_clip(tmp_path)), "name": "take.mp4", "duration": 3.0,
+          "width": 320, "height": 180, "fps": 30.0, "has_audio": False, "has_video": True}],
+        name="Big cut",
+    )
+    run_build(store, project["id"])
+    result = build_kit(store, project["id"], dst_dir=tmp_path / "kit", copy_limit=1)
+    assert not result.portable
+    assert result.linked
+    assert "Linked media" in (result.folder / "READ-ME-FIRST.md").read_text()
+
+
+def _clip(folder):
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "take.mp4"
+    if not path.exists():
+        proc = subprocess.run([
+            ffmpeg_exe(), "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30:duration=3",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-pix_fmt", "yuv420p", str(path),
+        ], capture_output=True)
+        assert proc.returncode == 0, proc.stderr.decode()[-400:]
+    return path

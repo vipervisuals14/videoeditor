@@ -53,6 +53,26 @@ Captions and titles are real QuickTime movies with an alpha channel, so they beh
 like any clip you would drop on a track. You can slip a single card, retype it, or
 delete the whole track without touching the picture.
 
+### The test kit
+
+Every finished cut also packs into a **test kit**: a zip with the timeline and
+every file it references, rewritten to relative paths so it imports on any
+machine — no Cutline install needed on the far side.
+
+Download it from the result panel (**Resolve test kit**) or from the CLI:
+
+```bash
+cutline kit                 # newest finished cut
+cutline kit 9c69ccaeb7c345  # a specific project
+```
+
+Unzip anywhere, keep `timeline.otio` beside `media/`, then **File → Import →
+Timeline**. The kit's `READ-ME-FIRST.md` lists the exact things worth checking
+(track order, alpha compositing, trimmability, source timecodes).
+
+If a project links camera originals totalling more than 2 GB, the kit links
+instead of copying and lists what must stay online.
+
 ## Quick start
 
 ```bash
@@ -148,6 +168,7 @@ cutline serve          # start the studio (default)
 cutline serve --port 9000 --no-browser
 cutline doctor         # check FFmpeg, fonts, OTIO, and the speech engine
 cutline demo --force   # regenerate the demo footage
+cutline kit            # package the newest cut for a Resolve import elsewhere
 cutline clean --uploads
 ```
 
@@ -174,7 +195,7 @@ cutline/
   timeline.py       OTIO writer (contiguous tracks, source ranges intact)
   planner.py        edit decision lists for all three modes
   static/           the studio UI (no build step, no framework)
-tests/              63 tests across analysis, planning, rendering, and the API
+tests/              66 tests across analysis, planning, rendering, and the API
 docs/images/        screenshots used in this README
 ```
 
