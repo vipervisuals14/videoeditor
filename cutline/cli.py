@@ -286,6 +286,11 @@ def command_resolve_status(args: argparse.Namespace) -> int:
 def command_resolve_agent(args: argparse.Namespace) -> int:
     from .resolve_bridge import render_agent, write_agent
 
+    if __import__("sys").platform != "darwin" and not args.print_only:
+        print("The login item is macOS-only. On Windows or Linux, keep the watcher")
+        print("running yourself:  cutline resolve-watch")
+        return 1
+
     root = _bridge_root(args)
     if args.print_only:
         print(render_agent(Path(root)))

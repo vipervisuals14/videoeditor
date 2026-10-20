@@ -47,8 +47,8 @@ From the Cutline folder:
 
 ```bash
 ./install.sh                       # first time only: creates .venv, checks tools
-.venv/bin/python -m cutline resolve-install
-.venv/bin/python -m cutline resolve-agent
+./bin/cutline resolve-install
+./bin/cutline resolve-agent
 launchctl unload ~/Library/LaunchAgents/com.cutline.watch.plist 2>/dev/null
 launchctl load   ~/Library/LaunchAgents/com.cutline.watch.plist
 ```
@@ -64,7 +64,7 @@ launchctl load   ~/Library/LaunchAgents/com.cutline.watch.plist
 
 `resolve-agent` writes a login item that keeps the watcher alive, so the engine
 is already running when you sit down. If you would rather not have a background
-item, run `.venv/bin/python -m cutline resolve-watch` in a terminal instead.
+item, run `./bin/cutline resolve-watch` in a terminal instead.
 
 **Restart Resolve once.** It reads the Scripts folder at launch, not while
 running. After that the entries appear under **Workspace → Scripts**:

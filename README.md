@@ -82,8 +82,8 @@ menu, and its Lua has no UI toolkit. So the engine lives outside Resolve and onl
 the import lives inside it:
 
 ```bash
-.venv/bin/python -m cutline resolve-install   # writes the Workspace → Scripts entries
-.venv/bin/python -m cutline resolve-agent     # keeps the watcher running at login
+./bin/cutline resolve-install   # writes the Workspace → Scripts entries
+./bin/cutline resolve-agent     # keeps the watcher running at login
 ```
 
 1. Drop clips into `~/Movies/Cutline/inbox` (an optional matching `.srt` is picked up).
