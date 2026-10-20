@@ -103,6 +103,9 @@ Full setup, the free-edition limits, and troubleshooting:
 
 ## Quick start
 
+New to this? **[INSTALL.md](INSTALL.md)** is the step-by-step macOS walkthrough,
+including the Resolve menu setup.
+
 ```bash
 git clone <your-repo> cutline && cd cutline
 ./install.sh          # macOS / Linux
@@ -233,7 +236,7 @@ cutline/
   planner.py        edit decision lists for all three modes
   resolve_bridge.py Resolve menu scripts, drop-folder watcher, login item
   static/           the studio UI (no build step, no framework)
-tests/              79 tests across analysis, planning, rendering, the API, and
+tests/              81 tests across analysis, planning, rendering, the API, and
                     the Lua bridge (driven by a fake Resolve in a Lua runtime)
 docs/inside-resolve.md  the in-app setup and the free-edition scripting limits
 docs/images/        screenshots used in this README

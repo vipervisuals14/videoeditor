@@ -1,0 +1,163 @@
+# Installing Cutline on macOS
+
+Ten minutes, most of it waiting for Python packages. You end up with Cutline in
+Resolve's **Workspace → Scripts** menu and a drop folder for footage.
+
+## 0. What you need
+
+- macOS (Intel or Apple Silicon)
+- DaVinci Resolve — **Free is fine**, 18.5 or newer (built against 21.x)
+- **Python 3.10 or newer**
+- Internet for the first install only
+
+Check Python first. Open **Terminal** (Applications → Utilities → Terminal) and run:
+
+```bash
+python3 --version
+```
+
+If it prints `3.9.x` or lower, install Python from
+[python.org/downloads](https://www.python.org/downloads/macos/) (3.11 or 3.12 is
+fine), then open a **new** Terminal window and check again. Do not skip this:
+macOS ships 3.9, and the engine needs 3.10+.
+
+## 1. Get the Cutline folder
+
+**Option A — download (no git needed).** Download this zip:
+
+<https://github.com/vipervisuals14/videoeditor/archive/refs/heads/arena/baa7f9aa-videoeditor.zip>
+
+It unzips to `videoeditor-arena-baa7f9aa-videoeditor`. Move it somewhere stable —
+your home folder is the best place — and rename it:
+
+```bash
+cd ~/Downloads
+unzip videoeditor-arena-baa7f9aa-videoeditor.zip
+mv videoeditor-arena-baa7f9aa-videoeditor ~/cutline
+cd ~/cutline
+```
+
+**Option B — git.**
+
+```bash
+cd ~
+git clone -b arena/baa7f9aa-videoeditor https://github.com/vipervisuals14/videoeditor.git cutline
+cd ~/cutline
+```
+
+Keep it at `~/cutline`, not Desktop or Documents. A background watcher reading
+those folders can hit macOS privacy prompts; your home folder avoids that.
+
+## 2. Install the engine
+
+```bash
+bash install.sh
+```
+
+Use `bash install.sh` rather than `./install.sh` — that avoids the “permission
+denied” message if the zip lost its executable bit.
+
+This creates `.venv/`, installs FFmpeg and the timeline libraries, tries to add
+local speech-to-text, and writes a launcher. It takes a few minutes. If the
+speech model fails to install, captions still work from an `.srt` file.
+
+## 3. Put Cutline inside Resolve
+
+```bash
+./bin/cutline resolve-install
+./bin/cutline resolve-agent
+```
+
+- `resolve-install` writes three small scripts into Resolve's user Scripts folder
+  and creates the drop folder at `~/Movies/Cutline`.
+- `resolve-agent` installs **and starts** a background watcher, so builds happen
+  without a Terminal window open.
+
+Then **quit DaVinci Resolve completely and reopen it.** Resolve only reads the
+Scripts folder at launch. This is the step people miss.
+
+## 4. Check that it is wired up
+
+In Resolve: **Workspace → Scripts → Cutline - check bridge**.
+
+A timeline named `Cutline: bridge ready (Cutline import)` appears in the media
+pool. That is the success signal — the free edition mutes `print()`, so a
+timeline name is how the script reports back.
+
+If the menu only shows `Cutline - import latest`, that is fine too; run it with
+an empty drop folder and it creates `Cutline: nothing imported (run resolve-status)`.
+
+## 5. Make your first cut
+
+1. Put a clip in `~/Movies/Cutline/inbox/`
+   (optional: an `.srt` with the same name becomes the captions).
+2. Wait 10–30 seconds. Check progress any time:
+
+   ```bash
+   ./bin/cutline resolve-status
+   ```
+
+   You want `Latest: …` with a duration, clip count, and track list.
+3. In Resolve: **Workspace → Scripts → Cutline - import latest**.
+
+The cut lands in the media pool and opens in the Edit page: program on V1,
+transitions on V2, captions on V3, collage on V5, viewfinder on V6, audio on A1.
+
+## Changing the look or mode
+
+Edit `~/Movies/Cutline/config.json` in any text editor. `mode` is `social`,
+`vlog`, or `music`; vlogs choose `look` `journal` or `viewfinder`. Changes apply
+on the next build. The full key table is in
+[inside-resolve.md](inside-resolve.md).
+
+## Updating later
+
+**If you downloaded the zip:** download the newer zip and replace `~/cutline`,
+then re-run:
+
+```bash
+./bin/cutline resolve-install
+```
+
+The menu scripts bake in absolute paths, so they must be rewritten if the folder
+moves or is replaced.
+
+**If you cloned:** `cd ~/cutline && git pull`, then `bash install.sh` only if
+`requirements.txt` changed, then `./bin/cutline resolve-install`.
+
+## Troubleshooting
+
+**`python3 --version` is 3.9.** Install Python 3.10+ from python.org and open a
+new Terminal. `install.sh` picks the newest `python3.x` it finds.
+
+**`bash: install.sh: No such file or directory`.** You are not in the Cutline
+folder. `cd ~/cutline` first; `ls` should show `install.sh` and `cutline/`.
+
+**No Cutline entries in the Scripts menu.** Resolve was not restarted, or the
+files went to a different user account's folder. Check:
+
+```bash
+ls ~/Library/Application\ Support/Blackmagic\ Design/DaVinci\ Resolve/Fusion/Scripts/Utility/
+```
+
+You should see `Cutline - import latest.lua` and two companions. If they are
+there, quit Resolve (Cmd+Q, not just close the window) and reopen.
+
+**`resolve-agent` says the login item failed to load.** Load it by hand:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.cutline.watch.plist
+```
+
+If it still refuses, skip the background service and keep a Terminal open with
+`./bin/cutline resolve-watch` while you work.
+
+**Nothing happens on import.** The engine may have nothing built yet —
+`./bin/cutline resolve-status` says which. If it shows a finished cut but the
+import still refuses, use **File → Import → Timeline** on
+`~/Movies/Cutline/latest/timeline.otio`; that path works on every Resolve build.
+Tell me your exact Resolve version in that case.
+
+**Captions are missing.** Either no `.srt` was supplied and speech-to-text is not
+installed, or the clip has no audio. Drop an `.srt` beside the clip and rebuild:
+`./bin/cutline resolve-build`.

@@ -118,6 +118,23 @@ def test_install_removes_pre_rename_scripts(tmp_path: Path):
     assert (scripts / "Cutline - import latest.lua").exists()
 
 
+def test_login_item_install_is_refused_off_macos(tmp_path: Path, monkeypatch):
+    import sys
+
+    from cutline.cli import main
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert main(["resolve-agent", "--root", str(tmp_path)]) == 1
+
+
+def test_load_agent_reports_a_missing_plist(tmp_path: Path):
+    from cutline.resolve_bridge import load_agent
+
+    ok, message = load_agent(tmp_path / "missing.plist")
+    assert ok is False
+    assert "No login item" in message
+
+
 def test_status_command_reports_before_and_after_a_build(tmp_path: Path, drop_media, capsys):
     from cutline.cli import main
 

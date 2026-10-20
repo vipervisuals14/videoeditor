@@ -195,6 +195,11 @@ def command_resolve_install(args: argparse.Namespace) -> int:
     print()
     print("  Drop footage into the inbox folder; each change builds a cut and")
     print("  publishes it to latest/. The menu entry imports whatever is there.")
+    if not result.get("folder_existed", True):
+        print()
+        print("  That folder did not exist yet, which usually means Resolve has never")
+        print("  been launched on this account. Open Resolve once, quit it, and run")
+        print("  this command again so the entries are certainly in the right place.")
     if not args.quiet:
         print()
         print("  Resolve only reads the Scripts folder at launch — restart it once.")
@@ -244,7 +249,13 @@ def command_resolve_build(args: argparse.Namespace) -> int:
 
 
 def command_resolve_status(args: argparse.Namespace) -> int:
-    from .resolve_bridge import inbox_signature, last_built_signature, latest_state, load_watch_config
+    from .resolve_bridge import (
+        agent_running,
+        inbox_signature,
+        last_built_signature,
+        latest_state,
+        load_watch_config,
+    )
 
     root = Path(_bridge_root(args))
     state = latest_state(root)
@@ -274,6 +285,8 @@ def command_resolve_status(args: argparse.Namespace) -> int:
     look = (config.get("vlog") or {}).get("look") if config.get("mode") == "vlog" else None
     print(f"  Config:  {root / 'config.json'}  (mode: {config.get('mode')}"
           + (f", look: {look}" if look else "") + ")")
+    if __import__("sys").platform == "darwin":
+        print(f"  Watcher: {'running' if agent_running() else 'not running (cutline resolve-agent)'}")
     for warning in (state.get("warnings") or [])[:4]:
         print(f"  note:    {warning}")
     for error in state.get("errors") or []:
@@ -284,7 +297,7 @@ def command_resolve_status(args: argparse.Namespace) -> int:
 
 
 def command_resolve_agent(args: argparse.Namespace) -> int:
-    from .resolve_bridge import render_agent, write_agent
+    from .resolve_bridge import load_agent, render_agent, write_agent
 
     if __import__("sys").platform != "darwin" and not args.print_only:
         print("The login item is macOS-only. On Windows or Linux, keep the watcher")
@@ -301,8 +314,17 @@ def command_resolve_agent(args: argparse.Namespace) -> int:
         print(f"Could not write the login item: {exc}")
         return 1
     print(f"Login item written: {path}")
-    print("Load it now (and on every login):")
-    print(f"  launchctl unload {path} 2>/dev/null; launchctl load {path}")
+    if args.no_load:
+        print("Load it when you want:")
+        print(f"  launchctl load {path}")
+    else:
+        ok, message = load_agent(path)
+        print(message)
+        if ok:
+            print("The watcher is running now and starts again at every login.")
+        else:
+            print("Load it by hand:")
+            print(f"  launchctl load {path}")
     print("Stop it:")
     print(f"  launchctl unload {path}")
     return 0
@@ -379,6 +401,7 @@ def main(argv: list[str] | None = None) -> int:
     agent = sub.add_parser("resolve-agent", help="Install the macOS login item for the watcher")
     agent.add_argument("--root", type=str, default=None, help="Drop-box folder (default ~/Movies/Cutline)")
     agent.add_argument("--print", dest="print_only", action="store_true", help="Print the plist instead of writing it")
+    agent.add_argument("--no-load", action="store_true", help="Write the login item but do not start it now")
     agent.set_defaults(func=command_resolve_agent)
 
     clean = sub.add_parser("clean", help="Remove generated files")

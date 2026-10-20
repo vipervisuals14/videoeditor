@@ -43,14 +43,12 @@ You still press one menu item. You no longer leave the app to get a cut.
 
 ## Setup (macOS, once)
 
-From the Cutline folder:
+From the Cutline folder (full walkthrough: [../INSTALL.md](../INSTALL.md)):
 
 ```bash
 ./install.sh                       # first time only: creates .venv, checks tools
-./bin/cutline resolve-install
-./bin/cutline resolve-agent
-launchctl unload ~/Library/LaunchAgents/com.cutline.watch.plist 2>/dev/null
-launchctl load   ~/Library/LaunchAgents/com.cutline.watch.plist
+./bin/cutline resolve-install    # writes the Workspace > Scripts entries
+./bin/cutline resolve-agent      # installs and starts the background watcher
 ```
 
 `resolve-install` writes three small files into Resolve's user scripts folder:
@@ -62,8 +60,8 @@ launchctl load   ~/Library/LaunchAgents/com.cutline.watch.plist
   Cutline - import latest (Studio).py   ← the same import for Studio, ignored by Free
 ```
 
-`resolve-agent` writes a login item that keeps the watcher alive, so the engine
-is already running when you sit down. If you would rather not have a background
+`resolve-agent` writes a login item that keeps the watcher alive and starts it
+immediately, so the engine is already running when you sit down. If you would rather not have a background
 item, run `./bin/cutline resolve-watch` in a terminal instead.
 
 **Restart Resolve once.** It reads the Scripts folder at launch, not while

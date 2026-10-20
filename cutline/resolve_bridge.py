@@ -236,6 +236,7 @@ def install_scripts(root: str | Path | None = None, target: str | Path | None = 
     root = Path(root).expanduser() if root else default_root()
     write_drop_readme(root)
     destination = scripts_dir(target)
+    existed = destination.exists()
     destination.mkdir(parents=True, exist_ok=True)
 
     latest = root / "latest"
@@ -256,7 +257,7 @@ def install_scripts(root: str | Path | None = None, target: str | Path | None = 
             pass
     return {"folder": str(destination), "scripts": [str(import_path), str(diag_path), str(studio_path)],
             "otio": str(otio), "root": str(root), "readme": str(root / "READ-ME.txt"),
-            "agent": str(launch_agent_path())}
+            "agent": str(launch_agent_path()), "folder_existed": existed}
 
 
 # ---------------------------------------------------------------------------
@@ -530,3 +531,32 @@ def write_agent(root: Path, python: str | None = None, cwd: str | None = None) -
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_agent(root, python, cwd), encoding="utf-8")
     return path
+
+
+def load_agent(path: Path | None = None) -> tuple[bool, str]:
+    """(Re)start the login item now so nobody has to copy launchctl by hand."""
+    import os
+    import subprocess
+
+    path = path or launch_agent_path()
+    if not path.exists():
+        return False, f"No login item at {path}."
+    subprocess.run(["launchctl", "unload", str(path)], capture_output=True, text=True)
+    result = subprocess.run(["launchctl", "load", str(path)], capture_output=True, text=True)
+    if result.returncode == 0:
+        return True, "Login item loaded."
+    # macOS 13+ prefers bootstrap; try it when the legacy verb is refused.
+    domain = f"gui/{os.getuid()}"
+    retry = subprocess.run(["launchctl", "bootstrap", domain, str(path)],
+                           capture_output=True, text=True)
+    if retry.returncode == 0:
+        return True, "Login item bootstrapped."
+    detail = (retry.stderr or result.stderr or "").strip()
+    return False, detail or "launchctl refused the login item."
+
+
+def agent_running(label: str = AGENT_LABEL) -> bool:
+    import subprocess
+
+    result = subprocess.run(["launchctl", "list", label], capture_output=True, text=True)
+    return result.returncode == 0
