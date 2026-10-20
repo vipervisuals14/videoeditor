@@ -95,6 +95,22 @@ say "Python $("$PYTHON" -c 'import platform; print(platform.python_version())' 2
 plain "If this says 3.13 or newer, the install may not find all packages; 3.12 is safest."
 
 # --- 3. Environment -------------------------------------------------------
+# A half-built environment from an earlier, aborted run (or from a different
+# Python version) causes confusing package errors. Rebuild it when it does not
+# match the Python we picked.
+if [ -d .venv ] && [ -f .venv/pyvenv.cfg ]; then
+  VENV_MM="$(sed -n 's/^version *= *\([0-9]*\.[0-9]*\).*/\1/p' .venv/pyvenv.cfg | head -1)"
+  WANT_MM="$("$PYTHON" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+  if [ -n "$VENV_MM" ] && [ "$VENV_MM" != "$WANT_MM" ]; then
+    say "Replacing the old environment (Python $VENV_MM to $WANT_MM)…"
+    if [ "$DRY" = "1" ]; then
+      plain "[dry-run] rm -rf .venv"
+    else
+      rm -rf .venv
+    fi
+  fi
+fi
+
 if [ ! -d .venv ]; then
   say "Creating the local environment (one time only)…"
   if ! run "$PYTHON" -m venv .venv; then
