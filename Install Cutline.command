@@ -42,7 +42,7 @@ ROOT=""
 if [ -f "./install.sh" ] && [ -d "./cutline" ]; then
   ROOT="$PWD"
 else
-  for candidate in "$HOME/cutline" "$HOME/Cutline" "$HOME/Downloads/cutline"; do
+  for candidate in "$HOME/cutline" "$HOME/Cutline" "$HOME/Downloads/cutline" "$HOME"/videoeditor-*; do
     if [ -f "$candidate/install.sh" ] && [ -d "$candidate/cutline" ]; then
       ROOT="$candidate"
       break
