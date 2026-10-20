@@ -79,7 +79,7 @@ instead of copying and lists what must stay online.
 
 Free Resolve 21.1 runs Lua menu scripts but no longer runs Python from the Scripts
 menu, and its Lua has no UI toolkit. So the engine lives outside Resolve and only
-the import lives inside it:
+the import lives inside it. After the one-time `./install.sh` (see Quick start):
 
 ```bash
 ./bin/cutline resolve-install   # writes the Workspace → Scripts entries
@@ -91,7 +91,7 @@ the import lives inside it:
 3. In Resolve: **Workspace → Scripts → Cutline - import latest**.
 
 The new timeline lands in the media pool and opens in the Edit page. Nothing is
-baked: it is the same seven-track stack as a hand import.
+baked: it is the same track stack as a hand import, only the tracks the cut uses.
 
 `Cutline - check bridge` proves the menu entry can reach Resolve's API,
 `cutline resolve-build` forces a build without waiting for the watcher, and
