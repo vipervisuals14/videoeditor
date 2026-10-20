@@ -3,6 +3,16 @@
 Ten minutes, most of it waiting for packages. You end up with Cutline in
 Resolve's **Workspace → Scripts** menu and a drop folder for footage.
 
+## Two folders, two jobs
+
+After installing you will have two folders with similar names. That is correct;
+they do different things and neither should be moved into the other.
+
+| Folder | What it is |
+|---|---|
+| `~/cutline` | The program: code, installer, `.venv`. Lives in your Home folder. |
+| `~/Movies/Cutline` | Your work folder: `inbox/` (drop clips), `latest/` (the built timeline), `config.json`, `logs/`. Created by the installer. |
+
 ## Easiest way — no Terminal
 
 If Terminal is not your thing, use the one-click installer:
