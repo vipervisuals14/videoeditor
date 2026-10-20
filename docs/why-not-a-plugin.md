@@ -10,12 +10,24 @@ route Cutline takes is the one Blackmagic left open.
 | OpenFX effect | sometimes, often watermarked | No. It processes one clip's pixels on a node. It cannot read a whole take, cut it, or create tracks. |
 | Fusion macro / `.setting` template | yes | No. It is a compositing graph inside one clip or title. |
 | DCTL | Studio only | No. Pixel maths on a single clip. |
-| Native scripting (`resolve` API, Python/Lua) | **no** — external scripting is Studio-only, and from 21.1 Python scripting is removed from the free build entirely | Yes — but gated. |
+| Native scripting (`resolve` API) | **partly** — Lua menu scripts still run; Python menu scripts were removed in 21.1; external scripting, Workflow Integrations, and MCP are Studio-only | Yes — but gated, and no UI. |
 | **Timeline interchange** (OTIO / FCPXML / EDL) | **yes**, both editions, all platforms | Yes. This is a document import, not an API call. |
 
 So the only interface on the free edition that can *create an edit* is the timeline
 file. Cutline is built on exactly that: it does the analysis and rendering outside
-Resolve, then writes a timeline Resolve imports natively (**File → Import → Timeline**).
+Resolve, then writes a timeline Resolve imports natively.
+
+### What does run inside Free Resolve
+
+Since 21.1 the free edition still lists and runs **Lua** files from
+`Workspace → Scripts`; only Python was removed. Cutline uses that for one thing:
+calling `MediaPool.ImportTimelineFromFile` on the timeline the engine just built,
+so the finished cut appears without a file dialog. It is a menu entry, not an
+editor — the Lua sandbox has no `io`, no directory listing, no UI toolkit, and
+`print()` is muted. Everything that thinks stays in the local engine.
+
+That is also why there is still no panel: `UIManager` returns `nil` on the free
+edition, so any dockable GUI would be Studio-only by definition.
 
 ## Why that is actually the better design
 

@@ -26,6 +26,11 @@ ASPECTS: dict[str, tuple[int, int]] = {
 
 FPS_CHOICES = (23.976, 24, 25, 29.97, 30, 50, 59.94, 60)
 
+ALLOWED_VIDEO = {".mp4", ".mov", ".mxf", ".mkv", ".m4v", ".avi", ".webm", ".mts", ".m2ts", ".mpg", ".mpeg", ".wmv"}
+ALLOWED_AUDIO = {".wav", ".mp3", ".m4a", ".aac", ".flac", ".aiff", ".aif", ".ogg", ".opus"}
+ALLOWED_CAPTION = {".srt", ".vtt", ".lrc", ".txt"}
+ALLOWED_OVERLAY = {".mov", ".webm", ".mkv", ".mp4", ".avi", ".png", ".gif"}
+
 
 def ensure_dirs() -> None:
     for directory in (DATA_DIR, PROJECTS_DIR, MODELS_DIR, DEMO_DIR):

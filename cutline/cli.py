@@ -5,6 +5,7 @@ import shutil
 import sys
 import threading
 import time
+from pathlib import Path
 import webbrowser
 
 
@@ -161,6 +162,147 @@ def command_kit(args: argparse.Namespace) -> int:
     return 0
 
 
+def _bridge_root(args: argparse.Namespace):
+    from .resolve_bridge import default_root
+
+    return args.root or str(default_root())
+
+
+def command_resolve_install(args: argparse.Namespace) -> int:
+    from .resolve_bridge import install_scripts
+
+    try:
+        result = install_scripts(root=_bridge_root(args), target=args.scripts_dir)
+    except OSError as exc:
+        print(f"Could not write the Resolve scripts folder: {exc}")
+        return 1
+    line = "─" * 62
+    print(line)
+    print("  Cutline is now in Resolve's Scripts menu")
+    print(line)
+    print(f"  Scripts:  {result['folder']}")
+    print(f"  Drop box: {result['root']}/inbox")
+    print(f"  Import:   {result['otio']}")
+    print(line)
+    print("  In Resolve, open Workspace → Scripts →")
+    print("    Cutline - import latest     pulls the newest cut into the project")
+    print("    Cutline - check bridge      proves the menu entry can talk to Resolve")
+    print()
+    print("  Now keep the engine running so cuts are waiting when you look:")
+    print("    cutline resolve-watch")
+    print("  …or install it as a login item that keeps running in the background:")
+    print("    cutline resolve-agent")
+    print()
+    print("  Drop footage into the inbox folder; each change builds a cut and")
+    print("  publishes it to latest/. The menu entry imports whatever is there.")
+    if not args.quiet:
+        print()
+        print("  Resolve only reads the Scripts folder at launch — restart it once.")
+    return 0
+
+
+def command_resolve_watch(args: argparse.Namespace) -> int:
+    from .resolve_bridge import watch
+
+    root = _bridge_root(args)
+
+    def report(result: dict) -> None:
+        print(f"  built: {result.get('name')}  ·  {result.get('timeline')}s  ·  "
+              f"{len(result.get('tracks') or [])} tracks  ·  {result.get('captions')} captions")
+
+    print("Cutline is watching the drop box. Ctrl+C to stop.")
+    print(f"  inbox: {root}/inbox")
+    print("  In Resolve: Workspace → Scripts → Cutline - import latest")
+    try:
+        state = watch(root=root, once=args.once, interval=args.interval, on_build=report)
+    except KeyboardInterrupt:
+        print("\nStopped.")
+        return 0
+    if args.once:
+        if state.errors:
+            for error in state.errors:
+                print(f"  {error}")
+            return 1
+        print("Nothing to build (inbox empty or unchanged)." if not state.built else "Done.")
+    return 0
+
+
+def command_resolve_build(args: argparse.Namespace) -> int:
+    from .resolve_bridge import build_from_inbox
+
+    try:
+        state = build_from_inbox(root=_bridge_root(args))
+    except Exception as exc:
+        print(f"Build failed: {exc}")
+        return 1
+    print(f"Built {state['name']} — {state['timeline']}s, {len(state['tracks'])} tracks")
+    for track in state["tracks"]:
+        print(f"  {track}")
+    print(f"Waiting in {_bridge_root(args)}/latest/timeline.otio")
+    print("Import it from Resolve: Workspace → Scripts → Cutline - import latest")
+    return 0
+
+
+def command_resolve_status(args: argparse.Namespace) -> int:
+    from .resolve_bridge import inbox_signature, last_built_signature, latest_state, load_watch_config
+
+    root = Path(_bridge_root(args))
+    state = latest_state(root)
+    config = load_watch_config(root)
+    inbox = root / "inbox"
+    pending = inbox_signature(inbox) != last_built_signature(root)
+    line = "─" * 62
+    print(line)
+    print("  Cutline drop box")
+    print(line)
+    print(f"  Root:    {root}")
+    count = sum(1 for path in inbox.glob("*") if path.is_file()) if inbox.exists() else 0
+    print(f"  Inbox:   {count} file(s){'  ·  waiting to build' if pending and count else ''}")
+    if not state:
+        print("  Latest:  nothing built yet — drop footage in the inbox")
+        print(line)
+        return 1
+    print(f"  Latest:  {state.get('name')}")
+    print(f"  Built:   {state.get('built')}")
+    print(f"  Cut:     {state.get('timeline')}s · {state.get('clips')} clips · "
+          f"{state.get('captions')} captions · {state.get('transitions')} transitions")
+    tracks = state.get("tracks") or []
+    if tracks:
+        print(f"  Tracks:  {', '.join(tracks)}")
+    if state.get("portable") is False:
+        print("  Media:   some originals stayed linked — keep them online for import")
+    look = (config.get("vlog") or {}).get("look") if config.get("mode") == "vlog" else None
+    print(f"  Config:  {root / 'config.json'}  (mode: {config.get('mode')}"
+          + (f", look: {look}" if look else "") + ")")
+    for warning in (state.get("warnings") or [])[:4]:
+        print(f"  note:    {warning}")
+    for error in state.get("errors") or []:
+        print(f"  error:   {error}")
+    print(line)
+    print("  Import: Workspace → Scripts → Cutline - import latest")
+    return 0
+
+
+def command_resolve_agent(args: argparse.Namespace) -> int:
+    from .resolve_bridge import render_agent, write_agent
+
+    root = _bridge_root(args)
+    if args.print_only:
+        print(render_agent(Path(root)))
+        return 0
+    try:
+        path = write_agent(Path(root))
+    except OSError as exc:
+        print(f"Could not write the login item: {exc}")
+        return 1
+    print(f"Login item written: {path}")
+    print("Load it now (and on every login):")
+    print(f"  launchctl unload {path} 2>/dev/null; launchctl load {path}")
+    print("Stop it:")
+    print(f"  launchctl unload {path}")
+    return 0
+
+
 def command_clean(args: argparse.Namespace) -> int:
     from .settings import DATA_DIR, PROJECTS_DIR, DEMO_DIR
 
@@ -208,6 +350,31 @@ def main(argv: list[str] | None = None) -> int:
     kit.add_argument("project", nargs="?", help="Project id (defaults to the newest finished cut)")
     kit.add_argument("--out", type=str, default=None, help="Folder to write the kit into")
     kit.set_defaults(func=command_kit)
+
+    install = sub.add_parser("resolve-install", help="Add Cutline to Resolve's Workspace > Scripts menu")
+    install.add_argument("--root", type=str, default=None, help="Drop-box folder (default ~/Movies/Cutline)")
+    install.add_argument("--scripts-dir", type=str, default=None, help="Override the Resolve scripts folder")
+    install.add_argument("--quiet", action="store_true", help="Skip the restart reminder")
+    install.set_defaults(func=command_resolve_install)
+
+    watch_cmd = sub.add_parser("resolve-watch", help="Watch the drop box and rebuild on every change")
+    watch_cmd.add_argument("--root", type=str, default=None, help="Drop-box folder (default ~/Movies/Cutline)")
+    watch_cmd.add_argument("--once", action="store_true", help="Build once if the inbox changed, then exit")
+    watch_cmd.add_argument("--interval", type=float, default=3.0, help="Seconds between checks")
+    watch_cmd.set_defaults(func=command_resolve_watch)
+
+    build_cmd = sub.add_parser("resolve-build", help="Build the drop box once, right now")
+    build_cmd.add_argument("--root", type=str, default=None, help="Drop-box folder (default ~/Movies/Cutline)")
+    build_cmd.set_defaults(func=command_resolve_build)
+
+    status = sub.add_parser("resolve-status", help="Show the last drop-box build")
+    status.add_argument("--root", type=str, default=None, help="Drop-box folder (default ~/Movies/Cutline)")
+    status.set_defaults(func=command_resolve_status)
+
+    agent = sub.add_parser("resolve-agent", help="Install the macOS login item for the watcher")
+    agent.add_argument("--root", type=str, default=None, help="Drop-box folder (default ~/Movies/Cutline)")
+    agent.add_argument("--print", dest="print_only", action="store_true", help="Print the plist instead of writing it")
+    agent.set_defaults(func=command_resolve_agent)
 
     clean = sub.add_parser("clean", help="Remove generated files")
     clean.add_argument("--uploads", action="store_true", help="Delete uploaded media copies")

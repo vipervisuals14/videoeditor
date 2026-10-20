@@ -3,9 +3,11 @@
 **A first-cut studio for DaVinci Resolve.** Auto-remove silences, add captions, add
 titles, and lay in transitions — then hand the timeline to Resolve and keep editing.
 
-Built for the free edition on purpose. Resolve Free has no scripting bridge, so
-Cutline doesn't use one: it renders its overlays and writes an **OpenTimelineIO**
-timeline that Resolve imports natively, the same way it imports an XML or EDL.
+Built for the free edition on purpose. Cutline installs a **Workspace → Scripts**
+entry inside Resolve, so a finished cut can be pulled into the open project
+without leaving the app — drop footage in a folder, and the menu item imports what
+the engine has built. Underneath it is still a plain **OpenTimelineIO** timeline,
+the same kind Resolve imports from an XML or EDL.
 
 ![Creator captions](docs/images/captions-creator.jpg)
 
@@ -73,6 +75,32 @@ Timeline**. The kit's `READ-ME-FIRST.md` lists the exact things worth checking
 If a project links camera originals totalling more than 2 GB, the kit links
 instead of copying and lists what must stay online.
 
+## Inside Resolve
+
+Free Resolve 21.1 runs Lua menu scripts but no longer runs Python from the Scripts
+menu, and its Lua has no UI toolkit. So the engine lives outside Resolve and only
+the import lives inside it:
+
+```bash
+.venv/bin/python -m cutline resolve-install   # writes the Workspace → Scripts entries
+.venv/bin/python -m cutline resolve-agent     # keeps the watcher running at login
+```
+
+1. Drop clips into `~/Movies/Cutline/inbox` (an optional matching `.srt` is picked up).
+2. The watcher builds the cut and publishes it to `~/Movies/Cutline/latest/`.
+3. In Resolve: **Workspace → Scripts → Cutline - import latest**.
+
+The new timeline lands in the media pool and opens in the Edit page. Nothing is
+baked: it is the same seven-track stack as a hand import.
+
+`Cutline - check bridge` proves the menu entry can reach Resolve's API,
+`cutline resolve-build` forces a build without waiting for the watcher, and
+`cutline resolve-status` prints what the last build produced. Modes and
+looks are set in `~/Movies/Cutline/config.json` — same schema as the studio.
+
+Full setup, the free-edition limits, and troubleshooting:
+**[docs/inside-resolve.md](docs/inside-resolve.md)**.
+
 ## Quick start
 
 ```bash
@@ -136,13 +164,15 @@ Cutline decodes the song, estimates tempo and downbeat phase, and cuts picture e
 N beats. Beat accents land on the bar. Lyric captions can come from transcription or
 an `.lrc`/`.srt` file. If detection is unsure, type the BPM and rebuild.
 
-## Why a companion studio instead of a native plugin
+## Why a menu script and a studio, not a plugin
 
 A native Resolve plugin can't do this on the free edition. OpenFX and Fusion
-templates process one clip's pixels and can't build a timeline. The scripting API —
-the only thing that *can* build a timeline — is Studio-only for external calls and
-has been removed from Free's Python support entirely. Timeline interchange is the
-one interface Blackmagic left open, so that is what Cutline targets.
+templates process one clip's pixels and can't build a timeline. The scripting API
+is what *can* build one, which is why Cutline puts a small Lua entry in the
+Scripts menu — but external scripting is Studio-only and Free has no UI toolkit
+for scripts, so the analysis and rendering stay in the local engine and the menu
+entry only imports the result. Timeline interchange is the one interface
+Blackmagic left open on both editions, so that is what the engine targets.
 
 More detail: [docs/why-not-a-plugin.md](docs/why-not-a-plugin.md).
 
@@ -152,7 +182,9 @@ Resolve 19.1 moved external scripting to Studio, and 21.1 removed Python scripti
 from the free edition altogether. File interchange was not touched: OTIO import (and
 EDL/FCPXML) still works on Free. Cutline is built entirely on that path:
 
-- no Python bridge, no Studio-only API calls
+- no dependency on Studio-only API calls: the menu entry is Lua, and the Python
+  entry is a convenience for Studio owners (Free ignores it)
+- no UIManager, no docked panel, no window that only exists on Studio
 - stock OTIO schemas only (custom schemas are known to make the importer fail)
 - absolute media paths, so the conform is silent
 - audio-first track order with video layered bottom-to-top, matching a verified import
@@ -169,6 +201,11 @@ cutline serve --port 9000 --no-browser
 cutline doctor         # check FFmpeg, fonts, OTIO, and the speech engine
 cutline demo --force   # regenerate the demo footage
 cutline kit            # package the newest cut for a Resolve import elsewhere
+cutline resolve-install   # add Cutline to Resolve's Workspace → Scripts menu
+cutline resolve-watch     # watch the drop folder and rebuild on changes
+cutline resolve-build     # build the drop folder once, now
+cutline resolve-status    # what the last drop-box build produced
+cutline resolve-agent     # install the macOS login item for the watcher
 cutline clean --uploads
 ```
 
@@ -194,8 +231,11 @@ cutline/
   transition_render.py  bakes accents with the real footage underneath
   timeline.py       OTIO writer (contiguous tracks, source ranges intact)
   planner.py        edit decision lists for all three modes
+  resolve_bridge.py Resolve menu scripts, drop-folder watcher, login item
   static/           the studio UI (no build step, no framework)
-tests/              66 tests across analysis, planning, rendering, and the API
+tests/              79 tests across analysis, planning, rendering, the API, and
+                    the Lua bridge (driven by a fake Resolve in a Lua runtime)
+docs/inside-resolve.md  the in-app setup and the free-edition scripting limits
 docs/images/        screenshots used in this README
 ```
 

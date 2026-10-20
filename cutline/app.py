@@ -36,6 +36,10 @@ from .ffmpeg import (
 from .kit import build_kit
 from .pipeline import run_build, run_recaption
 from .settings import (
+    ALLOWED_AUDIO,
+    ALLOWED_CAPTION,
+    ALLOWED_OVERLAY,
+    ALLOWED_VIDEO,
     ASPECTS,
     DATA_DIR,
     FONTS_DIR,
@@ -91,10 +95,6 @@ EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="cutline-job")
 _JOBS: dict[str, str] = {}
 _JOB_LOCK = threading.Lock()
 
-ALLOWED_VIDEO = {".mp4", ".mov", ".mxf", ".mkv", ".m4v", ".avi", ".webm", ".mts", ".m2ts", ".mpg", ".mpeg", ".wmv"}
-ALLOWED_AUDIO = {".wav", ".mp3", ".m4a", ".aac", ".flac", ".aiff", ".aif", ".ogg", ".opus"}
-ALLOWED_CAPTION = {".srt", ".vtt", ".lrc", ".txt"}
-ALLOWED_OVERLAY = {".mov", ".webm", ".mkv", ".mp4", ".avi", ".png", ".gif"}
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

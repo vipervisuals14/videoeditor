@@ -42,6 +42,12 @@ if [ "${CUTLINE_SKIP_ASR:-0}" != "1" ]; then
   fi
 fi
 
+# Optional: put Cutline in Resolve's Workspace → Scripts menu.
+if [ "${CUTLINE_RESOLVE:-0}" = "1" ] || [ "${1:-}" = "--resolve" ]; then
+  say "adding Cutline to Resolve's Workspace -> Scripts menu..."
+  python -m cutline resolve-install || warn "Could not write the Resolve scripts folder. Run: ./bin/cutline resolve-install"
+fi
+
 say "checking the install…"
 python -m cutline doctor || true
 
@@ -67,4 +73,5 @@ EOF
 fi
 
 say "${LIME}done.${RESET} Start with: ${BOLD}./bin/cutline serve${RESET}"
+printf "${DIM}To run Cutline from inside Resolve: ${RESET}./bin/cutline resolve-install && ./bin/cutline resolve-agent\n"
 printf "${DIM}The first caption run downloads a small speech model; everything stays on this machine.${RESET}\n"

@@ -137,9 +137,13 @@ def _test_readme(project: dict, result: KitResult, timeline_name: str) -> str:
     return "\n".join(lines)
 
 
-def build_kit(store: ProjectStore, project_id: str, dst_dir: str | Path | None = None,
-              copy_limit: int = COPY_LIMIT_BYTES) -> KitResult:
-    """Package a finished project for a Resolve import on another machine."""
+def bundle(store: ProjectStore, project_id: str, dst_dir: str | Path | None = None,
+           copy_limit: int = COPY_LIMIT_BYTES) -> KitResult:
+    """Write an import-ready folder: timeline plus the media it points at.
+
+    This is the same rewrite ``build_kit`` does, minus the zip. Resolve can open
+    the result in place, which is what the in-app import script does.
+    """
     project = store.load(project_id)
     folder = store.folder(project_id)
     source_otio = folder / "output" / "timeline.otio"
@@ -194,6 +198,15 @@ def build_kit(store: ProjectStore, project_id: str, dst_dir: str | Path | None =
         _test_readme(project, result, timeline.name or "Cutline edit"), encoding="utf-8"
     )
 
+    return result
+
+
+def build_kit(store: ProjectStore, project_id: str, dst_dir: str | Path | None = None,
+              copy_limit: int = COPY_LIMIT_BYTES) -> KitResult:
+    """Package a finished project for a Resolve import on another machine."""
+    result = bundle(store, project_id, dst_dir=dst_dir, copy_limit=copy_limit)
+    dst_dir = result.folder
+    slug = "cutline-test-kit"
     with zipfile.ZipFile(result.zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(dst_dir.rglob("*")):
             if path.is_file():
