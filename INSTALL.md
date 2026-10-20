@@ -1,9 +1,36 @@
 # Installing Cutline on macOS
 
-Ten minutes, most of it waiting for Python packages. You end up with Cutline in
+Ten minutes, most of it waiting for packages. You end up with Cutline in
 Resolve's **Workspace → Scripts** menu and a drop folder for footage.
 
-## 0. What you need
+## Easiest way — no Terminal
+
+If Terminal is not your thing, use the one-click installer:
+
+1. Download it:
+
+   <https://github.com/vipervisuals14/videoeditor/raw/arena/baa7f9aa-videoeditor/downloads/cutline-installer.zip>
+
+2. Double-click the downloaded `cutline-installer.zip` to unzip it.
+3. Double-click **Install Cutline.command**.
+   If macOS says it cannot verify the developer: **right-click the file → Open →
+   Open**. You only do this once.
+4. Leave the Terminal window open until it says **Cutline is installed.**
+   It finds your Cutline folder, installs everything, adds the Resolve menu,
+   starts the watcher, and opens the drop folder.
+5. **Quit DaVinci Resolve completely (Cmd+Q), reopen it**, then use
+   **Workspace → Scripts → Cutline - check bridge**.
+
+The installer expects the Cutline folder at `~/cutline` (your home folder). If
+it says it cannot find it, move the unzipped folder into your home folder, rename
+it `cutline`, and double-click the installer again.
+
+Everything below is the same install done by hand, for when you want to see or
+control each step.
+
+## Manual install (Terminal)
+
+### 0. What you need
 
 - macOS (Intel or Apple Silicon)
 - DaVinci Resolve — **Free is fine**, 18.5 or newer (built against 21.x)
@@ -22,7 +49,7 @@ If it prints `3.9.x` or lower, install Python from
 fine), then open a **new** Terminal window and check again. Do not skip this:
 macOS ships 3.9, and the engine needs 3.10+.
 
-## 1. Get the Cutline folder
+### 1. Get the Cutline folder
 
 **Option A — download (no git needed).** Download this zip:
 
@@ -49,7 +76,7 @@ cd ~/cutline
 Keep it at `~/cutline`, not Desktop or Documents. A background watcher reading
 those folders can hit macOS privacy prompts; your home folder avoids that.
 
-## 2. Install the engine
+### 2. Install the engine
 
 ```bash
 bash install.sh
@@ -62,7 +89,7 @@ This creates `.venv/`, installs FFmpeg and the timeline libraries, tries to add
 local speech-to-text, and writes a launcher. It takes a few minutes. If the
 speech model fails to install, captions still work from an `.srt` file.
 
-## 3. Put Cutline inside Resolve
+### 3. Put Cutline inside Resolve
 
 ```bash
 ./bin/cutline resolve-install
@@ -77,7 +104,7 @@ speech model fails to install, captions still work from an `.srt` file.
 Then **quit DaVinci Resolve completely and reopen it.** Resolve only reads the
 Scripts folder at launch. This is the step people miss.
 
-## 4. Check that it is wired up
+### 4. Check that it is wired up
 
 In Resolve: **Workspace → Scripts → Cutline - check bridge**.
 
@@ -88,7 +115,7 @@ timeline name is how the script reports back.
 If the menu only shows `Cutline - import latest`, that is fine too; run it with
 an empty drop folder and it creates `Cutline: nothing imported (run resolve-status)`.
 
-## 5. Make your first cut
+### 5. Make your first cut
 
 1. Put a clip in `~/Movies/Cutline/inbox/`
    (optional: an `.srt` with the same name becomes the captions).
@@ -159,7 +186,9 @@ import still refuses, use **File → Import → Timeline** on
 `~/Movies/Cutline/latest/timeline.otio`; that path works on every Resolve build.
 Tell me your exact Resolve version in that case.
 
-**Install stops with `pkg-config is required for building PyAV`.** The optional
+**Install stops with `pkg-config is required for building PyAV`.** The one-click
+installer already skips the speech engine in this case, so the simplest fix is to
+use it. Manually: The optional
 speech engine has no prebuilt wheel for this Python version, so pip tried to
 compile it. Cutline itself does not need it. Remove that one line and install
 without captions:

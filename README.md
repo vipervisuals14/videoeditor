@@ -104,7 +104,9 @@ Full setup, the free-edition limits, and troubleshooting:
 ## Quick start
 
 New to this? **[INSTALL.md](INSTALL.md)** is the step-by-step macOS walkthrough,
-including the Resolve menu setup.
+including the Resolve menu setup. No Terminal at all: download
+[the one-click installer](https://github.com/vipervisuals14/videoeditor/raw/arena/baa7f9aa-videoeditor/downloads/cutline-installer.zip),
+unzip it, and double-click `Install Cutline.command`.
 
 ```bash
 git clone <your-repo> cutline && cd cutline
