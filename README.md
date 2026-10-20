@@ -151,7 +151,7 @@ cutline/
   timeline.py       OTIO writer (contiguous tracks, source ranges intact)
   planner.py        edit decision lists for all three modes
   static/           the studio UI (no build step, no framework)
-tests/              49 tests across analysis, planning, rendering, and the API
+tests/              55 tests across analysis, planning, rendering, and the API
 docs/images/        screenshots used in this README
 ```
 

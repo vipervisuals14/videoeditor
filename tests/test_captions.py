@@ -96,3 +96,11 @@ def test_unknown_style_values_are_sanitised():
     assert style["size"] <= 150
     assert style["color"] == "#FFFFFF"
     assert style["position"] == "bottom"
+
+
+def test_title_text_falls_back_for_glyphs_the_fonts_lack():
+    from cutline.captions import _display_text
+
+    assert _display_text("Toronto ⇄ Lisbon") == "Toronto <-> Lisbon"
+    assert _display_text("A → B ★") == "A -> B *"
+    assert _display_text("The long way north") == "The long way north"

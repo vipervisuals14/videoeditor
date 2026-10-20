@@ -122,11 +122,9 @@ def parse_lrc(content: str) -> list[dict]:
         if not text:
             continue
         for minutes, seconds, fraction in times:
-            frac = (fraction + "00")[:3] if fraction else "0"
-            if len(fraction or "") <= 2:
-                ms = int(frac) * 10
-            else:
-                ms = int(frac)
+            # LRC fractions are decimal parts of a second at any width: ".5" is
+            # 500 ms, ".50" is 500 ms, ".500" is 500 ms — pad right, never scale.
+            ms = int((fraction + "000")[:3]) if fraction else 0
             at = max(0.0, int(minutes) * 60 + int(seconds) + ms / 1000.0 + offset_ms / 1000.0)
             raw.append((at, text))
     raw.sort(key=lambda item: item[0])

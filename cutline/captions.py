@@ -414,6 +414,27 @@ def render_preview(
 # Titles / chapter cards
 # ---------------------------------------------------------------------------
 
+# The bundled display faces have no arrow or dingbat glyphs, and FreeType draws a
+# notdef box for anything missing. Map the symbols people actually put in titles
+# onto characters that are guaranteed to render.
+_TITLE_GLYPHS = {
+    "→": "->", "←": "<-", "↔": "<->", "⇄": "<->", "➔": "->", "➜": "->",
+    "⇒": "=>", "⇐": "<=", "↗": "/", "↘": "/",
+    "★": "*", "☆": "*", "✓": "+", "✔": "+", "♪": "", "♫": "", "♥": "<3",
+}
+
+
+def _display_text(text: str) -> str:
+    out = "".join(_TITLE_GLYPHS.get(ch, ch) for ch in text)
+    # Drop anything left that the display faces cannot draw (arrows, dingbats,
+    # emoji) rather than let FreeType render a notdef box.
+    kept = []
+    for ch in out:
+        if ch.isalnum() or ch.isspace() or (ch.isprintable() and ord(ch) < 0x2190):
+            kept.append(ch)
+    return "".join(kept).strip()
+
+
 def title_frames(
     lines: dict,
     width: int,
@@ -424,9 +445,9 @@ def title_frames(
     end_frame: int,
 ) -> Iterable[Image.Image]:
     scale = max(0.42, height / 1080.0)
-    title = str(lines.get("title", "")).strip()
-    kicker = str(lines.get("kicker", "")).strip()
-    meta = str(lines.get("meta", "")).strip()
+    title = _display_text(str(lines.get("title", "")).strip())
+    kicker = _display_text(str(lines.get("kicker", "")).strip())
+    meta = _display_text(str(lines.get("meta", "")).strip())
     if not title and not kicker:
         return
     title_font = load_font("playfair", 600, max(24, int(66 * scale)))

@@ -185,14 +185,12 @@ function applyConfigToDom(cfg, options = {}) {
   updatePacingHint();
 
   $("#caption-enabled").checked = captions.enabled !== false;
-  let source = captions.source || "auto";
-  if (source === "auto" && state.health && !state.health.asr.available && !state.srt) {
-    source = "none";
-    setNote("Automatic captions need the optional speech model. Upload an SRT, or install it with ./install.sh — the rest of the cut still builds.", "warn");
-  } else if (source === "auto") {
+  const source = captions.source || "auto";
+  if (source === "auto") {
     setNote(state.health?.asr?.available
       ? "Transcription runs privately on this machine with faster-whisper. First run downloads a small model."
-      : "The speech model isn't installed in this copy — upload an SRT, or install it and restart.", state.health?.asr?.available ? "" : "warn");
+      : "Automatic captions need the optional speech model, which is not installed in this copy. Add an SRT below, or run ./install.sh and restart — the rest of the cut builds either way.",
+      state.health?.asr?.available ? "" : "warn");
   } else {
     setNote("");
   }

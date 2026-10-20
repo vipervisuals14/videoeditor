@@ -54,7 +54,19 @@ def test_lrc_parsing_applies_offset_and_repeats():
     cues = parse_lrc(LRC)
     assert cues[0]["start"] == pytest.approx(3.5)
     assert cues[0]["text"] == "First lyric line"
-    assert any(cue["start"] == pytest.approx(12.5) for cue in cues)
+    assert [cue["start"] for cue in cues] == pytest.approx([3.5, 8.0, 12.5])
+
+
+@pytest.mark.parametrize("stamp, expected", [
+    ("[00:06.5]", 6.5),
+    ("[00:06.50]", 6.5),
+    ("[00:06.500]", 6.5),
+    ("[00:06]", 6.0),
+    ("[01:02.25]", 62.25),
+])
+def test_lrc_fraction_widths_are_milliseconds(stamp, expected):
+    cues = parse_lrc(f"{stamp}line")
+    assert cues[0]["start"] == pytest.approx(expected)
 
 
 def test_write_srt_round_trip(tmp_path):
