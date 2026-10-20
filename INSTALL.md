@@ -13,8 +13,19 @@ If Terminal is not your thing, use the one-click installer:
 
 2. Double-click the downloaded `cutline-installer.zip` to unzip it.
 3. Double-click **Install Cutline.command**.
-   If macOS says it cannot verify the developer: **right-click the file → Open →
-   Open**. You only do this once.
+
+   macOS will probably stop it once with **“Apple could not verify … is free of
+   malware”**. That is expected for an unsigned script. Click **Done** (not
+   “Move to Bin”), then:
+
+   - Open **System Settings → Privacy & Security**.
+   - Scroll down to **Security**. You will see that
+     `Install Cutline.command` was blocked — click **Open Anyway**.
+   - Enter your Mac password (or Touch ID), then click **Open** in the dialog
+     that follows.
+
+   You only do this once. If the alert has no “Open Anyway” anywhere (older
+   macOS), right-clicking the file and choosing **Open** does the same thing.
 4. Leave the Terminal window open until it says **Cutline is installed.**
    It finds your Cutline folder, installs everything, adds the Resolve menu,
    starts the watcher, and opens the drop folder.
@@ -185,6 +196,21 @@ If it still refuses, skip the background service and keep a Terminal open with
 import still refuses, use **File → Import → Timeline** on
 `~/Movies/Cutline/latest/timeline.otio`; that path works on every Resolve build.
 Tell me your exact Resolve version in that case.
+
+**“Apple could not verify ‘Install Cutline.command’ is free of malware.”**
+Click **Done**, then allow it in **System Settings → Privacy & Security →
+Security → Open Anyway**, authenticate, and click **Open**.
+
+The other route avoids that dialog entirely — run the script *through* Terminal
+instead of launching it:
+
+```bash
+bash ~/Downloads/Install\ Cutline.command
+```
+
+That is still one line, and it is how the file would run if Apple had signed it.
+If the file is not in Downloads, drag it into the Terminal window after typing
+`bash ` (with a space) to fill in the path.
 
 **Install stops with `pkg-config is required for building PyAV`.** The one-click
 installer already skips the speech engine in this case, so the simplest fix is to
