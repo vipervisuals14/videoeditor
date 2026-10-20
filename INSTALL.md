@@ -22,7 +22,7 @@ If Terminal is not your thing, use the one-click installer:
    <https://github.com/vipervisuals14/videoeditor/raw/arena/baa7f9aa-videoeditor/downloads/cutline-installer.zip>
 
 2. Double-click the downloaded `cutline-installer.zip` to unzip it.
-3. Double-click **Install Cutline.command**.
+3. Double-click **Start Fresh.command** (it also does a normal first install).
 
    macOS will probably stop it once with **“Apple could not verify … is free of
    malware”**. That is expected for an unsigned script. Click **Done** (not
@@ -42,11 +42,12 @@ If Terminal is not your thing, use the one-click installer:
 5. **Quit DaVinci Resolve completely (Cmd+Q), reopen it**, open a project, then
    use **Workspace → Scripts → Cutline - check bridge**.
 
-   **If nothing happens:** Resolve **21.1 Free** runs menu scripts but keeps the
-   project API for Studio, so no menu script can import on that build. Skip the
-   menu entirely — **File → Import → Timeline** on
-   `~/Movies/Cutline/latest/timeline.otio` does the same job, and the drop folder,
-   watcher, and config all still work.
+   **If nothing happens:** quit Resolve and reopen it — it reads the Scripts
+   folder only at launch. If the entry still does nothing, open
+   **Workspace → Console**, switch the language to **Lua**, and run
+   `print(app:GetResolve())`. On 21.1 Free the `resolve` global is nil and the
+   live handle is on `app`; the shipped scripts already use that path, but the
+   check tells you whether Resolve is answering at all.
 
 The installer expects the Cutline folder at `~/cutline` (your home folder). If
 it says it cannot find it, move the unzipped folder into your home folder, rename
