@@ -21,15 +21,18 @@ from .captioning import (
     tokens_from_transcripts,
 )
 from .captions import caption_frames, render_caption_frame, title_frames
+from .collage import render_collage_movie
 from .config import MODES, TRANSITION_PRESETS, normalize_fps, output_dimensions
 from .ffmpeg import (
     decode_pcm,
     encode_overlay_frames,
+    encode_still_overlay,
     extract_audio,
     extract_frame,
     probe,
     waveform_image,
 )
+from .hud import render_hud
 from .planner import EditPlan, build_edit_plan
 from .silence import analyze_silence, silent_full_track
 from .store import ProjectStore
@@ -351,13 +354,14 @@ def run_build(store: ProjectStore, project_id: str) -> None:
             first = plan.clips[0]
             cover_frame = (first.src_in / fps) + min(1.0, plan.duration * 0.08)
 
-        assets = {"captions": [], "transitions": [], "titles": [], "preview": None}
+        assets = {"captions": [], "transitions": [], "titles": [], "graphics": [], "preview": None}
         caption_dir = output_dir / "media" / "captions"
         transition_dir = output_dir / "media" / "transitions"
         title_dir = output_dir / "media" / "titles"
-        for directory in (caption_dir, transition_dir, title_dir):
+        graphics_dir = output_dir / "media" / "graphics"
+        for directory in (caption_dir, transition_dir, title_dir, graphics_dir):
             directory.mkdir(parents=True, exist_ok=True)
-        for directory in (caption_dir, transition_dir, title_dir):
+        for directory in (caption_dir, transition_dir, title_dir, graphics_dir):
             for old in directory.glob("*.mov"):
                 old.unlink(missing_ok=True)
             for old in directory.glob("*.mp4"):
@@ -468,6 +472,44 @@ def run_build(store: ProjectStore, project_id: str) -> None:
                 assets["transitions"] = transition_clips
                 plan.stats["transitions"] = len(transition_clips)
 
+        # ---- Viewfinder graphics --------------------------------------------
+        graphics_clips: list[dict] = []
+        collage_clips: list[dict] = []
+        if plan.hud:
+            progress(76, "Hanging the viewfinder overlay…", "Graphics")
+            try:
+                overlay = render_hud(width, height, plan.hud)
+                path = graphics_dir / "hud.mov"
+                encode_still_overlay(
+                    overlay, path, width, height, fps, plan.duration,
+                    codec=config["output"].get("overlay_codec", "qtrle"),
+                )
+                graphics_clips.append({
+                    "name": "Viewfinder HUD", "path": str(path), "start": 0, "end": plan.duration_frames,
+                    "metadata": {"cutline": {"role": "hud", "grid": True}},
+                })
+                assets["graphics"].append({"path": str(path), "role": "hud", "start": 0, "end": plan.duration_frames})
+            except Exception as exc:
+                plan.warnings.append(f"The viewfinder overlay could not be rendered: {str(exc)[:180]}")
+        if plan.collage:
+            progress(77, "Building the opening collage…", "Graphics")
+            try:
+                path = graphics_dir / "collage_intro.mp4"
+                render_collage_movie(plan.collage, width, height, fps, path)
+                collage_clips.append({
+                    "name": "Collage intro", "path": str(path),
+                    "start": int(plan.collage.get("start_frame", 0)),
+                    "end": int(plan.collage.get("end_frame", 0)),
+                    "metadata": {"cutline": {"role": "collage"}},
+                })
+                assets["graphics"].append({
+                    "path": str(path), "role": "collage",
+                    "start": int(plan.collage.get("start_frame", 0)),
+                    "end": int(plan.collage.get("end_frame", 0)),
+                })
+            except Exception as exc:
+                plan.warnings.append(f"The opening collage could not be rendered: {str(exc)[:180]}")
+
         # ---- Timeline, sidecars, notes --------------------------------------
         progress(80, "Writing the Resolve timeline…", "Timeline")
         timeline = build_timeline(
@@ -475,6 +517,8 @@ def run_build(store: ProjectStore, project_id: str) -> None:
             caption_clips=assets["captions"],
             transition_clips=transition_clips,
             title_clips=title_clips,
+            collage_clips=collage_clips,
+            graphics_clips=graphics_clips,
             name=project["name"],
         )
         otio_path = output_dir / "timeline.otio"
@@ -662,7 +706,24 @@ def _write_preview(plan: EditPlan, style: dict, cues: list[dict], width: int, he
             base = Image.alpha_composite(base, overlay)
         except Exception:
             pass
+    if plan.hud:
+        try:
+            base = Image.alpha_composite(base, render_hud(width, height, plan.hud))
+        except Exception:
+            pass
     base.convert("RGB").save(path, quality=90)
+
+
+def _track_guide(plan: EditPlan) -> str:
+    guide = "The cut lands on V1, transitions on V2, captions on V3, titles on V4, audio on A1."
+    extras = []
+    if plan.collage:
+        extras.append("the opening collage on V5")
+    if plan.hud:
+        extras.append("the viewfinder HUD on V6")
+    if extras:
+        guide += " " + " and ".join(extras).capitalize() + " sit above the cut."
+    return guide.replace("on v5", "on V5").replace("on v6", "on V6").replace("viewfinder hud", "viewfinder HUD")
 
 
 def _notes(project: dict, plan: EditPlan, summary: dict, files: dict) -> str:
@@ -686,7 +747,7 @@ def _notes(project: dict, plan: EditPlan, summary: dict, files: dict) -> str:
         "1. Open your project in DaVinci Resolve (Free is fine).",
         "2. Choose **File → Import → Timeline** (Shift+Command/Ctrl+I).",
         "3. Select `timeline.otio` from this folder.",
-        "4. The cut lands on V1, transitions on V2, captions on V3, titles on V4, audio on A1.",
+        f"4. {_track_guide(plan)}",
         "5. Captions are also exported as `captions.srt` if you want Resolve's subtitle track.",
         "",
         "Footage stays linked to its original location. Keep those drives mounted.",
@@ -752,11 +813,24 @@ def run_recaption(store: ProjectStore, project_id: str, edits: list[dict]) -> No
             for entry in assets.get("titles", [])
             if entry.get("path")
         ]
+        collage_clips, graphics_clips = [], []
+        for entry in assets.get("graphics", []):
+            if not entry.get("path"):
+                continue
+            clip = {
+                "name": "Collage intro" if entry.get("role") == "collage" else "Viewfinder HUD",
+                "path": entry["path"],
+                "start": int(entry.get("start", 0)),
+                "end": int(entry.get("end", plan.duration_frames)),
+            }
+            (collage_clips if entry.get("role") == "collage" else graphics_clips).append(clip)
         timeline = build_timeline(
             plan, project["config"],
             caption_clips=assets["captions"],
             transition_clips=transitions,
             title_clips=title_clips,
+            collage_clips=collage_clips,
+            graphics_clips=graphics_clips,
             name=project["name"],
         )
         otio_path = output_dir / "timeline.otio"

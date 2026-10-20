@@ -14,16 +14,37 @@ Three passes, three workflows:
 | Pass | What it is for | It does |
 |---|---|---|
 | **Talking head** | Client social, vertical | Silence cuts, bold word-timed captions, light-leak/flash accents |
-| **Travel vlog** | Long-form, 16:9 | Gentle silence trims, opening title card, chapter cards, journal captions |
+| **Travel vlog** | Journal or viewfinder | Gentle silence trims, title/chapter cards *or* a REC-grid collage open, journal captions |
 | **Music video** | Beat-driven | Tempo detection, shot grid on the bar, beat accents, lyric captions |
 
 Everything runs on your machine. No account, no upload, no cloud render.
+
+### Two vlog looks
+
+The vlog pass ships with the two styles travel work actually uses:
+
+| Look | Built for | It adds |
+|---|---|---|
+| **Journal** | Long-form 16:9 travel films | Opening title card, one chapter card per location, warm journal captions |
+| **Viewfinder** | Short cinematic edits (15–45 s) | A five-tile opening collage, a thin 3×3 grid, a `++ REC.` tag, and a stacked location card |
+
+Viewfinder overlays are real media, never baked into your footage: the collage
+lands on **V5** and the REC grid on **V6**, both above the program track. Toggle
+either one off, or delete the track in Resolve and the cut is untouched. It
+carries no title or chapter cards, which matches the reference the look is
+modelled on.
+
+![Viewfinder: reference on top, Cutline output underneath](docs/images/vlog-viewfinder.jpg)
+
+*Top row: the reference frames. Bottom row: the same structure rendered by
+Cutline — five-tile collage, grid, REC tag, location card.*
 
 ---
 
 ## What you get
 
-- `timeline.otio` — video on V1, transitions on V2, captions on V3, title cards on V4, audio on A1
+- `timeline.otio` — video on V1, transitions on V2, captions on V3, title cards on V4,
+  collage on V5, viewfinder overlay on V6, audio on A1
 - `captions.srt` / `captions.vtt` — a subtitle sidecar if you would rather use Resolve's subtitle track
 - `transcript.txt` — timed transcript of the cut
 - `preview.jpg`, `manifest.json`, `cut_notes.md` — a still, the recipe, and import notes
@@ -65,6 +86,8 @@ running locally (installed by `install.sh`). The first transcription downloads a
    looks and tune type, colour, highlight, entrance, and position against a live preview.
 4. **Motion** — transitions (light leak, film burn, flash, glitch, soft bloom, whip,
    dip to ink, or your own alpha movie) and, for vlogs, title and chapter cards.
+   Vlogs also choose a look: **Journal** (title and chapter cards) or **Viewfinder**
+   (opening collage plus REC-grid overlay), each with its own switches.
 5. **Delivery** — aspect, frame rate, resolution. Build.
 
 Then in Resolve: **File → Import → Timeline**, pick `timeline.otio`, and accept the
@@ -151,7 +174,7 @@ cutline/
   timeline.py       OTIO writer (contiguous tracks, source ranges intact)
   planner.py        edit decision lists for all three modes
   static/           the studio UI (no build step, no framework)
-tests/              55 tests across analysis, planning, rendering, and the API
+tests/              63 tests across analysis, planning, rendering, and the API
 docs/images/        screenshots used in this README
 ```
 

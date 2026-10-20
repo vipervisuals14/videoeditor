@@ -104,6 +104,8 @@ class EditPlan:
     titles: list[TitleCue] = field(default_factory=list)
     music_audio: dict | None = None
     beat: dict | None = None
+    hud: dict | None = None
+    collage: dict | None = None
     stats: dict = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     source_map: dict[str, list[dict]] = field(default_factory=dict)
@@ -130,6 +132,8 @@ class EditPlan:
             "titles": [cue.to_dict(self.fps) for cue in self.titles],
             "music_audio": self.music_audio,
             "beat": self.beat,
+            "hud": self.hud,
+            "collage": self.collage,
             "stats": self.stats,
             "warnings": self.warnings,
             "source_map": self.source_map,
@@ -239,7 +243,7 @@ def _add_transitions(
 
 def _add_vlog_titles(plan: EditPlan, config: dict, sources: list[dict]) -> None:
     vlog = config.get("vlog", {})
-    if plan.mode != "vlog":
+    if plan.mode != "vlog" or vlog.get("look") == "viewfinder":
         return
     source_stem = human_name(plan.clips[0].source_name) if plan.clips else "A travel film"
     title = (vlog.get("title") or source_stem).strip()
@@ -271,6 +275,45 @@ def _add_vlog_titles(plan: EditPlan, config: dict, sources: list[dict]) -> None:
                 title=human_name(clip.source_name), kicker=f"CHAPTER {chapter_no:02d}", meta=location,
             ))
     plan.stats["titles"] = len(plan.titles)
+
+
+def _collage_spec(plan: EditPlan) -> dict | None:
+    """A five-tile opening collage: left / three stacked centre tiles / right."""
+    if not plan.clips:
+        return None
+    fps = plan.fps
+    picks = [plan.clips[(index * len(plan.clips)) // 5] for index in range(5)]
+    limit = min(int(round(4.0 * fps)), plan.duration_frames,
+                *(clip.src_out - clip.src_in for clip in picks))
+    if limit < int(round(1.0 * fps)):
+        return None
+    tiles = []
+    for index, clip in enumerate(picks):
+        span = max(1, clip.src_out - clip.src_in)
+        room = max(1, span - limit + 1)
+        start = clip.src_in + ((index * span) // 5) % room
+        tiles.append({
+            "path": clip.source_path,
+            "name": Path(clip.source_name).stem,
+            "start_frame": start,
+            "frames": limit,
+        })
+    return {"start_frame": 0, "end_frame": limit, "tiles": tiles}
+
+
+def _add_vlog_hud(plan: EditPlan, config: dict) -> None:
+    vlog = config.get("vlog", {})
+    if plan.mode != "vlog" or vlog.get("look") != "viewfinder":
+        return
+    if vlog.get("hud", True):
+        location = str(vlog.get("location") or "").strip()
+        plan.hud = {
+            "location": location or "A CUTLINE FILM",
+            "label": "REC",
+            "grid": True,
+        }
+    if vlog.get("collage", True):
+        plan.collage = _collage_spec(plan)
 
 
 def build_edit_plan(
@@ -357,6 +400,7 @@ def _build_speech_plan(
         plan.warnings.append("No usable silence was detected — the edit uses the full clips. Try Tight or Surgical pacing.")
     _add_transitions(plan, config)
     _add_vlog_titles(plan, config, sources)
+    _add_vlog_hud(plan, config)
     return plan
 
 

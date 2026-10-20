@@ -331,3 +331,44 @@ def encode_video_frames(
     finally:
         if proc.poll() is None:
             proc.kill()
+
+
+def encode_still_overlay(
+    image: Image.Image,
+    dst: str | Path,
+    width: int,
+    height: int,
+    fps: float,
+    duration: float,
+    codec: str = "qtrle",
+) -> Path:
+    """Turn one RGBA still into a full-length overlay movie (static HUD)."""
+    dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if image.size != (width, height):
+        image = image.resize((width, height), Image.Resampling.LANCZOS)
+    png_path = dst.with_suffix(".png")
+    image.convert("RGBA").save(png_path)
+
+    def command(which: str) -> list[str]:
+        base = [
+            ffmpeg_exe(), "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+            "-loop", "1", "-framerate", f"{fps}", "-t", f"{duration:.3f}",
+            "-i", str(png_path), "-an",
+        ]
+        if which == "prores":
+            return base + [
+                "-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le",
+                "-alpha_bits", "16", "-vendor", "apl0", str(dst),
+            ]
+        return base + ["-c:v", "qtrle", "-pix_fmt", "argb", str(dst)]
+
+    last_error: Exception | None = None
+    for candidate in (["prores", "qtrle"] if codec == "prores" else ["qtrle", "prores"]):
+        proc = subprocess.run(command(candidate), capture_output=True)
+        if proc.returncode == 0 and dst.exists():
+            png_path.unlink(missing_ok=True)
+            return dst
+        last_error = FFmpegError((proc.stderr or b"").decode("utf-8", "replace")[-1200:])
+    png_path.unlink(missing_ok=True)
+    raise last_error or FFmpegError("The overlay could not be encoded.")

@@ -102,6 +102,9 @@ def mode_defaults(mode: str) -> dict:
             "title_card": True,
             "chapter_cards": True,
             "title_seconds": 4.0,
+            "look": "journal",
+            "collage": False,
+            "hud": False,
         },
         "music": {
             "bpm": None,
@@ -215,6 +218,10 @@ def normalize_config(raw: dict[str, Any] | None, default_mode: str = "social") -
     cfg["vlog"]["title_card"] = _bool(vlog.get("title_card"), cfg["vlog"]["title_card"])
     cfg["vlog"]["chapter_cards"] = _bool(vlog.get("chapter_cards"), cfg["vlog"]["chapter_cards"])
     cfg["vlog"]["title_seconds"] = round(_number(vlog.get("title_seconds"), 4.0, 1.0, 8.0), 1)
+    look = str(vlog.get("look") or cfg["vlog"]["look"]).strip().lower()
+    cfg["vlog"]["look"] = look if look in ("journal", "viewfinder") else "journal"
+    cfg["vlog"]["collage"] = _bool(vlog.get("collage"), cfg["vlog"]["look"] == "viewfinder")
+    cfg["vlog"]["hud"] = _bool(vlog.get("hud"), cfg["vlog"]["look"] == "viewfinder")
 
     output = raw.get("output") if isinstance(raw.get("output"), dict) else {}
     if str(output.get("resolution")) in ("1080", "720", "720p"):

@@ -213,6 +213,11 @@ function applyConfigToDom(cfg, options = {}) {
   wireRange($("#tr-frequency"), $("#tr-frequency-out"), (value) => `${value}`);
   $("#custom-transition-block").classList.toggle("hide", state.transitionPreset !== "custom");
 
+  const vlogLook = vlog.look === "viewfinder" ? "viewfinder" : "journal";
+  segmented($("#seg-vlog-look"), vlogLook);
+  $("#vlog-collage").checked = vlog.collage ?? vlogLook === "viewfinder";
+  $("#vlog-hud").checked = vlog.hud ?? vlogLook === "viewfinder";
+  applyVlogLook(vlogLook);
   $("#vlog-title").value = vlog.title || "";
   $("#vlog-location").value = vlog.location || "";
   $("#vlog-date").value = vlog.date || "";
@@ -233,11 +238,17 @@ function updateModeNote() {
       ["", "Vertical 9:16 with large type — the safe area is already marked in the preview."],
       ["", "Captions land as transparent movies on V3, so you can still nudge a single card."],
     ],
-    vlog: [
-      ["good", "Silence removal is gentler by default so the film keeps its breathing room."],
-      ["", "One chapter card per source clip, titled from the file name."],
-      ["", "Widescreen 16:9 with journal-style captions and soft location blends."],
-    ],
+    vlog: $("#seg-vlog-look button.active")?.dataset.value === "viewfinder"
+      ? [
+        ["good", "Viewfinder: a five-tile collage opens the cut, then the HUD runs underneath."],
+        ["", "Thin 3×3 grid, REC tag left, location card right — on V6, toggle or retype it."],
+        ["", "Title and chapter cards are off — the reference carries no burned captions either."],
+      ]
+      : [
+        ["good", "Silence removal is gentler by default so the film keeps its breathing room."],
+        ["", "One chapter card per source clip, titled from the file name."],
+        ["", "Widescreen 16:9 with journal-style captions and soft location blends."],
+      ],
     music: [
       ["good", "Detected tempo becomes the cut grid; each shot advances on the bar."],
       ["", "Flash and glitch accents can land every N bars."],
@@ -987,11 +998,39 @@ function bindMotion() {
     });
   });
 
+  $$("#seg-vlog-look button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const look = button.dataset.value;
+      segmented($("#seg-vlog-look"), look);
+      $("#vlog-collage").checked = look === "viewfinder";
+      $("#vlog-hud").checked = look === "viewfinder";
+      applyVlogLook(look);
+      updateMetrics();
+      saveDraft();
+    });
+  });
+  ["#vlog-collage", "#vlog-hud"].forEach((selector) => {
+    $(selector).addEventListener("change", () => {
+      updateMetrics();
+      saveDraft();
+    });
+  });
+
   ["#vlog-title", "#vlog-location", "#vlog-date", "#vlog-title-seconds", "#vlog-title-card", "#vlog-chapters"].forEach((selector) => {
     $(selector).addEventListener("input", saveDraft);
     $(selector).addEventListener("change", saveDraft);
   });
   wireRange($("#vlog-title-seconds"), $("#vlog-title-seconds-val"), (value) => `${Number(value).toFixed(1)}s`);
+}
+
+function applyVlogLook(look) {
+  const viewfinder = look === "viewfinder";
+  $("#vlog-look-hint").textContent = viewfinder
+    ? "Viewfinder: five-tile collage, a thin REC grid, and a location card — no title card, captions optional."
+    : "Journal: a warm title card, chapter cards per clip, and long-form captions.";
+  $("#vlog-journal-options").classList.toggle("hide", viewfinder);
+  $("#vlog-viewfinder-options").classList.toggle("hide", !viewfinder);
+  updateModeNote();
 }
 
 async function uploadMusic(file) {
@@ -1328,6 +1367,9 @@ function readConfig() {
       custom_asset: state.overlay?.path || null,
     },
     vlog: {
+      look: $("#seg-vlog-look button.active")?.dataset.value || "journal",
+      collage: $("#vlog-collage").checked,
+      hud: $("#vlog-hud").checked,
       title: $("#vlog-title").value.trim(),
       location: $("#vlog-location").value.trim(),
       date: $("#vlog-date").value.trim(),
@@ -1494,7 +1536,7 @@ function openResult(project) {
     ["Silence out", summary.removed_seconds ? formatDuration(summary.removed_seconds) : "—"],
     ["Captions", summary.captions || 0],
     ["Transitions", summary.transitions || 0],
-    [summary.bpm ? "Tempo" : "Look", summary.bpm ? `${Number(summary.bpm).toFixed(1)} BPM` : (summary.style || "—")],
+    lookStat(summary, project),
   ];
   $("#result-stats").innerHTML = stats.map(([label, value]) => `
     <div class="stat"><b>${escapeHTML(String(value))}</b><span>${escapeHTML(label)}</span></div>
@@ -1687,6 +1729,14 @@ async function refreshProjects() {
   } catch (error) {
     toast(`Could not load projects: ${error.message}`, "error");
   }
+}
+
+function lookStat(summary, project) {
+  if (summary.bpm) return ["Tempo", `${Number(summary.bpm).toFixed(1)} BPM`];
+  const look = project.config?.vlog?.look;
+  if (summary.mode === "vlog" && look === "viewfinder") return ["Look", "Viewfinder"];
+  const preset = state.config?.styles?.find((item) => item.id === project.captions?.preset);
+  return ["Look", preset?.label || "Journal"];
 }
 
 function modeLabel(mode) {

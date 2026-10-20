@@ -56,6 +56,8 @@ def build_timeline(
     caption_clips: list[dict] | None = None,
     transition_clips: list[dict] | None = None,
     title_clips: list[dict] | None = None,
+    collage_clips: list[dict] | None = None,
+    graphics_clips: list[dict] | None = None,
     name: str = "Cutline edit",
 ) -> schema.Timeline:
     fps = plan.fps
@@ -149,6 +151,16 @@ def build_timeline(
     if title_clips:
         _add_entries(title_track, title_clips, fps)
         tracks.append(title_track)
+
+    collage_track = schema.Track(name="V5 — Collage", kind=schema.TrackKind.Video)
+    if collage_clips:
+        _add_entries(collage_track, collage_clips, fps)
+        tracks.append(collage_track)
+
+    graphics_track = schema.Track(name="V6 — Viewfinder", kind=schema.TrackKind.Video)
+    if graphics_clips:
+        _add_entries(graphics_track, graphics_clips, fps)
+        tracks.append(graphics_track)
 
     for track in tracks:
         timeline.tracks.append(track)

@@ -323,32 +323,48 @@
         <div class="step-body">
 
           <div id="vlog-panel" class="hide">
-            <div class="label" style="margin-bottom:9px">Title card</div>
-            <div class="row">
-              <div class="field">
-                <label for="vlog-title">Film title</label>
-                <input type="text" id="vlog-title" placeholder="The long way north" maxlength="70" />
-              </div>
-              <div class="field">
-                <label for="vlog-location">Location / kicker</label>
-                <input type="text" id="vlog-location" placeholder="Lisbon, Portugal" maxlength="60" />
-              </div>
+            <div class="label" style="margin-bottom:9px">Style</div>
+            <div class="segmented" id="seg-vlog-look">
+              <button data-value="journal" class="active">Journal</button>
+              <button data-value="viewfinder">Viewfinder</button>
             </div>
-            <div class="row" style="margin-top:10px">
+            <div class="hint" id="vlog-look-hint" style="margin-top:7px">Journal: a warm title card, chapter cards per clip, and long-form captions.</div>
+
+            <div class="row" style="margin-top:14px">
+              <div class="field">
+                <label for="vlog-location">Location</label>
+                <input type="text" id="vlog-location" placeholder="Honolulu, Hawaii" maxlength="60" />
+              </div>
               <div class="field">
                 <label for="vlog-date">Date line</label>
                 <input type="text" id="vlog-date" placeholder="October 2026" maxlength="40" />
               </div>
+            </div>
+
+            <div id="vlog-journal-options" style="margin-top:12px">
               <div class="field">
-                <label for="vlog-title-seconds">On screen</label>
-                <div class="slider"><input type="range" id="vlog-title-seconds" min="2" max="8" step="0.5" value="4" /><output id="vlog-title-seconds-val">4.0s</output></div>
+                <label for="vlog-title">Film title</label>
+                <input type="text" id="vlog-title" placeholder="The long way north" maxlength="70" />
+              </div>
+              <div class="row tight" style="margin-top:10px">
+                <div class="field">
+                  <label for="vlog-title-seconds">Title on screen</label>
+                  <div class="slider"><input type="range" id="vlog-title-seconds" min="2" max="8" step="0.5" value="4" /><output id="vlog-title-seconds-val">4.0s</output></div>
+                </div>
+              </div>
+              <div class="row tight" style="margin-top:12px">
+                <label class="switch"><input type="checkbox" id="vlog-title-card" checked /><span class="track"></span><span class="switch-copy"><b style="font-size:12.5px">Open with a title</b></span></label>
+                <label class="switch"><input type="checkbox" id="vlog-chapters" checked /><span class="track"></span><span class="switch-copy"><b style="font-size:12.5px">Chapter cards per clip</b></span></label>
               </div>
             </div>
-            <div class="row tight" style="margin-top:12px">
-              <label class="switch"><input type="checkbox" id="vlog-title-card" checked /><span class="track"></span><span class="switch-copy"><b style="font-size:12.5px">Open with a title</b></span></label>
-              <label class="switch"><input type="checkbox" id="vlog-chapters" checked /><span class="track"></span><span class="switch-copy"><b style="font-size:12.5px">Chapter cards per clip</b></span></label>
+
+            <div id="vlog-viewfinder-options" class="hide" style="margin-top:12px">
+              <div class="row tight">
+                <label class="switch"><input type="checkbox" id="vlog-collage" checked /><span class="track"></span><span class="switch-copy"><b style="font-size:12.5px">Opening collage</b></span></label>
+                <label class="switch"><input type="checkbox" id="vlog-hud" checked /><span class="track"></span><span class="switch-copy"><b style="font-size:12.5px">REC grid overlay</b></span></label>
+              </div>
+              <div class="hint" style="margin-top:9px">The collage opens the film; the REC grid and location card run on V6 for the whole cut. Nothing is baked into your footage.</div>
             </div>
-            <div class="hint" style="margin-top:9px">Titles are set in Playfair with a warm fade. They land on their own track so you can retype them later.</div>
             <div style="height:18px"></div>
           </div>
 
