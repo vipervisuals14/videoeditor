@@ -119,7 +119,7 @@ in under a minute — press **Add demo footage**.
 
 ### Requirements
 
-- Python 3.10+
+- Python 3.10+ (3.11 or 3.12 recommended for the optional speech engine)
 - FFmpeg (bundled automatically through `imageio-ffmpeg`; a system FFmpeg also works)
 - DaVinci Resolve 18.5 or newer, free or Studio
 

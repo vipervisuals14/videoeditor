@@ -33,12 +33,21 @@ source .venv/bin/activate
 
 say "installing the engine (this takes a minute)…"
 python -m pip install --quiet --upgrade pip wheel
-python -m pip install --quiet -r requirements.txt
+# Speech-to-text is optional and installed separately below. Strip it here too so
+# an older checkout whose requirements.txt still pins it cannot abort the install
+# with a PyAV source build ("pkg-config is required…").
+grep -v '^[[:space:]]*faster-whisper' requirements.txt > .venv/requirements-core.txt
+python -m pip install --quiet -r .venv/requirements-core.txt
 
 if [ "${CUTLINE_SKIP_ASR:-0}" != "1" ]; then
   say "installing local speech-to-text (optional but recommended)…"
-  if ! python -m pip install --quiet 'faster-whisper>=1.0'; then
-    warn "faster-whisper could not be installed on this machine. Captions will accept SRT/VTT files."
+  # Wheels only: a source build of PyAV needs pkg-config and FFmpeg headers, and
+  # most people should never see that error. If no wheel exists for this Python,
+  # skip captions rather than leaving a half-built environment.
+  if ! python -m pip install --quiet --only-binary=:all: 'faster-whisper>=1.0'; then
+    warn "No prebuilt speech engine for $(python -V 2>&1)."
+    warn "Captions still work from an .srt/.vtt file; everything else is unaffected."
+    warn "For automatic captions: install Python 3.12 from python.org, delete .venv, re-run install.sh."
   fi
 fi
 

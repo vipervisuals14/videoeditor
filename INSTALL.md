@@ -7,7 +7,8 @@ Resolve's **Workspace → Scripts** menu and a drop folder for footage.
 
 - macOS (Intel or Apple Silicon)
 - DaVinci Resolve — **Free is fine**, 18.5 or newer (built against 21.x)
-- **Python 3.10 or newer**
+- **Python 3.10 or newer** — **3.11 or 3.12 recommended**. Newer versions
+  sometimes have no prebuilt wheels yet for the optional speech engine.
 - Internet for the first install only
 
 Check Python first. Open **Terminal** (Applications → Utilities → Terminal) and run:
@@ -157,6 +158,22 @@ If it still refuses, skip the background service and keep a Terminal open with
 import still refuses, use **File → Import → Timeline** on
 `~/Movies/Cutline/latest/timeline.otio`; that path works on every Resolve build.
 Tell me your exact Resolve version in that case.
+
+**Install stops with `pkg-config is required for building PyAV`.** The optional
+speech engine has no prebuilt wheel for this Python version, so pip tried to
+compile it. Cutline itself does not need it. Remove that one line and install
+without captions:
+
+```bash
+cd ~/cutline
+sed -i '' '/faster-whisper/d' requirements.txt
+CUTLINE_SKIP_ASR=1 bash install.sh
+```
+
+To get automatic captions later, install **Python 3.12** from python.org, delete
+`~/cutline/.venv`, and run `bash install.sh` again (it picks the newest
+`python3.x`). Comfortable with Homebrew? `brew install pkg-config ffmpeg` also
+lets pip build PyAV, but the wheel route is more reliable.
 
 **Captions are missing.** Either no `.srt` was supplied and speech-to-text is not
 installed, or the clip has no audio. Drop an `.srt` beside the clip and rebuild:
