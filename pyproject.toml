@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cutline-resolve"
+version = "0.1.0"
+description = "A Resolve-native first-cut studio for DaVinci Resolve Free: silence cuts, captions, transitions, and beat-synced edits."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Cutline" }]
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "uvicorn[standard]>=0.30,<1.0",
+  "python-multipart>=0.0.9",
+  "pillow>=10.2",
+  "numpy>=1.26",
+  "opentimelineio>=0.17,<0.19",
+  "imageio-ffmpeg>=0.5",
+]
+
+[project.optional-dependencies]
+asr = ["faster-whisper>=1.0"]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+
+[project.scripts]
+cutline = "cutline.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["cutline*"]
+
+[tool.setuptools.package-data]
+cutline = ["assets/fonts/*.ttf", "assets/licenses/*.txt", "static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
