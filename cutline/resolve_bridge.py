@@ -76,8 +76,20 @@ local OTIO = [[{otio}]]
 local MEDIA = [[{media}]]
 local NAME = [[{name}]]
 
+-- Resolve hands menu scripts a `resolve` global on most builds, but on the free
+-- 21.1 build that global is nil and the live handle hangs off `app`. Reusing the
+-- app's own connection is the only one the free edition allows; asking for a new
+-- one (bmd.scriptapp) returns nil and the script silently does nothing.
+local function cutline_resolver()
+  local ok, app_resolve = pcall(function() return app:GetResolve() end)
+  if ok and app_resolve then return app_resolve end
+  return resolve
+end
+
 local function main()
-  local ok_manager, manager = pcall(function() return resolve:GetProjectManager() end)
+  local r = cutline_resolver()
+  if not r then return end
+  local ok_manager, manager = pcall(function() return r:GetProjectManager() end)
   if not ok_manager or not manager then return end
   local project = manager:GetCurrentProject()
   if not project then return end
@@ -94,7 +106,7 @@ local function main()
 
   if ok_import and timeline then
     pcall(function() project:SetCurrentTimeline(timeline) end)
-    pcall(function() resolve:OpenPage("edit") end)
+    pcall(function() r:OpenPage("edit") end)
     return
   end
 
@@ -116,8 +128,18 @@ DIAG_TEMPLATE = """-- Cutline - bridge self-check.
 local NAME = [[{name}]]
 local MEDIA = [[{media}]]
 
+-- Same free-edition rule as the import script: `resolve` is nil on 21.1 Free,
+-- the live connection is reachable through `app:GetResolve()`.
+local function cutline_resolver()
+  local ok, app_resolve = pcall(function() return app:GetResolve() end)
+  if ok and app_resolve then return app_resolve end
+  return resolve
+end
+
 local function main()
-  local ok_manager, manager = pcall(function() return resolve:GetProjectManager() end)
+  local r = cutline_resolver()
+  if not r then return end
+  local ok_manager, manager = pcall(function() return r:GetProjectManager() end)
   if not ok_manager or not manager then return end
   local project = manager:GetCurrentProject()
   if not project then return end

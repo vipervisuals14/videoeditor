@@ -203,7 +203,27 @@ Run inside the Console that prints the real app object, not `nil`. Free builds
 block *new connections* to Resolve, not the console's own connection. Any script
 that wants the API on Free must **reuse** the live object, never create one.
 
-What is reported working on free 21.1 builds, measured from inside Resolve:
+Measured on 21.1.1 Free, Console in Lua mode, project `sam` open:
+
+```
+Lua> print(resolve.GetProjectManager().GetCurrentProject().GetName())
+[string "???"]:1: attempt to index a nil value      <- the global is nil
+
+Lua> print(app:GetResolve())
+Resolve (0x0x11db81148) [App: 'Resolve' on 127.0.0.1, UUID: ff3a3c6a-...]
+
+Lua> local p = app:GetResolve():GetProjectManager():GetCurrentProject()
+Lua> print("PROJECT="..tostring(p:GetName()))
+PROJECT=sam
+Lua> print("CLIPS="..#p:GetMediaPool():GetRootFolder():GetClipList())
+CLIPS=1
+
+Lua> print("dofile="..type(dofile).." loadfile="..type(loadfile).." io="..type(io).." bmd="..type(bmd))
+dofile=function loadfile=function io=nil bmd=table
+```
+
+So the project and Media Pool are **not** gated on Free 21.1 — the gate is on
+*new* connections. What is reported working on free 21.1 builds, from inside:
 
 | Capability | Free 21.1 |
 | --- | --- |

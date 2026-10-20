@@ -69,6 +69,50 @@ def _run_lua(script: str, import_ok: bool):
     return runtime.globals().LOG
 
 
+FREE_PRELUDE = """
+local api = resolve
+resolve = nil
+app = { GetResolve = function() return api end }
+"""
+
+
+def _run_lua_free_edition(script: str, import_ok: bool):
+    """Resolve 21.1 Free: no `resolve` global, a live handle on `app`."""
+    runtime = lupa.LuaRuntime(unpack_returned_tuples=True)
+    runtime.execute(PRELUDE)
+    runtime.execute(FREE_PRELUDE)
+    if not import_ok:
+        runtime.execute("IMPORT_RESULT = nil")
+    runtime.execute(script)
+    return runtime.globals().LOG
+
+
+def test_import_script_uses_the_live_app_connection(tmp_path: Path):
+    # `resolve` is nil on Free 21.1; the script must reach the API through app.
+    script = render_script(IMPORT_TEMPLATE, tmp_path / "t.otio", tmp_path / "media", "Cutline import")
+    assert "app:GetResolve()" in script
+    assert "resolve:" not in script
+
+
+def test_import_works_when_the_resolve_global_is_nil(tmp_path: Path):
+    otio = tmp_path / "latest/timeline.otio"
+    script = render_script(IMPORT_TEMPLATE, otio, tmp_path / "latest/media", "Cutline import")
+
+    log = _run_lua_free_edition(script, import_ok=True)
+
+    assert log.touches == 1
+    assert log.path == str(otio)
+    assert log.page == "edit"
+
+
+def test_diagnostic_works_when_the_resolve_global_is_nil(tmp_path: Path):
+    script = render_script(DIAG_TEMPLATE, tmp_path / "t", tmp_path / "m", "Cutline import")
+
+    log = _run_lua_free_edition(script, import_ok=True)
+
+    assert log.empty.startswith("Cutline:")
+
+
 def test_render_bakes_absolute_paths_and_balanced_braces(tmp_path: Path):
     otio = tmp_path / "latest" / "timeline.otio"
     media = tmp_path / "latest" / "media"
