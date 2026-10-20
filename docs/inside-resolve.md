@@ -189,3 +189,44 @@ and 21.1 removed Python from the menu entirely. A dockable panel would be a
 Studio-only product, which is the one thing this project refuses to be. The
 drop-folder plus one-click-import loop is the smallest honest interface that
 works on both editions.
+
+## 21.1 Free: the Lua door
+
+`bmd.scriptapp("Resolve")` returns `nil` on Free 21.1, which is why the menu
+entries built on it did nothing. The Console hands out a live handle another way:
+
+```lua
+print(app:GetResolve())
+```
+
+Run inside the Console that prints the real app object, not `nil`. Free builds
+block *new connections* to Resolve, not the console's own connection. Any script
+that wants the API on Free must **reuse** the live object, never create one.
+
+What is reported working on free 21.1 builds, measured from inside Resolve:
+
+| Capability | Free 21.1 |
+| --- | --- |
+| Console in Lua mode, printing objects | works |
+| `dofile("/absolute/path/script.lua")` from the Console | works |
+| Media Pool + timeline API (`AppendToTimeline`, `ImportFolderFromFile`, timeline building) | works |
+| Project settings (`GetSetting` / `SetSetting`) | works |
+| `io`, `os.remove`, directory listing | stripped — no file writes, no listing |
+| `print()` in a *menu-launched* script | reported muted; the Console prints fine |
+
+Consequences for Cutline:
+
+- The entry point on Free 21.1 is a **one-line paste** in `Workspace → Console`:
+  `dofile("/Users/<you>/cutline/resolve/cutline.lua")`. No Terminal, no new
+  connection, no Studio.
+- Because `print()` may be muted from the Scripts menu, the Console is the
+  reliable place to see results. Scripts-menu entries stay as a convenience.
+- File I/O is unavailable, so the Lua side cannot write status files. Anything
+  that needs to report back must do it through the Console, a marker, or a
+  clip/title placed on the timeline.
+- Absolute paths must be baked in at install time — there is no way to list a
+  directory from Lua.
+
+This supersedes the earlier assumption that the project API is gated on 21.1
+Free. The gate is on *external* connections; the Console's own connection is the
+supported door.
