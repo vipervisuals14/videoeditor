@@ -5,8 +5,14 @@ drop footage into a folder, Cutline builds the cut in the background, and one
 click in Resolve pulls the finished timeline into the project you already have
 open. No browser tab, no File → Import dialog, no re-import shuffle.
 
-This works on the **free** edition. That constraint shaped the design more than
-anything else, so it is worth two minutes to explain what Resolve allows.
+**Verified on Resolve 21.1.1 Free:** the Lua entry appears and runs, but the
+project API is gated to Studio, so clicking it cannot import anything. On that
+build the finished cut is imported with **File → Import → Timeline** — the engine,
+drop folder, watcher, config, and OTIO output all work unchanged. On 21.0.x Free
+and Studio the menu import works.
+
+This design exists because of the **free** edition's limits, so it is worth two
+minutes to explain what Resolve allows.
 
 ## What the free edition actually permits
 
@@ -20,7 +26,8 @@ anything else, so it is worth two minutes to explain what Resolve allows.
 | OTIO / XML / EDL timeline import | Free, both editions | The timeline file is still the transport |
 
 So "a script inside Resolve" cannot mean the whole editor runs inside Resolve on
-Free. What it *can* mean — and what this ships — is:
+Free. On 21.1 even the import half is blocked; on 21.0.x it works. What this
+ships is:
 
 1. **The engine runs outside**, headless, watching a drop folder. It never needs
    a browser window or a click.

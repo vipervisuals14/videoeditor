@@ -39,8 +39,14 @@ If Terminal is not your thing, use the one-click installer:
 4. Leave the Terminal window open until it says **Cutline is installed.**
    It finds your Cutline folder, installs everything, adds the Resolve menu,
    starts the watcher, and opens the drop folder.
-5. **Quit DaVinci Resolve completely (Cmd+Q), reopen it**, then use
-   **Workspace → Scripts → Cutline - check bridge**.
+5. **Quit DaVinci Resolve completely (Cmd+Q), reopen it**, open a project, then
+   use **Workspace → Scripts → Cutline - check bridge**.
+
+   **If nothing happens:** Resolve **21.1 Free** runs menu scripts but keeps the
+   project API for Studio, so no menu script can import on that build. Skip the
+   menu entirely — **File → Import → Timeline** on
+   `~/Movies/Cutline/latest/timeline.otio` does the same job, and the drop folder,
+   watcher, and config all still work.
 
 The installer expects the Cutline folder at `~/cutline` (your home folder). If
 it says it cannot find it, move the unzipped folder into your home folder, rename
@@ -128,6 +134,10 @@ Scripts folder at launch. This is the step people miss.
 ### 4. Check that it is wired up
 
 In Resolve: **Workspace → Scripts → Cutline - check bridge**.
+
+On **21.1 Free** this entry can do nothing: that build gates the project API to
+Studio. Use **File → Import → Timeline** instead; the rest of the pipeline is
+unaffected.
 
 A timeline named `Cutline: bridge ready (Cutline import)` appears in the media
 pool. That is the success signal — the free edition mutes `print()`, so a

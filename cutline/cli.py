@@ -195,6 +195,11 @@ def command_resolve_install(args: argparse.Namespace) -> int:
     print()
     print("  Drop footage into the inbox folder; each change builds a cut and")
     print("  publishes it to latest/. The menu entry imports whatever is there.")
+    print()
+    print("  Known limit: on Resolve 21.1 Free, menu scripts run but the project")
+    print("  API is gated to Studio, so the menu item can do nothing. The cut is")
+    print("  still built; import it with File → Import → Timeline.")
+    print("  File → Import → Timeline works on every edition and version.")
     if not result.get("folder_existed", True):
         print()
         print("  That folder did not exist yet, which usually means Resolve has never")

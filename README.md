@@ -93,6 +93,12 @@ the import lives inside it. After the one-time `./install.sh` (see Quick start):
 The new timeline lands in the media pool and opens in the Edit page. Nothing is
 baked: it is the same track stack as a hand import, only the tracks the cut uses.
 
+**One verified limit:** Resolve **21.1 Free** runs Lua menu entries but gates the
+project API to Studio, so on that build the menu click does nothing. The cut is
+still built normally — use **File → Import → Timeline** on
+`~/Movies/Cutline/latest/timeline.otio`. On 21.0.x Free and Studio the menu
+import works as described.
+
 `Cutline - check bridge` proves the menu entry can reach Resolve's API,
 `cutline resolve-build` forces a build without waiting for the watcher, and
 `cutline resolve-status` prints what the last build produced. Modes and
