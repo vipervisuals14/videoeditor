@@ -125,6 +125,8 @@ three tone bands, cross-hatched in shadow, stroke weight carrying tone), `ASCII 
 Raster` became a true full-frame glyph raster with a gamma-lifted ramp, and
 `Datamosh Text Echo` was rebuilt around a mono plate + rust mid-band + red/cyan ghosts.
 
+![All 72 presets rendered at 3840x2160](docs/4k-verification.png)
+
 ### Measured cost (Node + Skia, CPU only, one core — a Mac is several times faster)
 
 | Path | Resolution | Total for all 72 | Average | Worst |
