@@ -36,6 +36,9 @@
     </div>
 
     <div class="topbar-actions">
+      <button class="btn-ghost" id="layoutMenuBtn" title="Turn any panel on or off, and add hidden panels back">
+        <span>▦ Panels</span><span class="layout-count hidden" id="layoutHiddenCount">0</span>
+      </button>
       <button class="btn-ghost" id="toggleCompactBtn" title="Shrink into a narrow floating pop-up dock to place beside DaVinci Resolve">
         <span id="compactBtnLabel">Pop-Up Dock Mode</span>
       </button>
@@ -45,6 +48,16 @@
       </button>
     </div>
   </header>
+
+  <!-- PANEL / LAYOUT MENU: every region can be switched off and added back -->
+  <div class="layout-menu hidden" id="layoutMenu">
+    <div class="layout-menu-head">
+      <strong>Panels</strong>
+      <button class="layout-showall" id="layoutShowAllBtn">Add all</button>
+    </div>
+    <div class="layout-list" id="layoutList"></div>
+    <p class="layout-hint">Hidden panels can be added back here at any time. Your choice is remembered.</p>
+  </div>
 
   <!-- MAIN WORKSPACE GRID -->
   <main class="workspace" id="workspaceRoot">
@@ -94,7 +107,7 @@
       <!-- ================================================================== -->
       <div class="tab-pane active" id="tab-vfx">
         <!-- AI LOOK DIRECTOR BAR -->
-        <div class="ai-prompt-card">
+        <div class="ai-prompt-card" data-module="look" data-label="Look Director">
           <div class="ai-prompt-header">
             <span class="ai-sparkle">LOOK DIRECTOR & TIMELINE PASS</span>
             <span class="ai-hint">Describe the TouchDesigner / optical look — builds a keyframed multi-node pass across your timeline</span>
@@ -119,7 +132,7 @@
         </div>
 
         <!-- INTERACTIVE KEYFRAME & INTENSITY CURVE INSPECTOR (FOR ALL EFFECTS & TRANSITIONS) -->
-        <div class="keyframe-inspector-card" id="keyframeEditorBox">
+        <div class="keyframe-inspector-card" id="keyframeEditorBox" data-module="keyframes" data-label="Keyframe Editor">
           <div class="kf-header-row">
             <div class="kf-title-group">
               <span class="kf-diamond-icon">◆</span>
@@ -187,7 +200,7 @@
         </div>
 
         <!-- 8 CATEGORY SUB-TABS (INCLUDING TOUCHDESIGNER TOPs & TRANSITIONS) -->
-        <div class="vfx-subtabs-bar">
+        <div class="vfx-subtabs-bar" data-module="presets" data-label="Effect Browser">
           <div class="vfx-subtabs" id="vfxCategoryTabs">
             <button class="vfx-subtab active" data-cat="ALL">All (72)</button>
             <button class="vfx-subtab" data-cat="TouchDesigner TOPs">TouchDesigner TOPs (12)</button>
@@ -204,14 +217,14 @@
         </div>
 
         <!-- LIVE MINI-CANVAS PRESET CARDS GRID (EACH WITH ITS OWN INTENSITY SLIDER + KEYFRAME BUTTON) -->
-        <div class="vfx-grid" id="vfxPresetGrid"></div>
+        <div class="vfx-grid" id="vfxPresetGrid" data-module="presets"></div>
       </div>
 
       <!-- ================================================================== -->
       <!-- TAB 2: LYRC.STUDIO KINETIC LYRIC STYLES & SUBTITLES                -->
       <!-- ================================================================== -->
       <div class="tab-pane" id="tab-captions">
-        <div class="pane-card">
+        <div class="pane-card" data-module="lyrc" data-label="LYRC Typography">
           <div class="pane-card-header">
             <div>
               <h3>LYRC.studio Kinetic Lyric Presets & Brand Captions</h3>
@@ -336,7 +349,7 @@
       <!-- TAB 3: CUT SILENCES (TALKING HEAD & BRAND CONTENT)                 -->
       <!-- ================================================================== -->
       <div class="tab-pane" id="tab-silences">
-        <div class="pane-card">
+        <div class="pane-card" data-module="silences" data-label="Cut Silences">
           <div class="pane-card-header">
             <div>
               <h3>Smart Silence & Dead-Air Cutter</h3>
@@ -412,7 +425,7 @@
       <!-- TAB 4: MEDIA POOL AI AUTO-EDITOR (VLOG & MUSIC VIDEO BUILDER)      -->
       <!-- ================================================================== -->
       <div class="tab-pane" id="tab-mediapool">
-        <div class="pane-card">
+        <div class="pane-card" data-module="mediapool" data-label="Media Pool AI">
           <div class="pane-card-header">
             <div>
               <h3>Media Pool Smart Auto-Editor</h3>
@@ -504,7 +517,7 @@
     <!-- RIGHT / LIVE RESOLVE MONITOR + MULTI-TRACK TIMELINE SIMULATOR -->
     <aside class="monitor-column" id="monitorColumn">
       <!-- LIVE VIEWER CARD -->
-      <div class="viewer-card">
+      <div class="viewer-card" data-module="monitor" data-label="Live Preview">
         <div class="viewer-topbar">
           <div class="viewer-tc" id="viewerTimecode">01:00:02:14</div>
           <div class="viewer-active-badges">
@@ -512,6 +525,7 @@
             <span class="active-cap-pill" id="activeCapPill">LYRC: Duet (Seed #1)</span>
           </div>
           <div class="viewer-controls-right">
+            <button class="btn-mini" id="toggleMotionBtn" title="Freeze every animation: shaders, beat pulses, lyric motion and card previews">Motion: ON</button>
             <button class="btn-mini" id="toggleLyricsOverlayBtn" title="Show or hide LYRC typography overlay on monitor">Lyrics: ON</button>
             <button class="btn-mini" id="aspectRatioBtn" title="Switch between 16:9 Widescreen and 9:16 Reels/TikTok vertical frame">9:16: OFF</button>
             <button class="btn-mini" id="compareSplitBtn" title="Before / After Split Wipe Comparison">Split Wipe: OFF</button>
@@ -536,7 +550,7 @@
       </div>
 
       <!-- MULTI-TRACK DAVINCI RESOLVE TIMELINE PREVIEW -->
-      <div class="timeline-card">
+      <div class="timeline-card" data-module="timeline" data-label="Timeline">
         <div class="timeline-header">
           <div class="tl-title-group">
             <strong id="activeTimelineTitle">Timeline 1 — ANAMORPHIC_EDIT_24FPS</strong>
@@ -578,13 +592,13 @@
         </div>
 
         <!-- LIVE RESOLVE LUA / BRIDGE LOG DRAWER -->
-        <div class="wire-strip" id="wireStrip">
+        <div class="wire-strip" id="wireStrip" data-module="wire" data-label="Resolve Wire">
           <span class="wire-pill" id="wireState">Bridge idle</span>
           <span class="wire-chain" id="wireChain">No graph dispatched yet</span>
           <span class="wire-pill" id="wireRecipeCount">-- recipes</span>
           <button class="wire-pill wire-btn" id="wireTestBtn" title="Ask the resident Resolve bridge what it can see right now">Test bridge</button>
         </div>
-        <div class="lua-drawer" id="luaDrawer">
+        <div class="lua-drawer" id="luaDrawer" data-module="lua" data-label="Lua Console">
           <div class="lua-drawer-head">
             <span>DaVinci Resolve Free 21.1.1 Bridge & Console Snippet</span>
             <div class="lua-drawer-btns">

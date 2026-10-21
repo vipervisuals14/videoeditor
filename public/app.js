@@ -762,6 +762,9 @@ const state = {
   splitCompare: false,
   vertical916: false,
   showLyricsOverlay: true,
+  motion: true,
+  frozenTime: 1.9,
+  hiddenModules: {},
   isPlaying: true,
   playheadSec: 2.8,
   totalDurSec: 16.0,
@@ -825,7 +828,10 @@ let offscreenCtx = null;
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
+let bootDone = false;
 document.addEventListener('DOMContentLoaded', () => {
+  if (bootDone) return;
+  bootDone = true;
   initTabs();
   initSceneSwitcher();
   initVfxTab();
@@ -835,6 +841,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCaptionsTab();
   initMediaPoolTab();
   initMonitorAndTimeline();
+  initModules();
   initBridgeModal();
   initConsoleModal();
   initBackend().then(() => startBridgeStatusPoll());
@@ -1132,6 +1139,179 @@ async function dispatchToResolve(action, payload, toastMsg) {
     if (toastMsg) showToast(toastMsg);
     return null;
   }
+}
+
+// ============================================================================
+// PANEL MODULES — every region can be switched off and added back
+// ----------------------------------------------------------------------------
+// A "module" is any element carrying data-module. Several elements may share an
+// id (the effect browser is a tab bar + a grid), and they hide together.
+// ============================================================================
+const UI_PREFS_KEY = 'pulsevfx.ui.v2';
+
+function moduleRegistry() {
+  const groups = new Map();
+  document.querySelectorAll('[data-module]').forEach((el) => {
+    const id = el.getAttribute('data-module');
+    if (!groups.has(id)) {
+      groups.set(id, {
+        id,
+        label: el.getAttribute('data-label') || id,
+        elements: []
+      });
+    }
+    const group = groups.get(id);
+    group.elements.push(el);
+    const label = el.getAttribute('data-label');
+    if (label && group.label === id) group.label = label;
+  });
+  return [...groups.values()];
+}
+
+function setModuleVisible(id, visible, persist) {
+  moduleRegistry().forEach((group) => {
+    if (group.id !== id) return;
+    group.elements.forEach((el) => el.classList.toggle('module-hidden', !visible));
+  });
+  if (visible) delete state.hiddenModules[id];
+  else state.hiddenModules[id] = true;
+  renderLayoutMenu();
+  updateEmptyPaneHints();
+  if (persist) saveUiPrefs();
+}
+
+function saveUiPrefs() {
+  try {
+    localStorage.setItem(UI_PREFS_KEY, JSON.stringify({
+      motion: state.motion,
+      lyrics: state.showLyricsOverlay,
+      hidden: state.hiddenModules || {}
+    }));
+  } catch (_e) { /* private mode, ignore */ }
+}
+
+function loadUiPrefs() {
+  try {
+    const raw = localStorage.getItem(UI_PREFS_KEY);
+    if (!raw) return;
+    const prefs = JSON.parse(raw);
+    if (typeof prefs.motion === 'boolean') state.motion = prefs.motion;
+    if (typeof prefs.lyrics === 'boolean') state.showLyricsOverlay = prefs.lyrics;
+    if (prefs.hidden && typeof prefs.hidden === 'object') state.hiddenModules = prefs.hidden;
+  } catch (_e) { /* ignore corrupt prefs */ }
+}
+
+function renderLayoutMenu() {
+  const list = document.getElementById('layoutList');
+  const badge = document.getElementById('layoutHiddenCount');
+  if (!list) return;
+  const groups = moduleRegistry();
+  const hiddenCount = groups.filter((g) => state.hiddenModules && state.hiddenModules[g.id]).length;
+  list.innerHTML = groups.map((group) => {
+    const on = !(state.hiddenModules && state.hiddenModules[group.id]);
+    return `<div class="layout-row ${on ? 'on' : 'off'}" data-module-toggle="${group.id}" role="button" tabindex="0">
+      <span class="layout-check">${on ? '✓' : ''}</span>
+      <span>${group.label}</span>
+      ${on ? '' : '<span class="layout-add">＋ Add</span>'}
+    </div>`;
+  }).join('');
+  list.querySelectorAll('[data-module-toggle]').forEach((row) => {
+    const id = row.getAttribute('data-module-toggle');
+    const toggle = () => {
+      const currentlyOn = !(state.hiddenModules && state.hiddenModules[id]);
+      setModuleVisible(id, !currentlyOn, true);
+    };
+    row.addEventListener('click', toggle);
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+  });
+  if (badge) {
+    badge.textContent = hiddenCount ? String(hiddenCount) : '';
+    badge.classList.toggle('hidden', hiddenCount === 0);
+  }
+}
+
+// When a whole tab's panels are switched off, say so instead of leaving a blank pane.
+function updateEmptyPaneHints() {
+  document.querySelectorAll('.tab-pane').forEach((pane) => {
+    const mods = [...pane.querySelectorAll('[data-module]')];
+    if (!mods.length) return;
+    const visible = mods.filter((m) => !m.classList.contains('module-hidden')).length;
+    pane.classList.toggle('panes-empty', visible === 0);
+  });
+}
+
+function addModuleHideButtons() {
+  moduleRegistry().forEach((group) => {
+    group.elements.forEach((el) => {
+      if (el.querySelector(':scope > .module-hide-btn')) return;
+      const btn = document.createElement('button');
+      btn.className = 'module-hide-btn';
+      btn.type = 'button';
+      btn.title = 'Turn this panel off (add it back from ▦ Panels)';
+      btn.textContent = '✕';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setModuleVisible(group.id, false, true);
+        showToast(`${group.label} hidden — ▦ Panels to add it back`, 'warn');
+      });
+      el.appendChild(btn);
+    });
+  });
+}
+
+function initModules() {
+  loadUiPrefs();
+  addModuleHideButtons();
+  renderLayoutMenu();
+  // apply saved visibility
+  moduleRegistry().forEach((group) => {
+    const visible = !(state.hiddenModules && state.hiddenModules[group.id]);
+    group.elements.forEach((el) => el.classList.toggle('module-hidden', !visible));
+  });
+
+  const menuBtn = document.getElementById('layoutMenuBtn');
+  const menu = document.getElementById('layoutMenu');
+  if (menuBtn && menu) {
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu.classList.toggle('hidden');
+      renderLayoutMenu();
+    });
+    document.addEventListener('click', (e) => {
+      if (menu.classList.contains('hidden')) return;
+      if (menu.contains(e.target) || menuBtn.contains(e.target)) return;
+      menu.classList.add('hidden');
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') menu.classList.add('hidden');
+    });
+  }
+  const showAll = document.getElementById('layoutShowAllBtn');
+  if (showAll) {
+    showAll.addEventListener('click', () => {
+      state.hiddenModules = {};
+      moduleRegistry().forEach((group) => {
+        group.elements.forEach((el) => el.classList.remove('module-hidden'));
+      });
+      renderLayoutMenu();
+      updateEmptyPaneHints();
+      saveUiPrefs();
+      showToast('All panels added back', 'ok');
+    });
+  }
+
+  const motionBtn = document.getElementById('toggleMotionBtn');
+  if (motionBtn) {
+    motionBtn.addEventListener('click', () => {
+      state.motion = !state.motion;
+      applyMotionState(true);
+    });
+  }
+  applyMotionState(false);
+  applyLyricsState(false);
+  updateEmptyPaneHints();
 }
 
 // ============================================================================
@@ -1452,7 +1632,7 @@ function drawCardShaderPreview(canvas, effectType, accent, timeSec) {
 let thumbCursor = 0;
 function startCardThumbnailLoop() {
   setInterval(() => {
-    if (state.activeTab !== 'vfx' || document.hidden) return;
+    if (state.activeTab !== 'vfx' || document.hidden || !state.motion) return;
     const cards = document.querySelectorAll('.vfx-thumb-canvas');
     if (!cards.length) return;
     const CHUNK = 14;
@@ -2436,6 +2616,9 @@ function initMonitorAndTimeline() {
   playPauseBtn.addEventListener('click', () => {
     state.isPlaying = !state.isPlaying;
     playPauseBtn.textContent = state.isPlaying ? 'Pause' : 'Play';
+    // pause means "stop moving", not "keep animating but stop the clock"
+    state.motion = state.isPlaying;
+    applyMotionState(true);
   });
 
   document.getElementById('triggerHitNowBtn').addEventListener('click', () => {
@@ -2447,7 +2630,8 @@ function initMonitorAndTimeline() {
   if (lyricsToggleBtn) {
     lyricsToggleBtn.addEventListener('click', () => {
       state.showLyricsOverlay = !state.showLyricsOverlay;
-      lyricsToggleBtn.textContent = state.showLyricsOverlay ? 'Lyrics: ON' : 'Lyrics: OFF';
+      applyLyricsState(true);
+      if (!state.showLyricsOverlay) renderTimelineTracks();
     });
   }
 
@@ -2545,7 +2729,13 @@ function renderLivePreviewLoop(now) {
   const dt = Math.min(0.05, (now - lastFrameTs) / 1000);
   lastFrameTs = now;
 
-  if (state.isPlaying) {
+  // Motion off freezes the whole monitor: shader time, beat pulse and lyric
+  // animation all derive from this timestamp, so nothing keeps drifting.
+  if (!state.motion) {
+    captureFrozenTime(now / 1000);
+  }
+
+  if (state.isPlaying && state.motion) {
     state.playheadSec = (state.playheadSec + dt) % state.totalDurSec;
     const pct = (state.playheadSec / state.totalDurSec) * 100;
     const scrubber = document.getElementById('timelineScrubber');
@@ -2568,8 +2758,47 @@ function renderLivePreviewLoop(now) {
   document.getElementById('viewerTimecode').textContent = `01:00:${ss}:${ff}`;
   document.getElementById('transportDurLabel').textContent = `${state.playheadSec.toFixed(1)}s / ${state.totalDurSec.toFixed(1)}s`;
 
-  drawMonitorFrame(now / 1000);
+  drawMonitorFrame(state.motion ? now / 1000 : state.frozenTime);
   requestAnimationFrame(renderLivePreviewLoop);
+}
+
+function captureFrozenTime(nowSec) {
+  if (typeof state.frozenTime !== 'number' || !Number.isFinite(state.frozenTime)) {
+    state.frozenTime = nowSec;
+  }
+}
+
+// Applies the Motion button + body class. Turning motion back on resumes from
+// the frozen frame instead of jumping to a random beat.
+function applyMotionState(persist) {
+  const btn = document.getElementById('toggleMotionBtn');
+  const play = document.getElementById('playPauseBtn');
+  if (!state.motion) {
+    state.isPlaying = false;
+    if (play) play.textContent = 'Play';
+  }
+  if (btn) {
+    btn.textContent = state.motion ? 'Motion: ON' : 'Motion: OFF';
+    btn.classList.toggle('is-off', !state.motion);
+  }
+  document.body.classList.toggle('motion-off', !state.motion);
+  if (state.motion) {
+    state.frozenTime = null;
+  } else if (typeof state.frozenTime !== 'number') {
+    state.frozenTime = performance.now() / 1000;
+  }
+  if (persist) saveUiPrefs();
+}
+
+function applyLyricsState(persist) {
+  const btn = document.getElementById('toggleLyricsOverlayBtn');
+  if (btn) {
+    btn.textContent = state.showLyricsOverlay ? 'Lyrics: ON' : 'Lyrics: OFF';
+    btn.classList.toggle('is-off', !state.showLyricsOverlay);
+  }
+  // keep the LYRC lane on the timeline strip in sync with the overlay
+  document.body.classList.toggle('lyrics-off', !state.showLyricsOverlay);
+  if (persist) saveUiPrefs();
 }
 
 function drawMonitorFrame(t) {
