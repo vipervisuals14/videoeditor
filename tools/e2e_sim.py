@@ -186,6 +186,11 @@ def main():
                                             f"projectName={r.get('projectName')!r}"))
         check("live timeline name", lambda: (r.get("timelineName") == "Timeline 1",
                                              f"timelineName={r.get('timelineName')!r}"))
+        check("ping names the clip an Apply will hit", lambda: (
+            (r.get("targetClip") or {}).get("name") == "A001_C003",
+            f"targetClip={r.get('targetClip')}"))
+        check("ping reports the playhead frame", lambda: (
+            isinstance(r.get("playheadFrame"), (int, float)), f"playheadFrame={r.get('playheadFrame')!r}"))
 
         # ---- apply a preset with keyframes
         res = post("/api/dispatch", {

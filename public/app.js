@@ -840,13 +840,15 @@ document.addEventListener('DOMContentLoaded', () => {
   requestAnimationFrame(renderLivePreviewLoop);
 });
 
-function showToast(msg) {
+function showToast(msg, kind) {
   const container = document.getElementById('toastContainer');
+  if (!container) return;
   const el = document.createElement('div');
-  el.className = 'toast';
+  el.className = 'toast' + (kind ? ' toast-' + kind : '');
   el.textContent = msg;
   container.appendChild(el);
-  setTimeout(() => el.remove(), 3400);
+  // errors and warnings stay up long enough to actually read
+  setTimeout(() => el.remove(), kind === 'warn' || kind === 'error' ? 6500 : 3400);
 }
 
 // Paints the wire strip above the Lua drawer: what graph was sent to Resolve,
@@ -854,16 +856,34 @@ function showToast(msg) {
 function paintWireStrip({ live, chain, mode, error } = {}) {
   const stateEl = document.getElementById('wireState');
   const chainEl = document.getElementById('wireChain');
+  const bridge = state.bridge || {};
+  if (typeof live === 'boolean') bridge.live = live;
+  if (chain) bridge.lastGraph = chain;
+  if (error !== undefined) bridge.lastError = error || null;
+
   if (stateEl) {
-    stateEl.className = 'wire-pill ' + (live ? 'ok' : 'warn');
-    stateEl.textContent = error
-      ? 'Resolve: ' + error
-      : (live ? 'Live Resolve 21.1.1' : 'Lua queued (bridge not running)');
+    if (bridge.lastError) {
+      stateEl.className = 'wire-pill warn';
+      stateEl.textContent = 'Resolve: ' + bridge.lastError;
+    } else if (bridge.live) {
+      stateEl.className = 'wire-pill ok';
+      stateEl.textContent = bridge.target
+        ? 'Live · target: ' + bridge.target
+        : 'Live · ' + (bridge.project || 'Resolve') + (bridge.timeline ? ' / ' + bridge.timeline : '');
+    } else {
+      stateEl.className = 'wire-pill warn';
+      stateEl.textContent = 'Bridge not running';
+    }
   }
   if (chainEl) {
-    chainEl.textContent = chain || mode || 'No graph dispatched yet';
+    chainEl.textContent = bridge.lastGraph
+      || mode
+      || (bridge.live
+        ? 'Pipe open — press “+ Apply” on any card to send a real graph'
+        : 'Open Resolve ▸ Workspace ▸ Scripts ▸ VFXKit_ResolveFree_Bridge');
     chainEl.title = chainEl.textContent;
   }
+  state.bridge = bridge;
 }
 
 function graphLabel(recipe, fallback) {
@@ -886,20 +906,34 @@ async function dispatchToResolve(action, payload, toastMsg) {
 
     const result = (data.bridgeResponse && data.bridgeResponse.result) || null;
     const live = !!data.liveBridgeConnected;
-    const chain = graphLabel(data.recipe, data.recipe ? '' : '');
+    const chain = graphLabel(data.recipe);
+    const bridgeErr = data.bridgeResponse && data.bridgeResponse.error;
+    const applyErr = result && result.error;
+    const failed = !live || bridgeErr || applyErr;
+
+    if (live && result && result.clipName) {
+      state.bridge.target = result.clipName;
+    }
     paintWireStrip({
       live,
       chain: chain ? `MediaIn → ${chain} → MediaOut` : '',
-      error: result && (result.error || data.bridgeResponse && data.bridgeResponse.error)
+      error: failed ? (applyErr || bridgeErr || 'no reply from Resolve') : null
     });
 
     if (toastMsg) {
-      const famTag = data.recipe && data.recipe.family ? ` · ${data.recipe.family.toUpperCase()} graph` : '';
-      const modeTag = live ? 'LIVE in Resolve 21.1.1' : 'Lua + monitor ready';
-      const appended = result && result.fusionNode
-        ? ` | ${String(result.fusionNode).slice(0, 90)}`
-        : '';
-      showToast(`${toastMsg}${famTag} (${modeTag})${appended}`);
+      if (failed) {
+        showToast(
+          !live
+            ? `${toastMsg} — but Resolve never answered. In Resolve click Workspace ▸ Scripts ▸ VFXKit_ResolveFree_Bridge, then press Test.`
+            : `Resolve said: ${applyErr || bridgeErr}`,
+          'error'
+        );
+      } else {
+        const famTag = data.recipe && data.recipe.family ? ` · ${data.recipe.family.toUpperCase()} graph` : '';
+        const appended = result && result.fusionNode ? ` | ${String(result.fusionNode).slice(0, 80)}` : '';
+        const where = result && result.clipName ? ` → ${result.clipName}` : '';
+        showToast(`${toastMsg}${famTag}${where} (LIVE in Resolve 21.1.1)${appended}`, 'ok');
+      }
     }
     return data;
   } catch (_err) {
@@ -2271,6 +2305,39 @@ function renderTimelineTracks() {
     `).join('');
   };
 
+  const live = state.liveTimeline;
+  const titleEl = document.getElementById('activeTimelineTitle');
+  const wrap = document.getElementById('timelineTracksContainer');
+  if (wrap) wrap.classList.toggle('is-live', !!live);
+
+  if (live) {
+    // connected: show the timeline that is actually open in Resolve instead of
+    // the demo arrangement, so nothing in the panel is pretending
+    const clips = live.clips || [];
+    const end = clips.reduce((m, c) => Math.max(m, c.endFrame || 0), 0) || 1;
+    renderLane('laneV1', clips.map((c) => ({
+      left: Math.max(0, ((c.startFrame || 0) / end) * 100),
+      width: Math.max(1.5, (((c.endFrame || 0) - (c.startFrame || 0)) / end) * 100),
+      label: c.name || 'Clip'
+    })), 'v1-item');
+    renderLane('laneV3', state.timelineTracks.v3, 'vfx-item');
+    renderLane('laneSub', [], 'sub-item');
+    renderLane('laneV2', [], 'v2-item');
+    renderLane('laneA1', [], 'a1-item');
+    if (titleEl) {
+      titleEl.innerHTML = `<span class="live-tag">LIVE</span> ${live.name || 'Timeline'} · `
+        + `${live.project || 'Project'} · ${live.fps || '24'} fps`;
+      titleEl.title = state.bridge && state.bridge.target
+        ? `Apply targets: ${state.bridge.target}`
+        : 'Bridge connected';
+    }
+    return;
+  }
+
+  if (titleEl) {
+    titleEl.innerHTML = 'Timeline 1 — ANAMORPHIC_EDIT_24FPS <span class="demo-tag">PREVIEW DEMO</span>';
+    titleEl.title = 'Not connected to Resolve yet — this is the panel’s demo arrangement';
+  }
   renderLane('laneV3', state.timelineTracks.v3, 'vfx-item');
   renderLane('laneSub', state.timelineTracks.sub, 'sub-item');
   renderLane('laneV2', state.timelineTracks.v2, 'v2-item');
@@ -3227,17 +3294,31 @@ async function checkResolveStatus() {
       statusText.textContent = `Live: ${proj} · Resolve ${session.version || '21.1.1'}`;
       statusText.title = `Bridge ${session.bridge || ''} · state ${session.stateDir || ''}`;
       if (dot) dot.className = 'status-dot live';
+      state.bridge = Object.assign(state.bridge || {}, {
+        live: true,
+        project: proj,
+        timeline: session.timelineName || ''
+      });
       if (state.resolveLive !== true) {
         state.resolveLive = true;
-        showToast(`Resolve bridge connected — ${proj}`);
+        // first sight of the bridge: ask it what an Apply would hit right now
+        probeBridge(true);
+      } else {
+        paintWireStrip({ live: true, error: null });
       }
     } else {
       state.resolveLive = false;
+      state.bridge = Object.assign(state.bridge || {}, { live: false });
+      if (state.liveTimeline) {
+        state.liveTimeline = null;
+        renderTimelineTracks();
+      }
       statusText.textContent = data.scriptInstalled
         ? 'Bridge installed · run it in Resolve'
         : 'Resolve 21.1.1 Bridge Setup';
       statusText.title = data.paths ? `Install target: ${data.paths.scriptsDir}` : '';
       if (dot) dot.className = 'status-dot ' + (data.scriptInstalled ? 'installed' : 'idle');
+      paintWireStrip({ live: false });
     }
 
     const cov = data.recipeCoverage;
@@ -3253,7 +3334,48 @@ async function checkResolveStatus() {
   }
 }
 
+// Asks the resident bridge what it can see (project / timeline / clip under the
+// playhead). This is the proof that a click will reach the timeline, and it is
+// what the wire strip shows instead of a bare "connected".
+async function probeBridge(announce) {
+  const data = await dispatchToResolve('ping', {});
+  const r = data && data.bridgeResponse && data.bridgeResponse.result;
+  if (!data || !data.liveBridgeConnected || !r) {
+    if (announce) {
+      showToast('Resolve did not answer the test. In Resolve click Workspace ▸ Scripts ▸ VFXKit_ResolveFree_Bridge, then press Test again.', 'warn');
+    }
+    return null;
+  }
+  state.bridge = Object.assign(state.bridge || {}, {
+    live: true,
+    project: r.projectName || '',
+    timeline: r.timelineName || '',
+    target: r.targetClip && r.targetClip.name ? r.targetClip.name : ''
+  });
+  state.liveTimeline = {
+    name: r.timelineName || 'Timeline',
+    project: r.projectName || '',
+    fps: r.fps || '24',
+    clips: r.timelineClips || []
+  };
+  renderTimelineTracks();
+  paintWireStrip({ live: true, error: null });
+  if (announce) {
+    const target = r.targetClip && r.targetClip.name
+      ? `Apply will hit “${r.targetClip.name}”${r.targetClip.underPlayhead ? ' under the playhead' : ' (first clip on V1)'}`
+      : 'No clip under the playhead — put one on V1 first';
+    showToast(`Resolve replied: ${r.projectName || 'project'} / ${r.timelineName || 'timeline'}. ${target}.`, 'ok');
+  }
+  return r;
+}
+
+function initWireStrip() {
+  const btn = document.getElementById('wireTestBtn');
+  if (btn) btn.addEventListener('click', () => probeBridge(true));
+}
+
 function startBridgeStatusPoll() {
+  initWireStrip();
   checkResolveStatus();
   setInterval(() => {
     if (document.hidden) return;

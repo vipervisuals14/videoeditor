@@ -152,7 +152,29 @@ That green pill is your proof that a click in the panel will really reach your t
 
 ---
 
-## Part 6 — Your first effect in 60 seconds
+## Part 6 — What "connected" actually means
+
+When the pill in the panel header turns green and reads
+**`Live: <your project> · Resolve 21.1.1`**, the pipe is open. That is all it means.
+
+**Nothing on your timeline changes until you press a button that sends something.**
+The panel is not a mirror of Resolve: its big preview renders on its own demo camera
+plates (`Camera Plate ▸ …`, or **`+ Load Video`** to use your own file), and the timeline
+strip at the bottom shows your **real** Resolve timeline once it is connected
+(look for the green `LIVE` tag; without it, the strip says `PREVIEW DEMO`).
+
+Two things to check, in this order:
+
+1. The strip above the Lua console should read
+   **`Live · target: <clip name>`** — that is the clip an Apply will hit.
+   If it says **`No clip under the playhead`**, put a clip on **V1** and park the playhead on it.
+2. Press **`Test bridge`** in that strip. Resolve should answer with its project, timeline and
+   target clip in a green toast. If you get an amber/red toast instead, the bridge is not
+   actually running (click `Workspace ▸ Scripts ▸ VFXKit_ResolveFree_Bridge` again).
+
+---
+
+## Part 7 — Your first effect in 60 seconds
 
 1. In Resolve, on the **Edit page**, put a clip on **V1**.
 2. Move the **playhead over that clip** (the bridge applies to the clip under the playhead).
@@ -173,7 +195,7 @@ timeline. Scrub it — the effect is real, on the clip.
 
 ---
 
-## Part 7 — Keyframes (the sliders that move)
+## Part 8 — Keyframes (the sliders that move)
 
 1. Select the card you applied.
 2. Under the big preview there is a **curve editor**. Click on the curve to drop a keyframe;
@@ -187,7 +209,7 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 
 ---
 
-## Part 8 — The other three tabs
+## Part 9 — The other three tabs
 
 **`02 • LYRC Typography`** — 20 kinetic lyric styles (Bold / Layered / Minimal / Talking).
 
@@ -218,6 +240,18 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 
 When you are done: close the panel's Terminal window and quit Resolve. Nothing to uninstall,
 nothing left running.
+
+---
+
+## Updating the kit later
+
+1. Download the ZIP again and replace your old PulseVFX folder (keep the new folder's name,
+   or the double-click files still work — they only look for their neighbours).
+2. Double-click **`Mac 1 - Install Resolve Bridge.command`** to copy the new bridge in.
+3. **Quit DaVinci Resolve completely (⌘Q) and reopen it.** The old bridge is still in memory
+   until Resolve quits, and two copies running at once would apply every effect twice.
+4. In Resolve: **Workspace ▸ Scripts ▸ VFXKit_ResolveFree_Bridge**.
+5. In the browser: reload the panel page (**⌘R**).
 
 ---
 

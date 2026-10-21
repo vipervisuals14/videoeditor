@@ -177,6 +177,8 @@ local function new_timeline(name, items)
   end
   tl.GetCurrentVideoItem = function(self) return self.items[1] end
   tl.GetStartFrame = function(self) return self.startFrame end
+  tl.GetCurrentFrame = function(self) return self.startFrame + 4 end
+  tl.GetTrackName = function(self, kind, idx) return tostring(kind) .. " " .. tostring(idx) end
   tl.GetStartTimecode = function(self) return "01:00:00:00" end
   tl.GetCurrentTimecode = function(self) return "01:00:04:12" end
   tl.GetName = function(self) return self.name end

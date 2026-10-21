@@ -213,6 +213,8 @@ Handlers.get_project_state = function(res, _fus, _args)
     local tl_name = "None"
     local start_tc = "01:00:00:00"
     local cur_tc = "01:00:00:00"
+    local target_clip = nil
+    local playhead_frame = nil
 
     if tl then
         tl_name = tl:GetName() or "Timeline 1"
@@ -234,6 +236,26 @@ Handlers.get_project_state = function(res, _fus, _args)
                 color = it:GetClipColor() or "Blue"
             }
         end
+
+        -- what an Apply will actually hit: the clip under the playhead,
+        -- falling back to the first clip on V1 exactly like apply_vfx does
+        pcall(function()
+            local it = tl:GetCurrentVideoItem()
+            if not it then
+                local list = tl:GetItemListInTrack("video", 1) or {}
+                it = list[1]
+            end
+            if it then
+                target_clip = {
+                    name = it:GetName() or "Clip",
+                    startFrame = it:GetStart() or 0,
+                    duration = it:GetDuration() or 0,
+                    underPlayhead = (tl:GetCurrentVideoItem() ~= nil),
+                    fusionComps = it:GetFusionCompCount() or 0
+                }
+            end
+            playhead_frame = tl:GetCurrentFrame()
+        end)
 
         local mks = tl:GetMarkers() or {}
         for frame_id, mk in pairs(mks) do
@@ -264,6 +286,8 @@ Handlers.get_project_state = function(res, _fus, _args)
         audioTracks = a_tracks,
         subtitleTracks = s_tracks,
         timelineClips = video_items,
+        targetClip = target_clip,
+        playheadFrame = playhead_frame,
         markers = markers_out
     }
 end
