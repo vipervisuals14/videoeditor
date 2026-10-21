@@ -3,3 +3,6 @@ preview-test/
 preview-shots/
 *.log
 .DS_Store
+
+# generated static web bundle (CI builds it)
+dist-web/

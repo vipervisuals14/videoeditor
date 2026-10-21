@@ -2141,3 +2141,43 @@ input[type="range"] {
   from { transform: translateY(12px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
+
+/* ==========================================================================
+   CONSOLE MODE (static web build)
+   ========================================================================== */
+.console-modal-card { max-width: 780px; width: min(92vw, 780px); }
+.console-steps {
+  margin: 4px 0 10px 18px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.75;
+  color: #cbd5e1;
+}
+.console-steps code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.console-lua {
+  max-height: 44vh;
+  overflow: auto;
+  user-select: text;
+  white-space: pre;
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+.console-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.console-hint { font-size: 11px; color: #86efac; }
+.console-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #94a3b8;
+}

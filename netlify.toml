@@ -1,0 +1,19 @@
+# Netlify — drag-and-drop or connect the repo; both work.
+[build]
+  command = "node tools/build-web.mjs"
+  publish = "dist-web"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# static bundle: no functions, no server
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+
+[[headers]]
+  for = "/preset-recipes.json"
+  [headers.values]
+    Cache-Control = "no-cache"

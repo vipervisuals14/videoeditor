@@ -10,6 +10,14 @@ Total time: **about 15 minutes**, once. After that it is a 2-double-click routin
 
 ---
 
+> **Shortcut: do you just want the effects without installing anything?**
+> There is a **web version** — deploy the `dist-web/` folder anywhere (or use a hosted URL),
+> then each effect is applied by pasting one snippet into Resolve's Console. No Node.js, no
+> terminal, no bridge. See **[DEPLOY-WEB.md](DEPLOY-WEB.md)**.
+> The trade-off: one paste per effect instead of one click. This manual is the one-click route.
+
+---
+
 ## What you are installing
 
 Two separate things, and it helps to know why:

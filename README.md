@@ -30,6 +30,20 @@ StayCreative's VFX Kit (`staycreative.store/pages/vfx-kit-extension`, created by
 
 ---
 
+## Two ways to run it
+
+| | **Web version** (no installs) | **Desktop version** (one-click apply) |
+| --- | --- | --- |
+| Setup | deploy a static folder, or open a hosted URL | Node.js + 3 double-clicks ([INSTALL.md](INSTALL.md)) |
+| Applying an effect | press **+ Apply** → paste one Lua snippet into `Workspace ▸ Console` | press **+ Apply** → done |
+| Everything else (72 live cards, 4K shaders, sliders, keyframes, LYRC styles) | identical | identical |
+
+Build the web bundle with `node tools/build-web.mjs` and deploy `dist-web/` — see
+**[DEPLOY-WEB.md](DEPLOY-WEB.md)** for GitHub Pages / Netlify / Vercel / Cloudflare, including
+the exact click-path in Resolve.
+
+---
+
 ## Quick Start (macOS & DaVinci Resolve Free 21.1.1)
 
 **Never used a terminal? Read [INSTALL.md](INSTALL.md) instead — it is a click-by-click manual

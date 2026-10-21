@@ -836,7 +836,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initMediaPoolTab();
   initMonitorAndTimeline();
   initBridgeModal();
-  startBridgeStatusPoll();
+  initConsoleModal();
+  initBackend().then(() => startBridgeStatusPoll());
   requestAnimationFrame(renderLivePreviewLoop);
 });
 
@@ -849,6 +850,195 @@ function showToast(msg, kind) {
   container.appendChild(el);
   // errors and warnings stay up long enough to actually read
   setTimeout(() => el.remove(), kind === 'warn' || kind === 'error' ? 6500 : 3400);
+}
+
+// ============================================================================
+// STATIC / WEB MODE
+// ----------------------------------------------------------------------------
+// The hosted build has no local server and therefore no Resolve bridge, so an
+// action cannot be dispatched over the mailbox. Instead the exact same Lua
+// generator (public/lua-export.js) runs in the browser and hands you one snippet
+// to paste into Resolve ▸ Workspace ▸ Console. Server mode is unchanged.
+// ============================================================================
+function copyText(text, okMsg) {
+  const done = () => showToast(okMsg || 'Copied to clipboard', 'ok');
+  const fallback = () => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand && document.execCommand('copy');
+      ta.remove();
+      ok ? done() : showToast('Text is selected — press ⌘C to copy', 'warn');
+    } catch (_e) {
+      showToast('Select the text and press ⌘C to copy', 'warn');
+    }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(fallback);
+  } else {
+    fallback();
+  }
+}
+
+async function initBackend() {
+  state.staticMode = false;
+  state.recipes = null;
+
+  if (window.PULSE_BUILD === 'web') {
+    state.staticMode = true;
+  } else {
+    try {
+      const res = await fetch('api/status', { cache: 'no-store' });
+      const data = await res.json();
+      if (!data || data.ok !== true) throw new Error('not a pulse server');
+    } catch (_err) {
+      state.staticMode = true;
+    }
+  }
+
+  if (state.staticMode) {
+    try {
+      const res = await fetch('preset-recipes.json', { cache: 'no-store' });
+      state.recipes = await res.json();
+    } catch (_err) {
+      state.recipes = null;
+    }
+  }
+  applyModeChrome();
+}
+
+// Same lookup + fallback the Node server uses, so a card always gets a graph.
+function recipeForLocal(presetId, category) {
+  const all = state.recipes && state.recipes.recipes ? state.recipes.recipes : null;
+  if (all && presetId && all[presetId]) return all[presetId];
+  if (!category) return null;
+  return {
+    label: presetId || category,
+    category,
+    family: 'generic',
+    chain: [{ tool: 'BrightnessContrast', bg: true, key: true, input: 'Gain', scale: 1.0 }],
+    marker: 'Fuchsia'
+  };
+}
+
+function applyModeChrome() {
+  const dot = document.getElementById('bridgeStatusDot');
+  const text = document.getElementById('bridgeStatusText');
+  const cov = document.getElementById('wireRecipeCount');
+  if (state.staticMode) {
+    if (dot) dot.className = 'status-dot installed';
+    if (text) text.textContent = 'Web mode · paste to Resolve Console';
+    if (cov && state.recipes) {
+      const n = state.recipes.count || Object.keys(state.recipes.recipes || {}).length;
+      cov.textContent = `${n} buildable graphs · console mode`;
+    }
+    paintWireStrip({ live: false });
+    const stateEl = document.getElementById('wireState');
+    if (stateEl) {
+      stateEl.className = 'wire-pill installed';
+      stateEl.textContent = 'Web / Console mode';
+    }
+    const chainEl = document.getElementById('wireChain');
+    if (chainEl && !(state.bridge && state.bridge.lastGraph)) {
+      chainEl.textContent = 'Press “+ Apply” — you get one Lua snippet to paste in Resolve';
+    }
+  }
+}
+
+function openConsoleModal(snippet, hint) {
+  const modal = document.getElementById('consoleModal');
+  const pre = document.getElementById('consoleLua');
+  if (!modal || !pre) return;
+  state.lastSnippet = snippet;
+  pre.textContent = snippet;
+  const hintEl = document.getElementById('consoleModalHint');
+  if (hintEl) hintEl.textContent = hint || '';
+  modal.classList.remove('hidden');
+  // preselect so ⌘C / the Copy button always has the whole snippet
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(pre);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch (_e) { /* selection is a nicety */ }
+}
+
+function initConsoleModal() {
+  const modal = document.getElementById('consoleModal');
+  if (!modal) return;
+  const close = () => modal.classList.add('hidden');
+  const closeBtn = document.getElementById('closeConsoleModalBtn');
+  if (closeBtn) closeBtn.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+  const copyBtn = document.getElementById('copyConsoleLuaBtn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      copyText(state.lastSnippet || '', 'Lua copied — paste into Resolve ▸ Workspace ▸ Console');
+    });
+  }
+
+  const dlBtn = document.getElementById('downloadConsoleLuaBtn');
+  if (dlBtn) {
+    dlBtn.addEventListener('click', () => {
+      const blob = new Blob([state.lastSnippet || ''], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'PulseVFX_apply.lua';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    });
+  }
+}
+
+// Builds the snippet locally and shows the paste dialog. Returns a dispatch-like
+// object so every caller keeps working unchanged.
+function staticDispatch(action, payload, toastMsg) {
+  const p = Object.assign({}, payload);
+  if (action === 'apply_vfx') {
+    p.recipe = recipeForLocal(p.presetId, p.category);
+  }
+  if (action === 'add_captions_lyrics') {
+    p.recipe = recipeForLocal('lyrc_' + p.presetId, p.category) || recipeForLocal(p.presetId, p.category);
+  }
+  const snippet = (window.LUA_EXPORT && LUA_EXPORT.generate)
+    ? LUA_EXPORT.generate(action, p)
+    : '-- generator missing (lua-export.js did not load)';
+
+  const out = document.getElementById('luaCodeOutput');
+  if (out) out.textContent = snippet;
+
+  const chain = graphLabel(p.recipe);
+  paintWireStrip({
+    live: false,
+    chain: chain ? `MediaIn → ${chain} → MediaOut` : '',
+    error: null
+  });
+
+  const hasLua = !!(window.LUA_EXPORT && LUA_EXPORT.isConsoleAction(action));
+  if (hasLua) {
+    openConsoleModal(snippet, toastMsg ? toastMsg.replace(/\.$/, '') : '');
+  }
+  if (toastMsg) {
+    showToast(hasLua
+      ? `${toastMsg} — Lua ready, paste it into Resolve ▸ Workspace ▸ Console`
+      : toastMsg, hasLua ? 'ok' : undefined);
+  }
+  return {
+    ok: true,
+    action,
+    staticMode: true,
+    liveBridgeConnected: false,
+    bridgeReason: 'static_console_mode',
+    recipe: p.recipe || null,
+    luaSnippet: snippet
+  };
 }
 
 // Paints the wire strip above the Lua drawer: what graph was sent to Resolve,
@@ -893,8 +1083,9 @@ function graphLabel(recipe, fallback) {
 }
 
 async function dispatchToResolve(action, payload, toastMsg) {
+  if (state.staticMode) return staticDispatch(action, payload, toastMsg);
   try {
-    const res = await fetch('/api/dispatch', {
+    const res = await fetch('api/dispatch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, payload })
@@ -3266,7 +3457,13 @@ function initBridgeModal() {
     const resBox = document.getElementById('installResultBox');
     resBox.textContent = 'Installing VFXKit_ResolveFree_Bridge.lua & Fusion .setting macros...';
     try {
-      const res = await fetch('/api/install-bridge', { method: 'POST' });
+      if (state.staticMode) {
+        resBox.innerHTML = 'This is the hosted web build, so there is nothing to install locally.<br/>'
+          + 'Press <b>+ Apply</b> on any card and paste the Lua it gives you into '
+          + '<code>Workspace ▸ Console</code> in Resolve.';
+        return;
+      }
+      const res = await fetch('api/install-bridge', { method: 'POST' });
       const data = await res.json();
       if (data.ok) {
         resBox.innerHTML = `✓ Installed Bridge to: <code>${data.installedTo}</code><br/>✓ Installed ${data.installedMacros.length} native Fusion VFX & LYRC Macros to: <code>${data.effectsDir}</code>`;
@@ -3282,8 +3479,12 @@ function initBridgeModal() {
 }
 
 async function checkResolveStatus() {
+  if (state.staticMode) {
+    applyModeChrome();
+    return;
+  }
   try {
-    const res = await fetch('/api/status');
+    const res = await fetch('api/status');
     const data = await res.json();
     const statusText = document.getElementById('bridgeStatusText');
     const dot = document.getElementById('bridgeStatusDot');
@@ -3338,6 +3539,12 @@ async function checkResolveStatus() {
 // playhead). This is the proof that a click will reach the timeline, and it is
 // what the wire strip shows instead of a bare "connected".
 async function probeBridge(announce) {
+  if (state.staticMode) {
+    if (announce) {
+      showToast('Web mode: there is no bridge to test. Press “+ Apply” on a card and paste the Lua it gives you into Resolve ▸ Workspace ▸ Console.', 'warn');
+    }
+    return null;
+  }
   const data = await dispatchToResolve('ping', {});
   const r = data && data.bridgeResponse && data.bridgeResponse.result;
   if (!data || !data.liveBridgeConnected || !r) {

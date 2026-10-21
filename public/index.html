@@ -658,6 +658,34 @@
   </div>
 
   <!-- TOAST NOTIFICATION -->
+  <!-- MODAL: WEB / CONSOLE MODE — the static build applies effects by one paste -->
+  <div class="modal-backdrop hidden" id="consoleModal">
+    <div class="modal-card console-modal-card">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow">DAVINCI RESOLVE FREE 21.1.1 · CONSOLE MODE</span>
+          <h2 id="consoleModalTitle">Paste this into Resolve</h2>
+        </div>
+        <button class="modal-close" id="closeConsoleModalBtn">✕</button>
+      </div>
+      <ol class="console-steps">
+        <li>In Resolve: <code>Workspace ▸ Console</code>, make sure the <b>Lua</b> tab is selected.</li>
+        <li>Press <b>Copy Lua</b> (the whole snippet is already selected for you).</li>
+        <li>Click into the console box, paste with <b>⌘V</b>, then press <b>Return</b>.</li>
+      </ol>
+      <pre class="lua-code-box console-lua" id="consoleLua"></pre>
+      <div class="console-actions">
+        <button class="btn-primary" id="copyConsoleLuaBtn">Copy Lua</button>
+        <button class="btn-secondary" id="downloadConsoleLuaBtn">Download .lua</button>
+        <span class="console-hint" id="consoleModalHint"></span>
+      </div>
+      <p class="console-note">
+        The hosted web version has no local bridge — each effect is applied by one paste.
+        One paste per effect, per clip. (The desktop build applies them with a click.)
+      </p>
+    </div>
+  </div>
+
   <div class="toast-container" id="toastContainer"></div>
 
   <script src="/touchdesigner.js"></script>
