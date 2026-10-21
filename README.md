@@ -126,8 +126,17 @@ Token/technique changes made during the pass: `Contour Ring Stipple` was rebuilt
 dots on the **iso-luma contours** of the plate (it previously drew literal concentric
 circles), `Copperplate Engrave Hatch` became a real burin plate (one line field masked into
 three tone bands, cross-hatched in shadow, stroke weight carrying tone), `ASCII Matrix
-Raster` became a true full-frame glyph raster with a gamma-lifted ramp, and
+Raster` became a true full-frame glyph raster that puts a character in **every** cell, and
 `Datamosh Text Echo` was rebuilt around a mono plate + rust mid-band + red/cyan ghosts.
+
+The second pass (after the panel was wired to Resolve) fixed what the first sheet still
+showed at 1:1: `Flow-Field Stipple Portrait` gated its tone with a bilinear lookup from a
+96×54 grid (nearest-neighbour had put stair-steps on every silhouette edge), `Flow Dash
+Glyph Field` now drops the empty background instead of speckling the whole frame, the ASCII
+raster reads as a monitor instead of a few dots, the lenticular rib screen became a cosine
+lens ramp with a thin specular crest, the newsprint ripple slices at `h/11` so 4K no longer
+stair-steps at 31px, and every print plate trades contrast for legibility
+(1.10–1.42 at gamma 0.92–0.98) instead of crushing to black.
 
 ![All 72 presets rendered at 3840x2160](docs/4k-verification.png)
 

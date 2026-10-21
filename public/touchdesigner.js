@@ -1338,9 +1338,9 @@ const TD_ENGINE = (() => {
           const lum = nl((0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255);
           // a gamma lift on the ramp index keeps the mid-tones as denser glyphs,
           // otherwise a low-key plate renders as almost empty space
-          const gi = Math.min(ramp.length - 1, Math.floor(Math.pow(lum, 0.72) * (ramp.length - 0.001)));
-          if (gi === 0) continue;
-          ctx.globalAlpha = Math.min(1, (0.22 + Math.pow(lum, 0.8) * 0.9) * (0.45 + I * 0.55));
+          // full raster: every cell carries a glyph, the dimmest one is a dot
+          const gi = Math.min(ramp.length - 1, Math.floor(Math.pow(lum, 0.55) * (ramp.length - 0.001)));
+          ctx.globalAlpha = Math.min(1, (0.10 + Math.pow(lum, 0.85) * 1.05) * (0.45 + I * 0.55));
           ctx.drawImage(ATLAS, gi * glyphCell, 0, glyphCell, AY,
             gx * cellW, gy * cellH, cellW, cellH);
         }
@@ -1753,7 +1753,7 @@ const TD_ENGINE = (() => {
       buf.fill(0);
 
       // pre-pass: luma + contour tangent on a coarse grid
-      const GW = 64, GH = Math.max(16, Math.round((64 * h) / w));
+      const GW = 96, GH = Math.max(24, Math.round((96 * h) / w));
       autoLevels(data, 0.04, 0.98, 0.18);
       const lumGrid = new Float32Array(GW * GH);
       const tanGrid = new Float32Array(GW * GH);
@@ -1790,15 +1790,22 @@ const TD_ENGINE = (() => {
           let px = cx * pitch + jx * pitch;
           let py = cy * pitch + jy * pitch;
           const u = px / SW, v = py / SH;
-          const gx = clamp((u * GW) | 0, 0, GW - 1);
-          const gy = clamp((v * GH) | 0, 0, GH - 1);
+          // bilinear tone lookup: nearest-neighbour on the coarse grid put
+          // visible stair-steps on every silhouette edge at 4K
+          const fx = clamp(u * GW - 0.5, 0, GW - 1.001);
+          const fy = clamp(v * GH - 0.5, 0, GH - 1.001);
+          const gx = fx | 0, gy = fy | 0;
+          const tx = fx - gx, ty = fy - gy;
+          const g00 = gy * GW + gx, g10 = g00 + 1;
+          const g01 = g00 + GW, g11 = g01 + 1;
+          const lum = (lumGrid[g00] * (1 - tx) + lumGrid[g10] * tx) * (1 - ty)
+                    + (lumGrid[g01] * (1 - tx) + lumGrid[g11] * tx) * ty;
           const gidx = gy * GW + gx;
-          const lum = lumGrid[gidx];
           // tone → ink: shadows stay empty (a stipple print has real blacks),
           // the probability climbs with tone so midtones read as texture and
           // highlights as solid grains rather than an even wash everywhere
-          const tone = clamp((lum - 0.10) / 0.90, 0, 1);
-          if (tone < 0.02) continue;
+          const tone = clamp((lum - 0.22) / 0.78, 0, 1);
+          if (tone < 0.03) continue;
           const rnd = hash2(seed, 4.3);
           if (rnd > clamp(0.10 + Math.pow(tone, 0.95) * 1.12, 0, 1) * density) continue;
           const tang = tanGrid[gidx];
@@ -2057,12 +2064,12 @@ const TD_ENGINE = (() => {
         const d = cloud[i];
         const n1 = (fbm(d.u * 2.6 + t * 0.09, d.v * 2.6 - t * 0.06, 2) - 0.5) * 2;
         const lum = Math.pow(nl(lumaAt(data, pw, ph, d.u, d.v)), 0.6);
-        const tone = clamp((lum - 0.12) / 0.88, 0, 1);
-        if (tone < 0.03 || hash2(d.u * 91.3, d.v * 47.7) > 0.2 + tone * 0.85) continue;
+        const tone = clamp((lum - 0.20) / 0.80, 0, 1);
+        if (tone < 0.06 || hash2(d.u * 91.3, d.v * 47.7) > 0.10 + tone * 0.95) continue;
         const ang = n1 * Math.PI * (0.6 + 0.5 * Math.min(1, I));
-        const len = (1.6 + tone * 8.5) * scale * (0.6 + 0.6 * Math.min(1, I));
+        const len = (2.4 + tone * 11) * scale * (0.6 + 0.6 * Math.min(1, I));
         const px = d.u * w, py = d.v * h;
-        ctx.globalAlpha = Math.min(1, (0.12 + tone * 0.95) * (0.45 + I * 0.55));
+        ctx.globalAlpha = Math.min(1, (0.18 + tone * 0.90) * (0.50 + I * 0.50));
         ctx.beginPath();
         ctx.moveTo(px - Math.cos(ang) * len * 0.5, py - Math.sin(ang) * len * 0.5);
         ctx.lineTo(px + Math.cos(ang) * len * 0.5, py + Math.sin(ang) * len * 0.5);
@@ -2390,7 +2397,7 @@ const TD_ENGINE = (() => {
       const bh = h / blocks;
 
       // 1. high-contrast mono plate: detail survives the smear as ink
-      const plate = monoPrintPlate(w, h, 1.8 + I * 0.4, 0.92);
+      const plate = monoPrintPlate(w, h, 1.24 + I * 0.28, 0.98);
 
       // 2. black ground + rust wash only in the mid band (not a full veil)
       ctx.save();
@@ -2399,10 +2406,15 @@ const TD_ENGINE = (() => {
       ctx.fillRect(0, 0, w, h);
       const rust = ctx.createLinearGradient(0, 0, 0, h);
       rust.addColorStop(0, 'rgba(120,44,22,0)');
-      rust.addColorStop(0.45, 'rgba(120,44,22,0.55)');
-      rust.addColorStop(1, 'rgba(60,18,10,0.25)');
+      rust.addColorStop(0.44, 'rgba(126,48,24,0)');
+      rust.addColorStop(0.50, 'rgba(126,48,24,0.30)');
+      rust.addColorStop(0.56, 'rgba(126,48,24,0)');
+      rust.addColorStop(1, 'rgba(60,18,10,0)');
       ctx.fillStyle = rust;
       ctx.fillRect(0, 0, w, h);
+      // the plate itself must be readable — the smear streaks are additive on top
+      ctx.globalAlpha = Math.min(1, 0.72 + I * 0.25);
+      ctx.drawImage(plate, 0, 0, w, h);
       ctx.restore();
 
       // 3. block smear: each slab is displaced and re-entered additively, so
@@ -2415,7 +2427,7 @@ const TD_ENGINE = (() => {
         const dx = drift * w * 0.22 * amt;
         const tearRoll = hash2(seed, Math.floor(t * 6) * 0.37);
         const tear = tearRoll > 0.84 ? (hash2(seed, 4.1) - 0.5) * w * 0.34 * amt : 0;
-        ctx.globalAlpha = Math.min(1, 0.34 + Math.abs(drift) * 0.34);
+        ctx.globalAlpha = Math.min(1, 0.20 + Math.abs(drift) * 0.26);
         ctx.drawImage(plate, 0, i * bh, w, bh, dx + tear, i * bh, w, bh);
       }
       ctx.restore();
