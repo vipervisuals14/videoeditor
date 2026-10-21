@@ -1,0 +1,3191 @@
+// ============================================================================
+// PULSEVFX STUDIO — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine
+// ============================================================================
+
+const VFX_PRESETS = [
+  // 1. OPTICAL & GLASS (Real Lens Physics & Emulsion Scatter)
+  {
+    id: 'opt_500t_halation',
+    name: '500T Halation Bloom',
+    category: 'Optical & Glass',
+    spec: 'IRE > 78%',
+    node: 'LumaKeyer + SoftGlow (R:1.45)',
+    desc: 'Authentic Kodak Vision3 red-orange emulsion scatter bleeding around high-IRE specular highlights.',
+    effectType: 'opt_halation',
+    accent: '#f97316'
+  },
+  {
+    id: 'opt_anamorphic_fringe',
+    name: 'Anamorphic Edge Fringing',
+    category: 'Optical & Glass',
+    spec: '2x Scope',
+    node: 'LensDistort + ChannelBooleans',
+    desc: 'Lateral red/cyan chromatic aberration restricted to the outer 28% of the lens barrel.',
+    effectType: 'opt_fringe',
+    accent: '#06b6d4'
+  },
+  {
+    id: 'opt_split_diopter',
+    name: 'Split-Diopter Refraction',
+    category: 'Optical & Glass',
+    spec: '+2 Diopter',
+    node: 'Transform + BlurSeam + Mask',
+    desc: 'Divides the frame into two simultaneous focal planes with an optical glass refraction seam.',
+    effectType: 'opt_diopter',
+    accent: '#38bdf8'
+  },
+  {
+    id: 'opt_prism_ghost',
+    name: 'Prism Corner Refraction',
+    category: 'Optical & Glass',
+    spec: '45° Glass',
+    node: 'Transform (Mirror) + ScreenMerge',
+    desc: 'Organic handheld glass prism double-reflection blooming across the outer frame corners.',
+    effectType: 'opt_prism',
+    accent: '#a855f7'
+  },
+  {
+    id: 'opt_gate_weave',
+    name: '16mm Gate Weave & Breath',
+    category: 'Optical & Glass',
+    spec: '0.4% SubPx',
+    node: 'CameraShake (0.3Hz) + Vignette',
+    desc: 'Sub-pixel mechanical film gate registration drift with subtle Arriflex SR3 border falloff.',
+    effectType: 'opt_gateweave',
+    accent: '#f59e0b'
+  },
+  {
+    id: 'opt_tilt_plane',
+    name: 'Tilt-Shift Oblique Plane',
+    category: 'Optical & Glass',
+    spec: 'f/1.4 Swing',
+    node: 'Defocus + LinearMask',
+    desc: 'Swings the plane of sharp focus diagonally across the subject with creamy out-of-focus falloff.',
+    effectType: 'opt_tilt',
+    accent: '#60a5fa'
+  },
+
+  // 2. SHUTTER & TIME (AWGE / Wong Kar-wai / Gibson Hazard Cadence)
+  {
+    id: 'time_360_smear',
+    name: '360° Shutter Step-Print (8fps)',
+    category: 'Shutter & Time',
+    spec: '360° / 8fps',
+    node: 'Trails (0.68) + TimeStretcher',
+    desc: 'True slow-shutter frame accumulation that smears motion into silky trailing exposures.',
+    effectType: 'time_smear',
+    accent: '#e11d48'
+  },
+  {
+    id: 'time_film_snip',
+    name: '2-Frame Film Snip Cut',
+    category: 'Shutter & Time',
+    spec: '-2f Splice',
+    node: 'TimeSpeed + ExposureSpike',
+    desc: 'Excises 2 frames on the snare transient with a 1-stop physical splice flash.',
+    effectType: 'time_snip',
+    accent: '#f43f5e'
+  },
+  {
+    id: 'time_velocity_snap',
+    name: 'Optical Velocity Snap',
+    category: 'Shutter & Time',
+    spec: '320% ▸ 100%',
+    node: 'TimeSpeed + OpticalFlow + Blur',
+    desc: 'Asymmetric exponential speed burst into an instant dead-stop lockup on the downbeat.',
+    effectType: 'time_velocity',
+    accent: '#ec4899'
+  },
+  {
+    id: 'time_echo_drag',
+    name: 'Sub-Frame Luma Echo Drag',
+    category: 'Shutter & Time',
+    spec: '4-Tap Luma',
+    node: 'Duplicate + LumaKey + TimeOffset',
+    desc: 'Persists only bright highlight trails across 4 trailing sub-frames while keeping darks clean.',
+    effectType: 'time_smear',
+    accent: '#f97316'
+  },
+  {
+    id: 'time_reverse_whip',
+    name: 'Reverse 4-Frame Pre-Roll',
+    category: 'Shutter & Time',
+    spec: '-4f PreCut',
+    node: 'TimeStretcher (ReverseTail)',
+    desc: 'Reverses the final 4 frames before a cut so motion pulls backward into the incoming shot.',
+    effectType: 'time_velocity',
+    accent: '#8b5cf6'
+  },
+  {
+    id: 'time_tape_catch',
+    name: 'Analog Tape Transport Catch',
+    category: 'Shutter & Time',
+    spec: '3f Hold/Catch',
+    node: 'TimeStretcher + DirectionalBlur',
+    desc: 'Momentary 3-frame mechanical reel catch followed by a fast 200% catch-up slip.',
+    effectType: 'time_snip',
+    accent: '#14b8a6'
+  },
+
+  // 3. FILM LAB & GRADE (Division Paris / Fincher / Tactile Emulsion)
+  {
+    id: 'lab_bleach_bypass',
+    name: 'Bleach Bypass Silver Retention',
+    category: 'Film Lab & Grade',
+    spec: 'Ag Halide',
+    node: 'ColorCorrector + SoftGlow (Mult)',
+    desc: 'Retains metallic silver in the emulsion for deep crushed blacks, cold steel mids, and hard speculars.',
+    effectType: 'lab_bleach',
+    accent: '#94a3b8'
+  },
+  {
+    id: 'lab_kodak_2383',
+    name: 'Kodak 2383 Print Stock Curve',
+    category: 'Film Lab & Grade',
+    spec: '2383 LUT',
+    node: 'ColorCurves + SplitTone',
+    desc: 'Dense cinema print stock toe/shoulder roll-off with deep teal-black shadows and warm skin separation.',
+    effectType: 'lab_2383',
+    accent: '#f59e0b'
+  },
+  {
+    id: 'lab_flir_luma',
+    name: 'FLIR Monochrome Thermal Map',
+    category: 'Film Lab & Grade',
+    spec: 'LWIR Sensor',
+    node: 'LumaGradient + FineGrain',
+    desc: 'High-detail military monochrome/amber thermal luminance mapping without cheesy rainbow banding.',
+    effectType: 'lab_flir',
+    accent: '#38bdf8'
+  },
+  {
+    id: 'lab_threshold_print',
+    name: 'Threshold Silver Litho Print',
+    category: 'Film Lab & Grade',
+    spec: '2-Tone Dither',
+    node: 'LumaKeyer + FilmGrain (Coarse)',
+    desc: 'Brutalist high-contrast darkroom litho print with organic silver grain dithering in midtones.',
+    effectType: 'lab_litho',
+    accent: '#e5e7eb'
+  },
+  {
+    id: 'lab_roll_flash',
+    name: 'End-of-Roll Lab Light Leak',
+    category: 'Film Lab & Grade',
+    spec: 'Amber Burn',
+    node: 'FastNoise + ScreenGain (Red/Amber)',
+    desc: 'Authentic optical printer edge fogging that sweeps across the frame over 6 frames at cut points.',
+    effectType: 'lab_leak',
+    accent: '#ea580c'
+  },
+  {
+    id: 'lab_trix_grain',
+    name: '35mm Tri-X Midtone Silver Grain',
+    category: 'Film Lab & Grade',
+    spec: 'ISO 800 Push',
+    node: 'FilmGrain (LumaWeighted)',
+    desc: 'Luminance-masked 35mm silver halide grain concentrated in midtones while protecting clean blacks.',
+    effectType: 'lab_bleach',
+    accent: '#a1a1aa'
+  },
+
+  // 4. CAMERA WEIGHT & KINETIC (Physical & Weighted, Zero Cartoon Shake)
+  {
+    id: 'cam_shoulder_float',
+    name: 'Weighted Shoulder-Rig Float',
+    category: 'Camera Weight',
+    spec: '0.8Hz Rig',
+    node: 'CameraShake (0.8Hz Sine)',
+    desc: 'Adds the natural breathing inertia of a 22lb Arri Alexa shoulder rig to static tripod shots.',
+    effectType: 'cam_float',
+    accent: '#10b981'
+  },
+  {
+    id: 'cam_sub_thump',
+    name: 'Damped Sub-Bass Lens Thump',
+    category: 'Camera Weight',
+    spec: '808 Damped',
+    node: 'Transform (Z-Spring) + RadialBlur',
+    desc: 'Heavy, critically-damped axial focal compression on 808 kicks with zero chaotic lateral jitter.',
+    effectType: 'cam_thump',
+    accent: '#e11d48'
+  },
+  {
+    id: 'cam_snare_snap',
+    name: 'Snare 1.06x Micro-Snap',
+    category: 'Camera Weight',
+    spec: '+6% 3-Frame',
+    node: 'Transform (1.06x ExpDecay)',
+    desc: 'Subtle 6% focal-length step-in on snare transients that decays smoothly over 5 frames.',
+    effectType: 'cam_thump',
+    accent: '#f43f5e'
+  },
+  {
+    id: 'cam_whip_pan',
+    name: '180° Shutter Whip-Pan',
+    category: 'Camera Weight',
+    spec: '5-Frame Whip',
+    node: 'Transform + DirectionalBlur (0°)',
+    desc: 'Physical horizontal camera pan smear across clip boundaries with mirrored motion edges.',
+    effectType: 'cam_whip',
+    accent: '#06b6d4'
+  },
+  {
+    id: 'cam_crash_zoom',
+    name: 'Crash-Zoom Barrel Snap',
+    category: 'Camera Weight',
+    spec: '24–70mm Snap',
+    node: 'Transform (Size) + DefocusHunt',
+    desc: 'Raw documentary parfocal manual zoom snap from 1.0x to 1.32x with 2-frame focus catch.',
+    effectType: 'time_velocity',
+    accent: '#f59e0b'
+  },
+  {
+    id: 'cam_vertigo',
+    name: 'Vertigo Counter-Dolly Warp',
+    category: 'Camera Weight',
+    spec: 'Z-Counter',
+    node: 'LensDistort + ScaleCounter',
+    desc: 'Subtle optical perspective compression that expands background scale relative to center subject.',
+    effectType: 'opt_fringe',
+    accent: '#8b5cf6'
+  },
+
+  // 5. DEPTH & SUBJECT (Clean Editorial Separation)
+  {
+    id: 'depth_sep',
+    name: 'Subject Depth Separation',
+    category: 'Depth & Subject',
+    spec: '-0.7 EV Bg',
+    node: 'EllipseMask + Grade + Defocus',
+    desc: 'Pulls background down 0.7 stops and adds subtle optical falloff so the artist or speaker pops in 3D.',
+    effectType: 'depth_sep',
+    accent: '#3b82f6'
+  },
+  {
+    id: 'depth_sky_burn',
+    name: 'Luma-Key Highlight Burn',
+    category: 'Depth & Subject',
+    spec: 'IRE > 82%',
+    node: 'LumaKeyer + Glow + Tint',
+    desc: 'Isolates sky and practical light fixtures above 82% IRE for stylized exposure bloom.',
+    effectType: 'opt_halation',
+    accent: '#f97316'
+  },
+  {
+    id: 'depth_streak',
+    name: 'Anamorphic Highlight Streak',
+    category: 'Depth & Subject',
+    spec: 'Horizontal 2x',
+    node: 'LumaKeyer + DirectionalGlow (X)',
+    desc: 'projects a clean horizontal cyan/amber anamorphic streak strictly from specular light sources.',
+    effectType: 'depth_streak',
+    accent: '#06b6d4'
+  },
+  {
+    id: 'depth_cutout_flash',
+    name: 'Pre-Drop Cutout Pre-Echo',
+    category: 'Depth & Subject',
+    spec: '-4f Cutout',
+    node: 'LumaMask + Transform + TimeOffset',
+    desc: 'Flashes a high-contrast isolated frame of the incoming subject 4 frames before the beat drops.',
+    effectType: 'time_snip',
+    accent: '#ec4899'
+  },
+  {
+    id: 'depth_shadow_offset',
+    name: 'Offset Shadow Silhouette',
+    category: 'Depth & Subject',
+    spec: '16px Lag',
+    node: 'Duplicate + TimeDelay + Multiply',
+    desc: 'Trails a dark, desaturated 2-frame delayed silhouette behind fast subject movement.',
+    effectType: 'time_smear',
+    accent: '#64748b'
+  },
+  {
+    id: 'depth_skin_rolloff',
+    name: 'Specular Skin Roll-Off',
+    category: 'Depth & Subject',
+    spec: 'Soft Knee',
+    node: 'LumaKeyer + Blur + HighlightCompress',
+    desc: 'Compresses harsh digital LED key-light hotspots on skin tones for an organic filmic roll-off.',
+    effectType: 'depth_sep',
+    accent: '#fda4af'
+  },
+
+  // 6. EDITORIAL POLISH (Talking Head & High-End Brand Content)
+  {
+    id: 'ed_2cam_punch',
+    name: '2-Cam Jump-Cut Switch (1.08x)',
+    category: 'Editorial Polish',
+    spec: '1.08x + EyeLine',
+    node: 'Transform (1.08x, Y:-0.015)',
+    desc: 'Seamless focal-length switch with eye-line compensation to make jump cuts look like a 2-camera shoot.',
+    effectType: 'cam_thump',
+    accent: '#10b981'
+  },
+  {
+    id: 'ed_pip_frame',
+    name: 'Documentary Frame-in-Frame',
+    category: 'Editorial Polish',
+    spec: '82% Inner Pip',
+    node: 'BackgroundBlur + Transform (0.82) + Border',
+    desc: 'Floats a crisp 82% inner frame with a 1px border over a darkened, optically blurred backdrop of itself.',
+    effectType: 'ed_pip',
+    accent: '#38bdf8'
+  },
+  {
+    id: 'ed_letterbox',
+    name: '2.39:1 Scope Matte + Rounded Gate',
+    category: 'Editorial Polish',
+    spec: '2.39:1 + 6px',
+    node: 'Letterbox + RoundedMask',
+    desc: 'Cinematic 2.39:1 widescreen crop with subtle rounded 35mm film gate corners.',
+    effectType: 'ed_scope',
+    accent: '#e5e7eb'
+  },
+  {
+    id: 'ed_soft_vignette',
+    name: 'Studio Soft-Knee Perimeter Falloff',
+    category: 'Editorial Polish',
+    spec: '-0.65 EV Edge',
+    node: 'Vignette + S-Curve',
+    desc: 'Gradual optical perimeter darkening that draws viewer focus directly to the speaker.',
+    effectType: 'depth_sep',
+    accent: '#a855f7'
+  },
+  {
+    id: 'ed_whip_jcut',
+    name: 'Editorial Whip + Flash Bridge',
+    category: 'Editorial Polish',
+    spec: '4-Frame Bridge',
+    node: 'DirectionalBlur + GainCurve',
+    desc: 'Fast, clean agency-style 4-frame directional blur bridge for B-roll montage sequences.',
+    effectType: 'cam_whip',
+    accent: '#f59e0b'
+  },
+  {
+    id: 'ed_split_screen',
+    name: 'Dual-Take Vertical Split Frame',
+    category: 'Editorial Polish',
+    spec: '50/50 Crop',
+    node: 'Crop + Merge + DividerLine',
+    desc: 'Pairs performance A-cam and B-roll side-by-side inside a clean editorial split composition.',
+    effectType: 'opt_diopter',
+    accent: '#06b6d4'
+  }
+];
+
+// ---------------------------------------------------------------------------
+// TOUCHDESIGNER TOP DISTORTIONS (12) + TRANSITIONS & MORPHS (8)
+// defined in touchdesigner.js — merged here so every category is searchable,
+// gets its own 0–200% intensity slider and full keyframe lane.
+// ---------------------------------------------------------------------------
+if (window.TD_PRESETS) {
+  VFX_PRESETS.push(...window.TD_PRESETS);
+}
+
+const TD_CATEGORIES = ['TouchDesigner TOPs', 'Data & Print TOPs', 'Glitch & Bitmap TOPs', 'Transitions & Morphs'];
+
+// ============================================================================
+// KEYFRAME ENGINE — per-effect/per-transition intensity curves (0–200%)
+// ============================================================================
+const KF = {
+  tracks: {},          // presetId -> [{ t, v, ease }]
+  intensity: {},       // presetId -> base intensity % (no keyframes)
+  master: 100
+};
+
+function kfTrack(presetId) {
+  if (!KF.tracks[presetId]) KF.tracks[presetId] = [];
+  return KF.tracks[presetId];
+}
+
+function baseIntensity(presetId) {
+  return KF.intensity[presetId] === undefined ? 100 : KF.intensity[presetId];
+}
+
+function setBaseIntensity(presetId, v) {
+  KF.intensity[presetId] = Math.round(Math.max(0, Math.min(200, v)));
+}
+
+function sortTrack(presetId) {
+  kfTrack(presetId).sort((a, b) => a.t - b.t);
+}
+
+function evalKeyframes(kfs, timeSec) {
+  if (!kfs || kfs.length === 0) return null;
+  if (kfs.length === 1) return kfs[0].v;
+  if (timeSec <= kfs[0].t) return kfs[0].v;
+  if (timeSec >= kfs[kfs.length - 1].t) return kfs[kfs.length - 1].v;
+  for (let i = 0; i < kfs.length - 1; i++) {
+    const a = kfs[i], b = kfs[i + 1];
+    if (timeSec >= a.t && timeSec <= b.t) {
+      const span = Math.max(0.0001, b.t - a.t);
+      let u = (timeSec - a.t) / span;
+      if (a.ease === 'hold') u = 0;
+      else if (a.ease !== 'linear') u = u * u * (3 - 2 * u); // smooth bezier-ish ease
+      return a.v + (b.v - a.v) * u;
+    }
+  }
+  return kfs[kfs.length - 1].v;
+}
+
+function effectiveIntensity(presetId, timeSec) {
+  const kfs = KF.tracks[presetId];
+  const raw = (kfs && kfs.length) ? evalKeyframes(kfs, timeSec) : baseIntensity(presetId);
+  return Math.max(0, Math.min(220, (raw || 0) * (KF.master / 100)));
+}
+
+function addKeyframe(presetId, timeSec, value) {
+  const track = kfTrack(presetId);
+  const t = Math.max(0, Math.min(state.totalDurSec, timeSec));
+  const v = Math.max(0, Math.min(200, Math.round(value)));
+  const existing = track.find((k) => Math.abs(k.t - t) < 0.08);
+  if (existing) {
+    existing.v = v;
+  } else {
+    track.push({ t, v, ease: 'smooth' });
+  }
+  sortTrack(presetId);
+  return track;
+}
+
+function removeKeyframeAt(presetId, timeSec) {
+  const track = kfTrack(presetId);
+  const idx = track.findIndex((k) => Math.abs(k.t - timeSec) < 0.12);
+  if (idx >= 0) track.splice(idx, 1);
+  return track;
+}
+
+function setEnvelope(presetId, kind) {
+  const d = state.totalDurSec;
+  const v = baseIntensity(presetId);
+  let kfs = [];
+  if (kind === 'peak') {
+    kfs = [{ t: 0, v: 0, ease: 'smooth' }, { t: d * 0.45, v: v * 1.55, ease: 'smooth' }, { t: d, v: 0, ease: 'smooth' }];
+  } else if (kind === 'ramp_in') {
+    kfs = [{ t: 0, v: 0, ease: 'smooth' }, { t: d, v: v * 1.6, ease: 'smooth' }];
+  } else if (kind === 'decay') {
+    kfs = [{ t: 0, v: Math.min(200, v * 1.9), ease: 'smooth' }, { t: d * 0.35, v: v, ease: 'smooth' }, { t: d, v: 0, ease: 'smooth' }];
+  } else if (kind === 'lfo') {
+    const cycles = 4;
+    for (let i = 0; i <= cycles * 2; i++) {
+      kfs.push({ t: (i / (cycles * 2)) * d, v: i % 2 === 0 ? v * 0.15 : v * 1.45, ease: 'smooth' });
+    }
+  }
+  KF.tracks[presetId] = kfs.map((k) => ({ ...k, v: Math.round(k.v) }));
+  sortTrack(presetId);
+}
+
+// ============================================================================
+// LYRC.STUDIO 20 KINETIC LYRIC PRESETS & BRAND CAPTION STYLES
+// ============================================================================
+const CAPTION_STYLES = [
+  {
+    id: 'duet',
+    name: 'Duet',
+    category: 'Bold',
+    previewHtml: '<span>BOLD</span> <em style="font-family:Georgia,serif;color:#f472b6;">serif</em>',
+    desc: 'Two font roles (Grotesque Sans + Expressive Serif Italic) trade emphasis as words arrive.',
+    supportsVariation: true,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#f472b6'
+  },
+  {
+    id: 'redline',
+    name: 'Redline',
+    category: 'Bold',
+    previewHtml: '<span style="background:#ef4444;color:#000;padding:1px 5px;">RED</span>LINE',
+    desc: 'Bold stacked type builds with red accents and selective inverted knockout boxes.',
+    supportsVariation: true,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#ef4444'
+  },
+  {
+    id: 'tiled_wave',
+    name: 'Tiled Wave',
+    category: 'Layered',
+    previewHtml: 'TILED<br/><span style="color:#38bdf8;font-size:10px;">WAVE ▦</span>',
+    desc: 'A 2D tiled mosaic composition shifts and locks in as each phrase arrives.',
+    supportsVariation: true,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#38bdf8'
+  },
+  {
+    id: 'margin',
+    name: 'Margin',
+    category: 'Layered',
+    previewHtml: '▎MAR<span style="color:#a855f7;">GIN</span>',
+    desc: 'Editorial side-column composition builds along a vertical rail and hands off between phrases.',
+    supportsVariation: true,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#a855f7'
+  },
+  {
+    id: 'relay',
+    name: 'Relay',
+    category: 'Layered',
+    previewHtml: '<span style="background:#a855f7;color:#fff;padding:1px 5px;border-radius:3px;">RELAY</span>',
+    desc: 'Fixed-recipe stacked color block cards that relay down the frame as words land.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#a855f7'
+  },
+  {
+    id: 'brat',
+    name: 'Brat',
+    category: 'Bold',
+    previewHtml: '<span style="background:#8ace00;color:#000;padding:1px 6px;font-weight:700;filter:blur(0.4px);">brat</span>',
+    desc: 'Stretched lowercase Arial with low-res blur and optional #8ACE00 Brat lime card.',
+    supportsVariation: false,
+    fav: true,
+    primary: '#000000',
+    accent: '#8ace00'
+  },
+  {
+    id: 'uplift',
+    name: 'Uplift',
+    category: 'Bold',
+    previewHtml: 'UP<span style="color:#facc15;">LIFT ↑</span>',
+    desc: 'Rising vertical kinetic stack where words float upward into lockup on each beat.',
+    supportsVariation: true,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#facc15'
+  },
+  {
+    id: 'full_set',
+    name: 'Full Set',
+    category: 'Layered',
+    previewHtml: 'FULL<br/><span style="color:#ec4899;font-size:10px;">SET ▤</span>',
+    desc: 'Full-frame typographic poster lockup where every line in the phrase shares the screen.',
+    supportsVariation: true,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#ec4899'
+  },
+  {
+    id: 'heartless',
+    name: 'Heartless',
+    category: 'Bold',
+    previewHtml: '<em style="font-family:Georgia,serif;color:#f87171;">heart</em>LESS',
+    desc: 'Moody R&B / melodic rap center stack with crimson neon glow on emotional keywords.',
+    supportsVariation: true,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#f87171'
+  },
+  {
+    id: 'ticker',
+    name: 'Ticker',
+    category: 'Layered',
+    previewHtml: '« TICKER »',
+    desc: 'High-speed horizontal kinetic tape sliding along top/bottom guide rails.',
+    supportsVariation: true,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#22d3ee'
+  },
+  {
+    id: 'deep_focus',
+    name: 'Deep Focus',
+    category: 'Minimal',
+    previewHtml: '<span style="filter:blur(1.2px);opacity:0.7;">DEEP</span> FOCUS',
+    desc: 'Out-of-focus words smoothly rack into razor-sharp optical focus as they are sung.',
+    supportsVariation: true,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#67e8f9'
+  },
+  {
+    id: 'afterimage',
+    name: 'Afterimage',
+    category: 'Minimal',
+    previewHtml: 'ECHO<span style="opacity:0.35;">ECHO</span>',
+    desc: 'Fixed-recipe motion ghost trail that leaves decaying vertical echoes behind the active word.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#c084fc'
+  },
+  {
+    id: 'afterglow',
+    name: 'Afterglow',
+    category: 'Minimal',
+    previewHtml: '<span style="text-shadow:0 0 10px #f472b6;">GLOW</span>',
+    desc: 'Soft luminous bloom aura that expands gently around held chorus notes.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#fdf2f8',
+    accent: '#f472b6'
+  },
+  {
+    id: 'quiet',
+    name: 'Quiet',
+    category: 'Minimal',
+    previewHtml: '<span style="letter-spacing:3px;font-weight:400;font-size:11px;">quiet</span>',
+    desc: 'Delicate, wide-tracked lowercase cinema typography for acoustic & late-night tracks.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#e5e7eb',
+    accent: '#fde68a'
+  },
+  {
+    id: 'voltage',
+    name: 'VOLTAGE',
+    category: 'Bold',
+    previewHtml: '<span style="color:#22d3ee;">VOLT</span><span style="color:#f43f5e;">AGE</span>',
+    desc: 'High-voltage electric jitter with cyan/crimson chromatic edge split.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#22d3ee'
+  },
+  {
+    id: 'overdrive',
+    name: 'Overdrive',
+    category: 'Bold',
+    previewHtml: '<em style="color:#fb923c;">OVERDRIVE</em>',
+    desc: 'Forward-sheared italic impact words slamming in horizontally on drum transients.',
+    supportsVariation: true,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#fb923c'
+  },
+  {
+    id: 'ladder_house',
+    name: 'Ladder House',
+    category: 'Layered',
+    previewHtml: 'LAD↗<br/><span style="color:#a78bfa;font-size:10px;">DER</span>',
+    desc: 'Stepped diagonal staircase composition that climbs across the canvas word by word.',
+    supportsVariation: true,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#a78bfa'
+  },
+  {
+    id: 'letterpress',
+    name: 'Letterpress',
+    category: 'Bold',
+    previewHtml: '<span style="text-shadow:3px 3px 0 #ec4899;">PRESS</span>',
+    desc: 'Heavy 3D extruded block shadow typography that stamps onto the frame.',
+    supportsVariation: true,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#ec4899'
+  },
+  {
+    id: 'hormozi_pop',
+    name: 'Hormozi Brand',
+    category: 'Talking',
+    previewHtml: 'BRAND<span style="color:#facc15;"> PRO</span>',
+    desc: 'High-retention talking-head word-by-word pop with yellow/green active keyword highlight.',
+    supportsVariation: false,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#facc15'
+  },
+  {
+    id: 'clean_pill',
+    name: 'Creator Pill',
+    category: 'Talking',
+    previewHtml: '<span style="background:#10b981;color:#000;padding:1px 5px;border-radius:4px;">PILL</span>',
+    desc: 'Frosted dark pill backdrop with crisp active word pill box for brand storytelling.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#10b981'
+  }
+];
+
+const DEFAULT_LYRICS_TEXT = `Blame it all on you when the midnight city fades
+We been driving past the redline through the neon haze
+Every single word is tiled across the studio frame
+Duet trading emphasis while they calling out our name
+Turn a fifteen second snippet to a million views
+Lock the song template once and let the footage move
+From Spotify straight into DaVinci Resolve Free
+Zero third party plugins, built the whole suite`;
+
+const DEFAULT_TALKING_TEXT = `Stop spending ten hours editing talking head videos by hand
+First we automatically strip out every awkward pause and silence
+Then we punch in eight percent on jump cuts to keep retention high
+Next we layer dynamic word by word captions right in the center
+And finally we pull B-roll straight from your Resolve Media Pool
+All running inside DaVinci Resolve Free 21.1.1 with zero paid plugins`;
+
+const INITIAL_SILENCE_SEGMENTS = [
+  { id: 1, start: 0.0, end: 4.2, db: -14, type: 'speech', label: 'Hook: "Stop spending 10 hours editing by hand..."', forceKeep: false },
+  { id: 2, start: 4.2, end: 6.1, db: -41, type: 'silence', label: 'Dead Air / Breath Pause (1.9s)', forceKeep: false },
+  { id: 3, start: 6.1, end: 11.4, db: -12, type: 'speech', label: 'Point 1: "First we strip out every awkward pause..."', forceKeep: false },
+  { id: 4, start: 11.4, end: 13.0, db: -38, type: 'silence', label: 'Looking at notes pause (1.6s)', forceKeep: false },
+  { id: 5, start: 13.0, end: 18.5, db: -11, type: 'speech', label: 'Point 2: "Then we punch in 8% on jump cuts..."', forceKeep: false },
+  { id: 6, start: 18.5, end: 20.8, db: -44, type: 'silence', label: 'Room noise / cough pause (2.3s)', forceKeep: false },
+  { id: 7, start: 20.8, end: 26.2, db: -13, type: 'speech', label: 'Point 3: "Next we layer word-by-word captions..."', forceKeep: false },
+  { id: 8, start: 26.2, end: 28.9, db: -36, type: 'silence', label: 'Retake hesitation pause (2.7s)', forceKeep: false },
+  { id: 9, start: 28.9, end: 33.3, db: -12, type: 'speech', label: 'Outro: "All inside DaVinci Resolve Free 21.1.1!"', forceKeep: false },
+  { id: 10, start: 33.3, end: 36.0, db: -46, type: 'silence', label: 'Tail dead air before camera stop (2.7s)', forceKeep: false }
+];
+
+const INITIAL_MEDIA_POOL = [
+  { id: 'mp_1', name: 'A_CAM_AlexaMini_Anamorphic_01.mov', bin: 'Performance', duration: '00:02:14', frames: 3216, fps: 24, res: '3840x2160', color: '#e11d48', included: true },
+  { id: 'mp_2', name: 'B_CAM_16mm_Arriflex_LowAngle.mov', bin: 'Performance', duration: '00:01:48', frames: 2592, fps: 24, res: '3840x2160', color: '#a855f7', included: true },
+  { id: 'mp_3', name: 'BROLL_Late_Night_Drive_500T.mov', bin: 'B-Roll', duration: '00:00:34', frames: 816, fps: 60, res: '3840x2160', color: '#06b6d4', included: true },
+  { id: 'mp_4', name: 'BROLL_Studio_Spotlight_Silhouette.mov', bin: 'B-Roll', duration: '00:00:28', frames: 672, fps: 60, res: '3840x2160', color: '#06b6d4', included: true },
+  { id: 'mp_5', name: 'BROLL_Sodium_Vapor_Tunnel_Run.mov', bin: 'B-Roll', duration: '00:00:19', frames: 456, fps: 24, res: '1920x1080', color: '#f59e0b', included: true },
+  { id: 'mp_6', name: 'TALKING_HEAD_Founder_KeyLight_A.mp4', bin: 'Talking Head', duration: '00:04:12', frames: 6048, fps: 24, res: '3840x2160', color: '#3b82f6', included: true },
+  { id: 'mp_7', name: 'TALKING_HEAD_85mm_Tight_Angle_B.mp4', bin: 'Talking Head', duration: '00:04:12', frames: 6048, fps: 24, res: '3840x2160', color: '#3b82f6', included: true },
+  { id: 'mp_8', name: 'BROLL_Macro_Hardware_ProbeLens.mov', bin: 'B-Roll', duration: '00:00:22', frames: 528, fps: 60, res: '3840x2160', color: '#10b981', included: true },
+  { id: 'mp_9', name: 'MASTER_142BPM_Atari_24bit.wav', bin: 'Audio', duration: '00:02:30', frames: 3600, fps: 24, res: '48kHz 24-bit', color: '#10b981', included: true },
+  { id: 'mp_10', name: 'VO_Schoeps_MK41_Clean_Dialogue.wav', bin: 'Audio', duration: '00:04:12', frames: 6048, fps: 24, res: '48kHz 24-bit', color: '#10b981', included: true }
+];
+
+// ============================================================================
+// APPLICATION STATE
+// ============================================================================
+const state = {
+  scene: 'music_video', // 'music_video' | 'lyric_canvas' | 'talking_head' | 'custom_video'
+  activeTab: 'vfx',
+  selectedVfxCat: 'ALL',
+  vfxSearch: '',
+  activePreset: VFX_PRESETS[0], // 500T Halation Bloom
+  masterIntensity: 100, // global scale for all per-effect intensities
+  bpm: 142,
+  mixShakes: 70,
+  mixStylized: 45,
+  splitCompare: false,
+  vertical916: false,
+  showLyricsOverlay: true,
+  isPlaying: true,
+  playheadSec: 2.8,
+  totalDurSec: 16.0,
+  hitFlashBurst: 0,
+  clipShuffleSeed: 1,
+
+  // Silence Cutter state
+  silenceThresholdDb: -32,
+  silenceMinMs: 300,
+  silencePadMs: 60,
+  silenceSegments: structuredClone(INITIAL_SILENCE_SEGMENTS),
+
+  // LYRC.studio Captions & Lyrics state
+  lyrcFilterCat: 'ALL',
+  captionStyle: CAPTION_STYLES[0], // Duet
+  variationSeed: 1,
+  fontPair: 'sans_serif',
+  alignment: 'center',
+  backdropMode: 'auto',
+  primaryColor: '#ffffff',
+  accentColor: '#f472b6',
+  fontScale: 105,
+  posY: 52,
+  cues: [],
+
+  // Media Pool Auto-Editor state
+  directorMode: 'music_video',
+  selectedBin: 'ALL',
+  mediaPool: structuredClone(INITIAL_MEDIA_POOL),
+
+  // Timeline tracks state
+  timelineTracks: {
+    v3: [
+      { left: 2, width: 18, label: '500T Halation Bloom', presetId: 'opt_500t_halation' },
+      { left: 22, width: 16, label: '360° Shutter Smear', presetId: 'time_360_smear' },
+      { left: 42, width: 16, label: 'Split-Diopter +2', presetId: 'opt_split_diopter' },
+      { left: 62, width: 16, label: 'Bleach Bypass Ag', presetId: 'lab_bleach_bypass' },
+      { left: 80, width: 18, label: 'Damped Sub Thump', presetId: 'cam_sub_thump' }
+    ],
+    sub: [],
+    v2: [
+      { left: 16, width: 18, label: 'BROLL_Late_Night_Drive_500T' },
+      { left: 52, width: 20, label: 'BROLL_Sodium_Vapor_Tunnel' }
+    ],
+    v1: [
+      { left: 0, width: 24, label: 'A_CAM_AlexaMini_01' },
+      { left: 24, width: 26, label: 'B_CAM_16mm_Arriflex' },
+      { left: 50, width: 25, label: 'A_CAM_AlexaMini_01' },
+      { left: 75, width: 25, label: 'B_CAM_16mm_Arriflex' }
+    ],
+    a1: [
+      { left: 0, width: 100, label: 'MASTER_142BPM_Atari_24bit.wav (24.00 fps • Timecode Locked)' }
+    ]
+  }
+};
+
+// Offscreen frame buffer for authentic 360° Shutter Step-Printing / Motion Trail accumulation
+let offscreenBuffer = null;
+let offscreenCtx = null;
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  initTabs();
+  initSceneSwitcher();
+  initVfxTab();
+  initKeyframeEditor();
+  startCardThumbnailLoop();
+  initSilenceTab();
+  initCaptionsTab();
+  initMediaPoolTab();
+  initMonitorAndTimeline();
+  initBridgeModal();
+  checkResolveStatus();
+  requestAnimationFrame(renderLivePreviewLoop);
+});
+
+function showToast(msg) {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3400);
+}
+
+async function dispatchToResolve(action, payload, toastMsg) {
+  try {
+    const res = await fetch('/api/dispatch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, payload })
+    });
+    const data = await res.json();
+    if (data.luaSnippet) {
+      document.getElementById('luaCodeOutput').textContent = data.luaSnippet;
+    }
+    if (toastMsg) {
+      const modeTag = data.liveBridgeConnected
+        ? 'Live Resolve 21.1.1 Bridge'
+        : 'Live Monitor + Resolve Lua Ready';
+      showToast(`${toastMsg} (${modeTag})`);
+    }
+    return data;
+  } catch (_err) {
+    if (toastMsg) showToast(toastMsg);
+    return null;
+  }
+}
+
+// ============================================================================
+// MAIN TABS & COMPACT DOCK SWITCHER
+// ============================================================================
+function initTabs() {
+  document.querySelectorAll('.main-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.main-tab').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach((p) => p.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      state.activeTab = tab;
+      document.getElementById(`tab-${tab}`).classList.add('active');
+      if (tab === 'silences') drawSilenceWaveform();
+    });
+  });
+
+  const compactBtn = document.getElementById('toggleCompactBtn');
+  compactBtn.addEventListener('click', () => {
+    const root = document.getElementById('workspaceRoot');
+    root.classList.toggle('compact-dock');
+    const isCompact = root.classList.contains('compact-dock');
+    document.getElementById('compactBtnLabel').textContent = isCompact
+      ? 'Expand Full Workspace'
+      : 'Pop-Up Dock Mode';
+    showToast(isCompact
+      ? 'Switched to Compact Floating Pop-Up Mode (440px extension width)'
+      : 'Switched to Full Side-by-Side Workspace');
+  });
+}
+
+function initSceneSwitcher() {
+  document.querySelectorAll('.scene-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.scene = btn.dataset.scene;
+      showToast(`Camera Plate switched to: ${btn.textContent.trim()}`);
+    });
+  });
+
+  // Custom Local Video Upload for Live Shader Testing
+  const videoInput = document.getElementById('customVideoInput');
+  const videoEl = document.getElementById('customVideoElement');
+  if (videoInput && videoEl) {
+    videoInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      videoEl.src = url;
+      videoEl.play().catch(() => {});
+      state.scene = 'custom_video';
+      document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
+      showToast(`Loaded custom video "${file.name}" into real-time optical shader pipeline`);
+    });
+  }
+}
+
+// ============================================================================
+// TAB 1: OPTICAL, SHUTTER & FILM LAB VFX
+// ============================================================================
+function initVfxTab() {
+  renderVfxGrid();
+
+  document.querySelectorAll('.vfx-subtab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.vfx-subtab').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.selectedVfxCat = btn.dataset.cat;
+      renderVfxGrid();
+    });
+  });
+
+  document.getElementById('vfxSearchInput').addEventListener('input', (e) => {
+    state.vfxSearch = e.target.value.trim().toLowerCase();
+    renderVfxGrid();
+  });
+
+  document.querySelectorAll('.vibe-pill').forEach((pill) => {
+    pill.addEventListener('click', () => {
+      document.getElementById('vfxPromptInput').value = pill.dataset.prompt;
+      runAiVfxAssistant(pill.dataset.prompt);
+    });
+  });
+
+  document.getElementById('runAiVfxBtn').addEventListener('click', () => {
+    const prompt = document.getElementById('vfxPromptInput').value.trim();
+    runAiVfxAssistant(prompt);
+  });
+
+  document.getElementById('shakeSpeedSlider').addEventListener('input', (e) => {
+    state.bpm = Number(e.target.value);
+    document.getElementById('shakeSpeedVal').textContent = `${state.bpm} BPM`;
+  });
+
+  document.getElementById('mixShakesSlider').addEventListener('input', (e) => {
+    state.mixShakes = Number(e.target.value);
+    document.getElementById('mixShakesVal').textContent = `${state.mixShakes}%`;
+  });
+
+  document.getElementById('mixStylizedSlider').addEventListener('input', (e) => {
+    state.mixStylized = Number(e.target.value);
+    document.getElementById('mixStylizedVal').textContent = `${state.mixStylized}%`;
+  });
+}
+
+function renderVfxGrid() {
+  const grid = document.getElementById('vfxPresetGrid');
+  const filtered = VFX_PRESETS.filter((p) => {
+    const catMatch = state.selectedVfxCat === 'ALL' || p.category === state.selectedVfxCat;
+    const searchMatch = !state.vfxSearch ||
+      p.name.toLowerCase().includes(state.vfxSearch) ||
+      p.category.toLowerCase().includes(state.vfxSearch) ||
+      p.desc.toLowerCase().includes(state.vfxSearch) ||
+      p.node.toLowerCase().includes(state.vfxSearch);
+    return catMatch && searchMatch;
+  });
+
+  grid.innerHTML = filtered.map((p) => {
+    const isSel = state.activePreset && state.activePreset.id === p.id;
+    const kfs = KF.tracks[p.id] || [];
+    const val = Math.round(kfs.length ? evalKeyframes(kfs, state.playheadSec) : baseIntensity(p.id));
+    return `
+      <div class="vfx-card ${isSel ? 'selected' : ''}" data-id="${p.id}">
+        <div class="vfx-thumb">
+          <canvas class="vfx-thumb-canvas" width="180" height="62" data-thumbtype="${p.effectType}" data-accent="${p.accent}"></canvas>
+          <span class="vfx-thumb-badge">${p.category}</span>
+          <span class="vfx-thumb-spec" style="background:${p.accent};">${p.spec}</span>
+        </div>
+        <div class="vfx-card-body">
+          <div class="vfx-card-title">${p.name}</div>
+          <div class="vfx-card-desc">${p.desc}</div>
+          <div class="vfx-card-slider-row" data-sliderrow="${p.id}">
+            <span class="int-lbl">INT</span>
+            <input class="card-intensity-slider" type="range" min="0" max="200" value="${val}"
+              data-int="${p.id}" title="Per-effect intensity (0–200%)" />
+            <strong class="int-val" data-intval="${p.id}">${val}%</strong>
+            <button class="card-kf-btn ${kfs.length ? 'has-kfs' : ''}" data-kf="${p.id}"
+              title="Add / update intensity keyframe at playhead">◆ KF${kfs.length ? ' ' + kfs.length : ''}</button>
+          </div>
+          <div class="vfx-card-foot">
+            <span class="vfx-node-tag">${p.node}</span>
+            <button class="vfx-apply-btn" data-apply="${p.id}">+ Apply</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Draw procedural optical/waveform preview on each card's thumbnail canvas
+  grid.querySelectorAll('.vfx-thumb-canvas').forEach((canv) => {
+    drawCardShaderPreview(canv, canv.dataset.thumbtype, canv.dataset.accent);
+  });
+
+  // Per-card intensity sliders (0–200%) — never trigger the card's apply action
+  grid.querySelectorAll('.card-intensity-slider').forEach((slider) => {
+    const id = slider.dataset.int;
+    const out = grid.querySelector(`[data-intval="${id}"]`);
+    slider.addEventListener('pointerdown', (e) => e.stopPropagation());
+    slider.addEventListener('click', (e) => e.stopPropagation());
+    slider.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const v = Number(e.target.value);
+      setBaseIntensity(id, v);
+      // if this effect already has a keyframe lane, the slider writes into it
+      // at the playhead so the change is actually visible on the animated curve
+      const track = KF.tracks[id];
+      if (track && track.length) {
+        addKeyframe(id, state.playheadSec, v);
+      }
+      if (out) out.textContent = `${v}%`;
+      if (state.activePreset && state.activePreset.id === id) {
+        syncKeyframeInspector();
+      }
+    });
+  });
+
+  // Per-card keyframe button — stamps a keyframe at the playhead
+  grid.querySelectorAll('.card-kf-btn').forEach((btn) => {
+    const id = btn.dataset.kf;
+    btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const preset = VFX_PRESETS.find((x) => x.id === id);
+      if (!preset) return;
+      state.activePreset = preset;
+      const current = effectiveIntensity(id, state.playheadSec);
+      addKeyframe(id, state.playheadSec, current);
+      document.getElementById('activeFxPill').textContent = `Preview: ${preset.name}`;
+      renderVfxGrid();
+      syncKeyframeInspector();
+      showToast(`◆ Keyframe @ ${state.playheadSec.toFixed(2)}s — ${preset.name} at ${Math.round(current)}%`);
+    });
+  });
+
+  grid.querySelectorAll('.vfx-card').forEach((card) => {
+    const preset = VFX_PRESETS.find((x) => x.id === card.dataset.id);
+    card.addEventListener('mouseenter', () => {
+      if (preset) {
+        state.activePreset = preset;
+        document.getElementById('activeFxPill').textContent = `Preview: ${preset.name}`;
+        syncKeyframeInspector();
+      }
+    });
+
+    card.addEventListener('click', (e) => {
+      if (!preset) return;
+      if (e.target.closest('.vfx-card-slider-row')) return;
+      state.activePreset = preset;
+      state.hitFlashBurst = 0.85;
+      document.getElementById('activeFxPill').textContent = `Preview: ${preset.name}`;
+      renderVfxGrid();
+      syncKeyframeInspector();
+
+      const playheadPct = Math.min(84, Math.max(0, Math.round((state.playheadSec / state.totalDurSec) * 100)));
+      state.timelineTracks.v3.push({
+        left: playheadPct,
+        width: 15,
+        label: preset.name,
+        presetId: preset.id
+      });
+      renderTimelineTracks();
+
+      applyPresetToResolve(preset);
+      e.stopPropagation();
+    });
+  });
+}
+
+function applyPresetToResolve(preset) {
+  if (!preset) return;
+  const kfs = (KF.tracks[preset.id] || []).map((k) => ({ timeSec: +k.t.toFixed(3), value: Math.round(k.v) }));
+  dispatchToResolve('apply_vfx', {
+    presetId: preset.id,
+    presetName: preset.name,
+    category: preset.category,
+    intensity: Math.round(effectiveIntensity(preset.id, state.playheadSec)),
+    keyframes: kfs,
+    toolChain: preset.node
+  }, `Applied "${preset.name}"${kfs.length ? ` + ${kfs.length} BezierSpline KFs` : ''} at playhead`);
+}
+
+function drawCardShaderPreview(canvas, effectType, accent, timeSec) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+
+  // TouchDesigner TOP + Transition shaders get the real generative runtime
+  if (window.TD_ENGINE && TD_ENGINE.hasShader(effectType)) {
+    const tSeed = timeSec === undefined
+      ? 1.2 + ((effectType.length * 7) % 40) * 0.23
+      : timeSec + ((effectType.length * 7) % 40) * 0.23;
+    TD_ENGINE.drawThumb(canvas, effectType, accent, tSeed);
+    return;
+  }
+
+  ctx.fillStyle = '#07090e';
+  ctx.fillRect(0, 0, w, h);
+
+  // Subtle technical grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < w; x += 24) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+
+  if (effectType === 'opt_halation' || effectType === 'lab_leak') {
+    const g = ctx.createRadialGradient(w * 0.65, h * 0.4, 2, w * 0.65, h * 0.4, 52);
+    g.addColorStop(0, '#fff7ed');
+    g.addColorStop(0.35, accent || '#f97316');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  } else if (effectType === 'opt_fringe' || effectType === 'depth_streak') {
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(26, 12, w - 56, h - 28);
+    ctx.strokeStyle = '#06b6d4';
+    ctx.strokeRect(30, 12, w - 56, h - 28);
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+    ctx.beginPath(); ctx.moveTo(10, h * 0.45); ctx.lineTo(w - 10, h * 0.45); ctx.stroke();
+  } else if (effectType === 'opt_diopter' || effectType === 'ed_pip') {
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.14)';
+    ctx.fillRect(0, 0, w * 0.48, h);
+    ctx.strokeStyle = accent || '#38bdf8';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(w * 0.48, 0); ctx.lineTo(w * 0.48, h); ctx.stroke();
+  } else if (effectType === 'time_smear' || effectType === 'cam_whip') {
+    for (let i = 0; i < 5; i++) {
+      ctx.fillStyle = accent || '#e11d48';
+      ctx.globalAlpha = 0.15 + i * 0.16;
+      ctx.beginPath();
+      ctx.arc(45 + i * 20, h * 0.46, 12, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  } else {
+    // Optical response curve visualization
+    ctx.strokeStyle = accent || '#e11d48';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = 0; x < w; x += 4) {
+      const y = h * 0.5 + Math.sin(x * 0.08) * 14 * Math.exp(-Math.pow((x - w * 0.5) / 55, 2));
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+// Animated mini-canvas card previews — updates in chunks so 56 cards stay cheap
+let thumbCursor = 0;
+function startCardThumbnailLoop() {
+  setInterval(() => {
+    if (state.activeTab !== 'vfx' || document.hidden) return;
+    const cards = document.querySelectorAll('.vfx-thumb-canvas');
+    if (!cards.length) return;
+    const CHUNK = 14;
+    thumbCursor = (thumbCursor + CHUNK) % cards.length;
+    const t = performance.now() / 1000;
+    for (let i = 0; i < CHUNK; i++) {
+      const c = cards[(thumbCursor + i) % cards.length];
+      if (!c) continue;
+      drawCardShaderPreview(c, c.dataset.thumbtype, c.dataset.accent, t);
+    }
+  }, 150);
+}
+
+// ============================================================================
+// INTERACTIVE KEYFRAME & INTENSITY CURVE INSPECTOR
+// ============================================================================
+function initKeyframeEditor() {
+  const canvas = document.getElementById('keyframeCurveCanvas');
+  if (!canvas) return;
+
+  document.getElementById('addKeyframeBtn').addEventListener('click', () => {
+    const p = state.activePreset;
+    if (!p) return;
+    const cur = effectiveIntensity(p.id, state.playheadSec);
+    addKeyframe(p.id, state.playheadSec, cur);
+    refreshKeyframeUI();
+    showToast(`◆ Keyframe @ ${state.playheadSec.toFixed(2)}s → ${Math.round(cur)}% on ${p.name}`);
+  });
+
+  document.getElementById('prevKeyframeBtn').addEventListener('click', () => jumpKeyframe(-1));
+  document.getElementById('nextKeyframeBtn').addEventListener('click', () => jumpKeyframe(1));
+  document.getElementById('clearKeyframesBtn').addEventListener('click', () => {
+    const p = state.activePreset;
+    if (!p) return;
+    KF.tracks[p.id] = [];
+    refreshKeyframeUI();
+    showToast(`Cleared intensity keyframes for ${p.name}`);
+  });
+
+  document.querySelectorAll('.kf-env-pill').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const p = state.activePreset;
+      if (!p) return;
+      setEnvelope(p.id, btn.dataset.env);
+      refreshKeyframeUI();
+      document.querySelectorAll('.kf-env-pill').forEach((b) => b.classList.toggle('active', b === btn));
+      showToast(`Applied ${btn.textContent.trim()} envelope to ${p.name}`);
+    });
+  });
+
+  // ---- direct curve editing ------------------------------------------------
+  let dragging = null;
+
+  const posToVal = (e) => {
+    const r = canvas.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    const y = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+    return { time: x * state.totalDurSec, value: (1 - y) * 200 };
+  };
+
+  const hitKeyframe = (e) => {
+    const p = state.activePreset;
+    if (!p) return null;
+    const track = kfTrack(p.id);
+    const r = canvas.getBoundingClientRect();
+    const px = e.clientX - r.left;
+    const py = e.clientY - r.top;
+    let best = null, bestDist = 14;
+    track.forEach((k) => {
+      const kx = (k.t / state.totalDurSec) * r.width;
+      const ky = (1 - k.v / 200) * r.height;
+      const d = Math.hypot(kx - px, ky - py);
+      if (d < bestDist) { bestDist = d; best = k; }
+    });
+    return best;
+  };
+
+  const onMove = (e) => {
+    if (!dragging) return;
+    const p = state.activePreset;
+    if (!p) return;
+    const { time, value } = posToVal(e);
+    dragging.t = Math.max(0, Math.min(state.totalDurSec, time));
+    dragging.v = Math.round(Math.max(0, Math.min(200, value)));
+    sortTrack(p.id);
+    drawKeyframeCurve();
+    updateKeyframeReadouts();
+  };
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const p = state.activePreset;
+    if (!p) return;
+    if (canvas.setPointerCapture) {
+      try { canvas.setPointerCapture(e.pointerId); } catch (_e) { /* older Safari / touch */ }
+    }
+    const hit = hitKeyframe(e);
+    if (hit) {
+      dragging = hit;
+    } else if (e.shiftKey || e.button === 2) {
+      const { time } = posToVal(e);
+      removeKeyframeAt(p.id, time);
+      refreshKeyframeUI();
+      return;
+    } else {
+      const { time, value } = posToVal(e);
+      addKeyframe(p.id, time, value);
+      const track = kfTrack(p.id);
+      dragging = track.find((k) => Math.abs(k.t - time) < 0.1) || null;
+      refreshKeyframeUI();
+      drawKeyframeCurve();
+      return;
+    }
+    drawKeyframeCurve();
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', onMove);
+  canvas.addEventListener('pointerup', () => {
+    if (dragging) {
+      dragging = null;
+      refreshKeyframeUI();
+    }
+  });
+  canvas.addEventListener('pointercancel', () => { dragging = null; });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // master intensity slider drives the active effect's base intensity / keyframe
+  const masterSlider = document.getElementById('masterIntensitySlider');
+  masterSlider.addEventListener('input', (e) => {
+    const p = state.activePreset;
+    if (!p) return;
+    const v = Number(e.target.value);
+    setBaseIntensity(p.id, v);
+    const track = kfTrack(p.id);
+    const near = track.find((k) => Math.abs(k.t - state.playheadSec) < 0.25);
+    if (near) {
+      near.v = v;
+      sortTrack(p.id);
+    }
+    document.getElementById('masterIntensityVal').textContent = `${v}%`;
+    drawKeyframeCurve();
+    updateKeyframeReadouts();
+    updateCardKfBadges();
+    const cardVal = document.querySelector(`[data-intval="${p.id}"]`);
+    const cardSlider = document.querySelector(`[data-int="${p.id}"]`);
+    if (cardVal) cardVal.textContent = `${v}%`;
+    if (cardSlider) cardSlider.value = v;
+  });
+
+  syncKeyframeInspector();
+  setInterval(() => {
+    if (state.activeTab !== 'vfx') return;
+    drawKeyframeCurve();
+    updateKeyframeReadouts();
+  }, 120);
+}
+
+function jumpKeyframe(dir) {
+  const p = state.activePreset;
+  if (!p) return;
+  const track = kfTrack(p.id);
+  if (!track.length) {
+    showToast('No keyframes yet — click the curve or press ◆ Keyframe');
+    return;
+  }
+  let target = null;
+  if (dir > 0) target = track.find((k) => k.t > state.playheadSec + 0.05);
+  else target = [...track].reverse().find((k) => k.t < state.playheadSec - 0.05);
+  if (!target) target = dir > 0 ? track[0] : track[track.length - 1];
+  state.playheadSec = target.t;
+  syncKeyframeInspector();
+}
+
+function updateCardKfBadges() {
+  document.querySelectorAll('.card-kf-btn').forEach((btn) => {
+    const id = btn.dataset.kf;
+    const n = (KF.tracks[id] || []).length;
+    btn.textContent = `◆ KF${n ? ' ' + n : ''}`;
+    btn.classList.toggle('has-kfs', n > 0);
+  });
+  document.querySelectorAll('.card-intensity-slider').forEach((slider) => {
+    const id = slider.dataset.int;
+    const v = Math.round(baseIntensity(id));
+    slider.value = v;
+    const out = document.querySelector(`[data-intval="${id}"]`);
+    if (out) out.textContent = `${v}%`;
+  });
+}
+
+function refreshKeyframeUI() {
+  syncKeyframeInspector();
+  updateCardKfBadges();
+}
+
+function syncKeyframeInspector() {
+  const p = state.activePreset;
+  if (!p) return;
+  const track = kfTrack(p.id);
+  const nameEl = document.getElementById('kfInspectorPresetName');
+  const subEl = document.getElementById('kfInspectorNodeSub');
+  const countEl = document.getElementById('kfCountBadge');
+  const slider = document.getElementById('masterIntensitySlider');
+  const valEl = document.getElementById('masterIntensityVal');
+
+  if (nameEl) nameEl.textContent = p.name;
+  if (subEl) subEl.textContent = `${p.category} • ${p.node} — ${track.length ? track.length + ' keyframes (BezierSpline on Apply)' : 'click canvas to place keyframes'}`;
+  if (countEl) countEl.textContent = String(track.length);
+  if (slider) slider.value = Math.round(baseIntensity(p.id));
+  if (valEl) valEl.textContent = `${Math.round(baseIntensity(p.id))}%`;
+  document.querySelectorAll('.kf-env-pill').forEach((b) => b.classList.remove('active'));
+  drawKeyframeCurve();
+  updateKeyframeReadouts();
+}
+
+function updateKeyframeReadouts() {
+  const p = state.activePreset;
+  if (!p) return;
+  const t = state.playheadSec;
+  const v = effectiveIntensity(p.id, t);
+  const phEl = document.getElementById('kfPlayheadReadout');
+  const evEl = document.getElementById('kfInterpolatedReadout');
+  const valEl = document.getElementById('masterIntensityVal');
+  if (phEl) phEl.textContent = `Playhead: ${t.toFixed(2)}s`;
+  if (evEl) evEl.textContent = `Evaluated Intensity: ${Math.round(v)}%`;
+  if (valEl) valEl.textContent = `${Math.round(baseIntensity(p.id))}%`;
+  const cardVal = document.querySelector(`[data-intval="${p.id}"]`);
+  if (cardVal) cardVal.textContent = `${Math.round(baseIntensity(p.id))}%`;
+}
+
+function drawKeyframeCurve() {
+  const canvas = document.getElementById('keyframeCurveCanvas');
+  const p = state.activePreset;
+  if (!canvas || !p) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const rect = canvas.getBoundingClientRect();
+  const cw = Math.max(240, Math.round(rect.width || 380));
+  const ch = Math.max(70, Math.round(rect.height || 92));
+  if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) {
+    canvas.width = Math.round(cw * dpr);
+    canvas.height = Math.round(ch * dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+
+  // background + grid
+  const bg = ctx.createLinearGradient(0, 0, 0, ch);
+  bg.addColorStop(0, 'rgba(20,24,34,0.9)');
+  bg.addColorStop(1, 'rgba(8,10,16,0.95)');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, cw, ch);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const y = (i / 4) * ch;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.stroke();
+  }
+  for (let i = 1; i < 8; i++) {
+    const x = (i / 8) * cw;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ch); ctx.stroke();
+  }
+  // 100% reference line
+  const y100 = ch - (100 / 200) * ch;
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath(); ctx.moveTo(0, y100); ctx.lineTo(cw, y100); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const track = KF.tracks[p.id] || [];
+  const timeToX = (t) => (t / state.totalDurSec) * cw;
+  const valToY = (v) => ch - (Math.max(0, Math.min(200, v)) / 200) * ch;
+
+  if (track.length) {
+    // area
+    const grad = ctx.createLinearGradient(0, 0, 0, ch);
+    grad.addColorStop(0, hexToRgba(p.accent || '#e11d48', 0.35));
+    grad.addColorStop(1, hexToRgba(p.accent || '#e11d48', 0.03));
+    ctx.beginPath();
+    ctx.moveTo(0, ch);
+    for (let px = 0; px <= cw; px += 2) {
+      const tt = (px / cw) * state.totalDurSec;
+      ctx.lineTo(px, valToY(evalKeyframes(track, tt)));
+    }
+    ctx.lineTo(cw, ch);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // curve
+    ctx.beginPath();
+    for (let px = 0; px <= cw; px += 2) {
+      const tt = (px / cw) * state.totalDurSec;
+      const y = valToY(evalKeyframes(track, tt));
+      if (px === 0) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+    }
+    ctx.strokeStyle = p.accent || '#e11d48';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = hexToRgba(p.accent || '#e11d48', 0.8);
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '600 10px "SF Mono", monospace';
+    ctx.fillText('NO KEYFRAMES — click to place, drag to move, ⇧click to delete', 10, ch / 2 + 3);
+    const base = baseIntensity(p.id);
+    ctx.strokeStyle = hexToRgba(p.accent || '#e11d48', 0.65);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(0, valToY(base)); ctx.lineTo(cw, valToY(base)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // keyframe diamonds
+  track.forEach((k) => {
+    const x = timeToX(k.t);
+    const y = valToY(k.v);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#0b0d14';
+    ctx.strokeStyle = p.accent || '#e11d48';
+    ctx.lineWidth = 2;
+    ctx.fillRect(-4, -4, 8, 8);
+    ctx.strokeRect(-4, -4, 8, 8);
+    ctx.restore();
+  });
+
+  // playhead
+  const px = timeToX(state.playheadSec);
+  ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, ch); ctx.stroke();
+  const py = valToY(effectiveIntensity(p.id, state.playheadSec));
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
+
+  // labels
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.font = '9px "SF Mono", monospace';
+  ctx.fillText('200%', 4, 10);
+  ctx.fillText('0%', 4, ch - 4);
+}
+
+function hexToRgba(hex, a) {
+  const h = (hex || '#e11d48').replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function runAiVfxAssistant(promptText) {
+  const lower = (promptText || '').toLowerCase();
+  let chosenPool = [];
+
+  if (lower.includes('awge') || lower.includes('16mm') || lower.includes('shutter') || lower.includes('step')) {
+    chosenPool = ['time_360_smear', 'time_film_snip', 'opt_500t_halation', 'opt_split_diopter', 'opt_gate_weave'];
+  } else if (lower.includes('silver') || lower.includes('bleach') || lower.includes('division') || lower.includes('brutalist')) {
+    chosenPool = ['lab_bleach_bypass', 'cam_sub_thump', 'cam_crash_zoom', 'lab_threshold_print', 'time_velocity_snap'];
+  } else if (lower.includes('anamorphic') || lower.includes('a24') || lower.includes('500t')) {
+    chosenPool = ['opt_anamorphic_fringe', 'opt_500t_halation', 'cam_shoulder_float', 'lab_kodak_2383', 'depth_streak'];
+  } else if (lower.includes('brand') || lower.includes('commercial') || lower.includes('talking')) {
+    chosenPool = ['ed_2cam_punch', 'depth_skin_rolloff', 'depth_sep', 'ed_soft_vignette', 'ed_whip_jcut'];
+    state.scene = 'talking_head';
+  } else {
+    chosenPool = ['opt_500t_halation', 'time_360_smear', 'cam_sub_thump', 'opt_split_diopter', 'lab_kodak_2383'];
+  }
+
+  const newVfxClips = [];
+  const slots = [2, 21, 40, 60, 80];
+  slots.forEach((leftPct, idx) => {
+    const pid = chosenPool[idx % chosenPool.length];
+    const preset = VFX_PRESETS.find((p) => p.id === pid) || VFX_PRESETS[0];
+    newVfxClips.push({
+      left: leftPct,
+      width: 17,
+      label: preset.name,
+      presetId: preset.id
+    });
+  });
+
+  state.timelineTracks.v3 = newVfxClips;
+  state.activePreset = VFX_PRESETS.find((p) => p.id === chosenPool[0]) || VFX_PRESETS[0];
+  state.hitFlashBurst = 0.9;
+  document.getElementById('activeFxPill').textContent = `Optical Pass: ${state.activePreset.name}`;
+  renderTimelineTracks();
+  renderVfxGrid();
+
+  dispatchToResolve('batch_ai_vfx', {
+    prompt: promptText,
+    presetsPlaced: newVfxClips.length,
+    intensity: state.masterIntensity,
+    keyframes: []
+  }, `Built ${newVfxClips.length}-node cinema VFX pass across timeline`);
+}
+
+// ============================================================================
+// TAB 3: CUT SILENCES (TALKING HEAD & BRAND CONTENT)
+// ============================================================================
+function initSilenceTab() {
+  const dbSlider = document.getElementById('silenceDbSlider');
+  const minMsSlider = document.getElementById('silenceMinMsSlider');
+  const padMsSlider = document.getElementById('silencePadMsSlider');
+
+  const updateSilenceAnalysis = () => {
+    state.silenceThresholdDb = Number(dbSlider.value);
+    state.silenceMinMs = Number(minMsSlider.value);
+    state.silencePadMs = Number(padMsSlider.value);
+
+    document.getElementById('silenceDbVal').textContent = `${state.silenceThresholdDb} dB`;
+    document.getElementById('thresholdBadge').textContent = `Threshold: ${state.silenceThresholdDb} dB`;
+    document.getElementById('silenceMinMsVal').textContent = `${state.silenceMinMs} ms`;
+    document.getElementById('silencePadMsVal').textContent = `${state.silencePadMs} ms`;
+
+    renderSilenceSegments();
+    drawSilenceWaveform();
+  };
+
+  dbSlider.addEventListener('input', updateSilenceAnalysis);
+  minMsSlider.addEventListener('input', updateSilenceAnalysis);
+  padMsSlider.addEventListener('input', updateSilenceAnalysis);
+
+  document.getElementById('applySilenceCutBtn').addEventListener('click', executeSilenceCut);
+
+  renderSilenceSegments();
+  drawSilenceWaveform();
+}
+
+function isSegmentCut(seg) {
+  if (seg.forceKeep) return false;
+  const durMs = (seg.end - seg.start) * 1000;
+  return seg.db <= state.silenceThresholdDb && durMs >= state.silenceMinMs;
+}
+
+function renderSilenceSegments() {
+  const listEl = document.getElementById('silenceSegmentsList');
+  let keptSec = 0;
+  let cutCount = 0;
+  const padSec = (state.silencePadMs / 1000) * 2;
+
+  listEl.innerHTML = state.silenceSegments.map((seg) => {
+    const cut = isSegmentCut(seg);
+    const dur = (seg.end - seg.start).toFixed(1);
+    if (cut) {
+      cutCount++;
+      keptSec += Math.min(seg.end - seg.start, padSec);
+    } else {
+      keptSec += (seg.end - seg.start);
+    }
+    return `
+      <div class="segment-row ${cut ? 'silence-cut' : ''}" data-segid="${seg.id}">
+        <div>
+          <strong>${seg.start.toFixed(1)}s – ${seg.end.toFixed(1)}s (${dur}s)</strong>
+          <span style="color:#9ca3af; margin-left:8px;">${seg.label} (${seg.db} dB)</span>
+        </div>
+        <span class="segment-badge ${cut ? 'cut' : 'keep'}">
+          ${cut ? 'CUT SILENCE' : 'KEEP SPEECH'}
+        </span>
+      </div>
+    `;
+  }).join('');
+
+  const orig = 36.0;
+  const saved = Math.max(0, orig - keptSec);
+  const pct = Math.round((saved / orig) * 100);
+
+  document.getElementById('silenceOrigDur').textContent = `00:${orig.toFixed(1)}s`;
+  document.getElementById('silenceNewDur').textContent = `00:${keptSec.toFixed(1)}s`;
+  document.getElementById('silenceSavedPct').textContent = `${pct}% (-${saved.toFixed(1)}s)`;
+  document.getElementById('silenceCutCount').textContent = `${cutCount} cuts`;
+
+  listEl.querySelectorAll('.segment-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const id = Number(row.dataset.segid);
+      const seg = state.silenceSegments.find((s) => s.id === id);
+      if (seg) {
+        seg.forceKeep = !seg.forceKeep;
+        renderSilenceSegments();
+        drawSilenceWaveform();
+      }
+    });
+  });
+}
+
+function drawSilenceWaveform() {
+  const canvas = document.getElementById('silenceWaveformCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.fillStyle = '#07090e';
+  ctx.fillRect(0, 0, w, h);
+
+  const totalDur = 36.0;
+  state.silenceSegments.forEach((seg) => {
+    const x1 = (seg.start / totalDur) * w;
+    const x2 = (seg.end / totalDur) * w;
+    const cut = isSegmentCut(seg);
+
+    ctx.fillStyle = cut ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.08)';
+    ctx.fillRect(x1, 0, x2 - x1, h);
+
+    const bars = Math.max(4, Math.floor((x2 - x1) / 4));
+    for (let i = 0; i < bars; i++) {
+      const bx = x1 + i * 4;
+      const normAmp = cut ? 0.11 : (0.42 + 0.45 * Math.abs(Math.sin(bx * 0.17 + i)));
+      const bh = normAmp * (h * 0.78);
+      ctx.fillStyle = cut ? '#ef4444' : '#e11d48';
+      ctx.fillRect(bx, (h - bh) / 2, 2.5, bh);
+    }
+  });
+
+  const normThresh = Math.min(0.9, Math.max(0.1, (state.silenceThresholdDb + 55) / 42));
+  const ty = h - normThresh * (h * 0.8);
+  ctx.strokeStyle = '#f59e0b';
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath();
+  ctx.moveTo(0, ty);
+  ctx.lineTo(w, ty);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function executeSilenceCut() {
+  const kept = state.silenceSegments.filter((s) => !isSegmentCut(s));
+  const autoZoom = document.getElementById('autoZoomJumpCut').checked;
+
+  let cursor = 0;
+  const newV1 = [];
+  const totalKeptDur = kept.reduce((acc, s) => acc + (s.end - s.start), 0) || 1;
+
+  kept.forEach((s, idx) => {
+    const widthPct = Math.max(8, Math.round(((s.end - s.start) / totalKeptDur) * 100));
+    const zoomLabel = autoZoom && idx % 2 === 1 ? ' (1.08x 2-Cam)' : '';
+    newV1.push({
+      left: Math.min(92, cursor),
+      width: Math.min(100 - cursor, widthPct),
+      label: `Subclip #${idx + 1}${zoomLabel}`
+    });
+    cursor += widthPct;
+  });
+
+  state.timelineTracks.v1 = newV1;
+  renderTimelineTracks();
+
+  const resolveSegments = kept.map((s) => ({
+    startFrame: Math.round(s.start * 24),
+    endFrame: Math.round(s.end * 24),
+    label: s.label
+  }));
+
+  dispatchToResolve('cut_silences', {
+    thresholdDb: state.silenceThresholdDb,
+    minSilenceMs: state.silenceMinMs,
+    paddingMs: state.silencePadMs,
+    autoZoomJumpCut: autoZoom,
+    segments: resolveSegments
+  }, `Stripped silences & built ${kept.length} subclips on timeline`);
+}
+
+// ============================================================================
+// TAB 2: LYRC.STUDIO KINETIC LYRIC STYLES & SONG TEMPLATE ENGINE
+// ============================================================================
+function initCaptionsTab() {
+  const rawInput = document.getElementById('lyricsRawInput');
+  rawInput.value = DEFAULT_LYRICS_TEXT;
+
+  renderCaptionStyleStrip();
+  updateContextualBar();
+  syncLyricsToBeatCues();
+
+  document.querySelectorAll('#lyrcCategoryPills .lyrc-cat-pill').forEach((pill) => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('#lyrcCategoryPills .lyrc-cat-pill').forEach((p) => p.classList.remove('active'));
+      pill.classList.add('active');
+      state.lyrcFilterCat = pill.dataset.lcat;
+      renderCaptionStyleStrip();
+    });
+  });
+
+  document.getElementById('lyricVariationBtn').addEventListener('click', () => {
+    if (!state.captionStyle.supportsVariation) {
+      showToast(`"${state.captionStyle.name}" uses a fixed recipe and does not use Variation seeds.`);
+      return;
+    }
+    state.variationSeed = (state.variationSeed % 6) + 1;
+    document.getElementById('variationSeedBadge').textContent = `#${state.variationSeed}`;
+    document.getElementById('activeCapPill').textContent = `LYRC: ${state.captionStyle.name} (Var #${state.variationSeed})`;
+    showToast(`Generated Arrangement Variation #${state.variationSeed} for "${state.captionStyle.name}"`);
+  });
+
+  document.getElementById('lyricShuffleClipsBtn').addEventListener('click', () => {
+    state.clipShuffleSeed++;
+    const videoPool = state.mediaPool.filter((c) => c.bin !== 'Audio');
+    const shuffled = [...videoPool].sort((a, b) => {
+      const ha = (a.name.charCodeAt(0) + state.clipShuffleSeed * 17) % 13;
+      const hb = (b.name.charCodeAt(0) + state.clipShuffleSeed * 31) % 13;
+      return ha - hb;
+    });
+    const newV1 = [];
+    for (let i = 0; i < 4; i++) {
+      const clip = shuffled[i % shuffled.length];
+      newV1.push({
+        left: i * 25,
+        width: 25,
+        label: clip.name.replace(/\.(mov|mp4)$/i, '')
+      });
+    }
+    state.timelineTracks.v1 = newV1;
+    state.hitFlashBurst = 0.55;
+    renderTimelineTracks();
+    showToast(`Shuffled Media Pool clips under locked "${state.captionStyle.name}" Song Template`);
+  });
+
+  document.getElementById('lyrcFontPairSelect').addEventListener('change', (e) => {
+    state.fontPair = e.target.value;
+  });
+  document.getElementById('lyrcAlignSelect').addEventListener('change', (e) => {
+    state.alignment = e.target.value;
+  });
+  document.getElementById('lyrcBackdropSelect').addEventListener('change', (e) => {
+    state.backdropMode = e.target.value;
+  });
+
+  document.getElementById('loadSampleLyricsBtn').addEventListener('click', () => {
+    rawInput.value = DEFAULT_LYRICS_TEXT;
+    state.scene = 'music_video';
+    syncLyricsToBeatCues();
+    showToast('Loaded Artist Music Video Hook Lyrics');
+  });
+
+  document.getElementById('loadSampleTalkingBtn').addEventListener('click', () => {
+    rawInput.value = DEFAULT_TALKING_TEXT;
+    state.scene = 'talking_head';
+    const hormozi = CAPTION_STYLES.find((s) => s.id === 'hormozi_pop');
+    if (hormozi) selectLyrcPreset(hormozi);
+    syncLyricsToBeatCues();
+    showToast('Loaded Talking-Head Brand Script');
+  });
+
+  rawInput.addEventListener('input', () => syncLyricsToBeatCues());
+  document.getElementById('autoSyncLyricsBtn').addEventListener('click', () => {
+    syncLyricsToBeatCues();
+    showToast(`Beat-synced ${state.cues.length} lyric phrases at ${state.bpm} BPM`);
+  });
+
+  document.getElementById('capPrimaryColor').addEventListener('input', (e) => {
+    state.primaryColor = e.target.value;
+  });
+  document.getElementById('capAccentColor').addEventListener('input', (e) => {
+    state.accentColor = e.target.value;
+  });
+  document.getElementById('capFontSizeSlider').addEventListener('input', (e) => {
+    state.fontScale = Number(e.target.value);
+  });
+  document.getElementById('capPosYSlider').addEventListener('input', (e) => {
+    state.posY = Number(e.target.value);
+  });
+
+  document.getElementById('pushCaptionsResolveBtn').addEventListener('click', () => {
+    syncLyricsToBeatCues();
+    renderTimelineTracks();
+    dispatchToResolve('add_captions_lyrics', {
+      presetId: state.captionStyle.id,
+      style: `${state.captionStyle.name} (Var #${state.variationSeed})`,
+      alignment: state.alignment,
+      backdropMode: state.backdropMode,
+      lines: state.cues
+    }, `Placed ${state.cues.length} LYRC "${state.captionStyle.name}" kinetic blocks onto Resolve Timeline`);
+  });
+
+  document.getElementById('exportSrtBtn').addEventListener('click', downloadSrtFile);
+}
+
+function selectLyrcPreset(st) {
+  state.captionStyle = st;
+  state.primaryColor = st.primary;
+  state.accentColor = st.accent;
+  document.getElementById('capPrimaryColor').value = st.primary;
+  document.getElementById('capAccentColor').value = st.accent;
+  if (st.id === 'margin') state.alignment = 'left';
+  else state.alignment = 'center';
+  document.getElementById('lyrcAlignSelect').value = state.alignment;
+
+  const varTag = st.supportsVariation ? ` (Seed #${state.variationSeed})` : ' (Fixed)';
+  document.getElementById('activeCapPill').textContent = `LYRC: ${st.name}${varTag}`;
+  updateContextualBar();
+  renderCaptionStyleStrip();
+}
+
+function updateContextualBar() {
+  const st = state.captionStyle;
+  const label = document.getElementById('ctxPresetLabel');
+  label.innerHTML = `Active LYRC Preset: <strong>${st.name}</strong> (${st.category}) — ${st.desc}`;
+  const varBtn = document.getElementById('lyricVariationBtn');
+  varBtn.disabled = !st.supportsVariation;
+  document.getElementById('variationSeedBadge').textContent = st.supportsVariation ? `#${state.variationSeed}` : 'Fixed';
+}
+
+function renderCaptionStyleStrip() {
+  const strip = document.getElementById('captionStyleStrip');
+  const filtered = CAPTION_STYLES.filter((s) => {
+    if (state.lyrcFilterCat === 'ALL') return true;
+    if (state.lyrcFilterCat === 'FAV') return s.fav;
+    return s.category === state.lyrcFilterCat;
+  });
+
+  strip.innerHTML = filtered.map((st) => `
+    <div class="cap-style-card ${state.captionStyle.id === st.id ? 'active' : ''}" data-styleid="${st.id}">
+      <div class="cap-card-top">
+        <span class="cap-cat-tag">${st.category}</span>
+        <button class="cap-fav-btn ${st.fav ? 'fav-on' : ''}" data-favid="${st.id}" title="Favorite this LYRC style">★</button>
+      </div>
+      <div class="cap-style-preview">${st.previewHtml}</div>
+      <div class="cap-style-foot">
+        <span class="cap-style-name">${st.name}</span>
+        <span class="cap-var-tag">${st.supportsVariation ? 'Var' : 'Fixed'}</span>
+      </div>
+    </div>
+  `).join('');
+
+  strip.querySelectorAll('.cap-style-card').forEach((card) => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.cap-fav-btn')) return;
+      const found = CAPTION_STYLES.find((s) => s.id === card.dataset.styleid);
+      if (found) selectLyrcPreset(found);
+    });
+  });
+
+  strip.querySelectorAll('.cap-fav-btn').forEach((fbtn) => {
+    fbtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const found = CAPTION_STYLES.find((s) => s.id === fbtn.dataset.favid);
+      if (found) {
+        found.fav = !found.fav;
+        renderCaptionStyleStrip();
+      }
+    });
+  });
+}
+
+function syncLyricsToBeatCues() {
+  const raw = document.getElementById('lyricsRawInput').value || '';
+  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+  const slotDur = state.totalDurSec / Math.max(1, lines.length);
+
+  state.cues = lines.map((text, idx) => ({
+    index: idx + 1,
+    startSec: Number((idx * slotDur).toFixed(2)),
+    endSec: Number(((idx + 1) * slotDur).toFixed(2)),
+    text
+  }));
+
+  document.getElementById('cueCountBadge').textContent = `${state.cues.length} Phrases`;
+
+  const listEl = document.getElementById('captionCuesList');
+  listEl.innerHTML = state.cues.map((c) => `
+    <div class="cue-item" data-start="${c.startSec}">
+      <span class="cue-time">${c.startSec.toFixed(1)}s – ${c.endSec.toFixed(1)}s</span>
+      <span class="cue-text">${c.text}</span>
+    </div>
+  `).join('');
+
+  listEl.querySelectorAll('.cue-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      state.playheadSec = Number(item.dataset.start) + 0.1;
+    });
+  });
+
+  state.timelineTracks.sub = state.cues.map((c) => ({
+    left: Math.round((c.startSec / state.totalDurSec) * 100),
+    width: Math.max(6, Math.round(((c.endSec - c.startSec) / state.totalDurSec) * 100) - 1),
+    label: `${state.captionStyle.name}: ${c.text}`
+  }));
+  renderTimelineTracks();
+}
+
+function downloadSrtFile() {
+  const formatSrtTime = (sec) => {
+    const ms = Math.floor((sec % 1) * 1000);
+    const totalS = Math.floor(sec);
+    const s = totalS % 60;
+    const m = Math.floor(totalS / 60) % 60;
+    const h = Math.floor(totalS / 3600);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
+  };
+  const srt = state.cues.map((c) => `${c.index}\n${formatSrtTime(c.startSec)} --> ${formatSrtTime(c.endSec)}\n${c.text}\n`).join('\n');
+  const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `pulsevfx_${state.captionStyle.id}_lyrics.srt`;
+  a.click();
+  showToast('Downloaded .SRT subtitle file ready for DaVinci Resolve');
+}
+
+// ============================================================================
+// TAB 4: MEDIA POOL AI AUTO-EDITOR (MUSIC VIDEO & VLOG BUILDER)
+// ============================================================================
+function initMediaPoolTab() {
+  renderMediaPoolGrid();
+
+  document.querySelectorAll('.director-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.director-card').forEach((c) => c.classList.remove('active'));
+      card.classList.add('active');
+      state.directorMode = card.dataset.director;
+    });
+  });
+
+  document.querySelectorAll('.mp-bin').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mp-bin').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.selectedBin = btn.dataset.bin;
+      renderMediaPoolGrid();
+    });
+  });
+
+  document.getElementById('syncMediaPoolBtn').addEventListener('click', async () => {
+    const res = await dispatchToResolve('get_media_pool', {}, 'Scanned Resolve 21.1.1 Media Pool bins & clip metadata');
+    if (res && res.bridgeResponse && Array.isArray(res.bridgeResponse.clips) && res.bridgeResponse.clips.length > 0) {
+      state.mediaPool = res.bridgeResponse.clips.map((c, idx) => ({
+        id: c.id || `live_${idx}`,
+        name: c.name,
+        bin: c.bin || 'Master',
+        duration: c.duration || '00:00:10',
+        frames: c.frames || 240,
+        fps: c.fps || 24,
+        res: c.resolution || '1920x1080',
+        color: '#e11d48',
+        included: true
+      }));
+      renderMediaPoolGrid();
+    }
+  });
+
+  document.getElementById('addCustomPoolClipBtn').addEventListener('click', () => {
+    const idx = state.mediaPool.length + 1;
+    const isMv = state.directorMode === 'music_video';
+    state.mediaPool.unshift({
+      id: `mp_custom_${idx}`,
+      name: isMv ? `C_CAM_CookeAnamorphic_Take_${idx}.mov` : `VLOG_SonyFX3_Broll_${idx}.mp4`,
+      bin: isMv ? 'Performance' : 'B-Roll',
+      duration: '00:00:42',
+      frames: 1008,
+      fps: 24,
+      res: '3840x2160',
+      color: '#e11d48',
+      included: true
+    });
+    renderMediaPoolGrid();
+    showToast('Added new clip to Media Pool list');
+  });
+
+  document.getElementById('autoAssembleBtn').addEventListener('click', runMediaPoolAutoAssembler);
+}
+
+function renderMediaPoolGrid() {
+  const grid = document.getElementById('mediaPoolGrid');
+  const clips = state.mediaPool.filter((c) => state.selectedBin === 'ALL' || c.bin === state.selectedBin);
+
+  grid.innerHTML = clips.map((c) => `
+    <div class="mp-clip-card ${c.included ? 'included' : ''}" data-clipid="${c.id}">
+      <div class="mp-clip-left">
+        <span class="mp-color-swatch" style="background:${c.color};"></span>
+        <div>
+          <div class="mp-clip-name">${c.name}</div>
+          <div class="mp-clip-meta">Bin: ${c.bin} • ${c.res} @ ${c.fps}fps • ${c.duration}</div>
+        </div>
+      </div>
+      <label class="checkbox-pill" style="padding:3px 7px;">
+        <input type="checkbox" data-toggleclip="${c.id}" ${c.included ? 'checked' : ''} />
+        <span>Use</span>
+      </label>
+    </div>
+  `).join('');
+
+  grid.querySelectorAll('input[data-toggleclip]').forEach((chk) => {
+    chk.addEventListener('change', (e) => {
+      const clip = state.mediaPool.find((c) => c.id === chk.dataset.toggleclip);
+      if (clip) {
+        clip.included = e.target.checked;
+        renderMediaPoolGrid();
+      }
+    });
+  });
+}
+
+function runMediaPoolAutoAssembler() {
+  const included = state.mediaPool.filter((c) => c.included && c.bin !== 'Audio');
+  if (included.length === 0) {
+    showToast('Select at least one video clip in the Media Pool first');
+    return;
+  }
+
+  const isMv = state.directorMode === 'music_video';
+  const bpm = Number(document.getElementById('mvBpmInput').value) || 142;
+  const pacing = document.getElementById('mvPacingSelect').value;
+  const autoVfx = document.getElementById('mvAutoVfxSelect').value;
+
+  const numCuts = isMv ? (pacing === '1' ? 10 : pacing === '4' ? 5 : 8) : 6;
+  const stepPct = Math.floor(100 / numCuts);
+
+  const newV1 = [];
+  const newV2 = [];
+  const newV3 = [];
+
+  for (let i = 0; i < numCuts; i++) {
+    const clip = included[i % included.length];
+    const left = i * stepPct;
+    const width = i === numCuts - 1 ? 100 - left : stepPct;
+    newV1.push({
+      left,
+      width,
+      label: clip.name.replace(/\.(mov|mp4)$/i, '')
+    });
+
+    if (i % 2 === 1) {
+      const broll = included.find((c) => c.bin === 'B-Roll') || clip;
+      newV2.push({
+        left: left + 2,
+        width: Math.max(6, width - 3),
+        label: `B-Roll: ${broll.name.slice(0, 18)}`
+      });
+    }
+
+    if (isMv && autoVfx !== 'none' && i % 2 === 0) {
+      const vfxPreset = autoVfx === 'grunge'
+        ? VFX_PRESETS.find((p) => p.id === 'lab_bleach_bypass')
+        : autoVfx === 'crt'
+          ? VFX_PRESETS.find((p) => p.id === 'opt_anamorphic_fringe')
+          : VFX_PRESETS.find((p) => p.id === (i % 4 === 0 ? 'opt_500t_halation' : 'time_360_smear'));
+      if (vfxPreset) {
+        newV3.push({
+          left,
+          width: Math.min(14, width),
+          label: vfxPreset.name,
+          presetId: vfxPreset.id
+        });
+      }
+    }
+  }
+
+  state.timelineTracks.v1 = newV1;
+  state.timelineTracks.v2 = newV2;
+  if (newV3.length > 0) state.timelineTracks.v3 = newV3;
+
+  state.scene = isMv ? 'music_video' : 'talking_head';
+  state.hitFlashBurst = 0.85;
+
+  const tlTitle = isMv
+    ? `TIMELINE — ${bpm}BPM_ANAMORPHIC_CUT (${numCuts} Cuts)`
+    : `TIMELINE — BRAND_EDITORIAL_CUT (${numCuts} Scenes)`;
+  document.getElementById('activeTimelineTitle').textContent = tlTitle;
+
+  renderTimelineTracks();
+
+  dispatchToResolve('auto_edit_timeline', {
+    mode: state.directorMode,
+    bpm,
+    pacing,
+    autoVfx,
+    clipsUsed: included.map((c) => c.name),
+    cuts: newV1
+  }, `Auto-Assembled "${tlTitle}" from ${included.length} Media Pool clips`);
+}
+
+// ============================================================================
+// MONITOR TRANSPORT, MULTI-TRACK TIMELINE & LIVE 60FPS CANVAS VIEWER
+// ============================================================================
+function initMonitorAndTimeline() {
+  renderTimelineTracks();
+
+  const playPauseBtn = document.getElementById('playPauseBtn');
+  playPauseBtn.addEventListener('click', () => {
+    state.isPlaying = !state.isPlaying;
+    playPauseBtn.textContent = state.isPlaying ? 'Pause' : 'Play';
+  });
+
+  document.getElementById('triggerHitNowBtn').addEventListener('click', () => {
+    state.hitFlashBurst = 1.15;
+    showToast('Triggered 2-Frame Film Snip + Damped Sub-Bass Thump');
+  });
+
+  const lyricsToggleBtn = document.getElementById('toggleLyricsOverlayBtn');
+  if (lyricsToggleBtn) {
+    lyricsToggleBtn.addEventListener('click', () => {
+      state.showLyricsOverlay = !state.showLyricsOverlay;
+      lyricsToggleBtn.textContent = state.showLyricsOverlay ? 'Lyrics: ON' : 'Lyrics: OFF';
+    });
+  }
+
+  const aspectBtn = document.getElementById('aspectRatioBtn');
+  aspectBtn.addEventListener('click', () => {
+    state.vertical916 = !state.vertical916;
+    aspectBtn.textContent = state.vertical916 ? '9:16: ON' : '9:16: OFF';
+  });
+
+  const compareBtn = document.getElementById('compareSplitBtn');
+  compareBtn.addEventListener('click', () => {
+    state.splitCompare = !state.splitCompare;
+    compareBtn.textContent = state.splitCompare ? 'Split Wipe: ON' : 'Split Wipe: OFF';
+  });
+
+  const scrubber = document.getElementById('timelineScrubber');
+  scrubber.addEventListener('input', (e) => {
+    state.playheadSec = (Number(e.target.value) / 1000) * state.totalDurSec;
+  });
+
+  document.getElementById('clearVfxTrackBtn').addEventListener('click', () => {
+    state.timelineTracks.v3 = [];
+    renderTimelineTracks();
+    showToast('Cleared V3 Optical FX track');
+  });
+
+  document.getElementById('copyLuaBtn').addEventListener('click', () => {
+    const code = document.getElementById('luaCodeOutput').textContent;
+    navigator.clipboard.writeText(code);
+    showToast('Copied Lua snippet — Paste into Resolve: Workspace ▸ Console ▸ Lua');
+  });
+
+  document.getElementById('openLuaDrawerBtn').addEventListener('click', () => {
+    document.getElementById('luaCodeOutput').scrollIntoView({ behavior: 'smooth' });
+  });
+}
+
+function renderTimelineTracks() {
+  const renderLane = (laneId, items, cls) => {
+    const el = document.getElementById(laneId);
+    if (!el) return;
+    el.innerHTML = items.map((it, idx) => `
+      <div class="tl-clip ${cls}" style="left:${it.left}%; width:${it.width}%;" data-idx="${idx}" title="${it.label}">
+        ${it.label}
+      </div>
+    `).join('');
+  };
+
+  renderLane('laneV3', state.timelineTracks.v3, 'vfx-item');
+  renderLane('laneSub', state.timelineTracks.sub, 'sub-item');
+  renderLane('laneV2', state.timelineTracks.v2, 'v2-item');
+  renderLane('laneV1', state.timelineTracks.v1, 'v1-item');
+  renderLane('laneA1', state.timelineTracks.a1, 'a1-item');
+}
+
+// ============================================================================
+// REAL-TIME 60FPS OPTICAL SHADER, FRAME-ACCUMULATION & LYRC ENGINE
+// ============================================================================
+let lastFrameTs = performance.now();
+
+function renderLivePreviewLoop(now) {
+  const dt = Math.min(0.05, (now - lastFrameTs) / 1000);
+  lastFrameTs = now;
+
+  if (state.isPlaying) {
+    state.playheadSec = (state.playheadSec + dt) % state.totalDurSec;
+    const pct = (state.playheadSec / state.totalDurSec) * 100;
+    const scrubber = document.getElementById('timelineScrubber');
+    if (scrubber && document.activeElement !== scrubber) {
+      scrubber.value = Math.round(pct * 10);
+    }
+    const ph = document.getElementById('tlPlayhead');
+    if (ph) {
+      ph.style.left = `calc(104px + ${(pct / 100) * 82}%)`;
+    }
+  }
+
+  if (state.hitFlashBurst > 0) {
+    state.hitFlashBurst = Math.max(0, state.hitFlashBurst - dt * 3.1);
+  }
+
+  const totalFrames = Math.floor(state.playheadSec * 24);
+  const ff = String(totalFrames % 24).padStart(2, '0');
+  const ss = String(Math.floor(state.playheadSec) % 60).padStart(2, '0');
+  document.getElementById('viewerTimecode').textContent = `01:00:${ss}:${ff}`;
+  document.getElementById('transportDurLabel').textContent = `${state.playheadSec.toFixed(1)}s / ${state.totalDurSec.toFixed(1)}s`;
+
+  drawMonitorFrame(now / 1000);
+  requestAnimationFrame(renderLivePreviewLoop);
+}
+
+function drawMonitorFrame(t) {
+  const canvas = document.getElementById('livePreviewCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+
+  if (!offscreenBuffer) {
+    offscreenBuffer = document.createElement('canvas');
+    offscreenBuffer.width = w;
+    offscreenBuffer.height = h;
+    offscreenCtx = offscreenBuffer.getContext('2d');
+  }
+
+  const preset = state.activePreset || VFX_PRESETS[0];
+  const effectType = preset.effectType || 'opt_halation';
+  // per-effect intensity (keyframed curve or slider) × global master scale
+  const intensity = effectiveIntensity(preset.id, state.playheadSec) / 100;
+  const grainAmount = (state.mixStylized / 100);
+  const beatPhase = (t * (state.bpm / 60)) % 1;
+  const onBeatPulse = Math.pow(Math.max(0, 1 - beatPhase * 3.5), 2.2);
+
+  // Step-print / 8fps quantize time when time_smear is active
+  const renderTime = effectType === 'time_smear' ? Math.floor(t * 9) / 9 : t;
+
+  ctx.save();
+
+  // If 360° Shutter Smear is active, blend previous frame buffer instead of hard clearing
+  if (effectType === 'time_smear' && !state.splitCompare) {
+    ctx.globalAlpha = 0.34;
+    ctx.drawImage(offscreenBuffer, 0, 0);
+    ctx.globalAlpha = 0.66;
+  } else {
+    ctx.clearRect(0, 0, w, h);
+  }
+
+  // Physical Camera Weight & Kinetic Transforms (Critically damped, never cartoonish)
+  let dx = 0;
+  let dy = 0;
+  let scale = 1.0;
+  let rot = 0;
+
+  if (effectType === 'cam_float') {
+    dx = Math.sin(t * 1.7) * 5.5 * intensity;
+    dy = Math.cos(t * 1.3) * 4.2 * intensity;
+    rot = Math.sin(t * 0.9) * 0.006 * intensity;
+    scale = 1.02;
+  } else if (effectType === 'opt_gateweave') {
+    dx = (Math.sin(t * 19) * 1.4 + Math.cos(t * 31) * 0.9) * intensity;
+    dy = (Math.cos(t * 23) * 1.2) * intensity;
+    scale = 1.01;
+  } else if (effectType === 'cam_thump' || state.hitFlashBurst > 0.05) {
+    const thump = (0.075 * intensity * onBeatPulse) + (state.hitFlashBurst * 0.09);
+    scale = 1.0 + thump;
+    dy = Math.sin(beatPhase * Math.PI * 2) * 3.5 * thump * 10;
+  } else if (effectType === 'time_velocity') {
+    scale = 1.0 + 0.16 * intensity * Math.pow(onBeatPulse, 1.5);
+  } else if (effectType === 'cam_whip') {
+    dx = Math.pow(onBeatPulse, 2) * 58 * intensity * (Math.floor(t) % 2 === 0 ? 1 : -1);
+    scale = 1.06;
+  }
+
+  ctx.save();
+  ctx.translate(w / 2 + dx, h / 2 + dy);
+  ctx.rotate(rot);
+  ctx.scale(scale, scale);
+  ctx.translate(-w / 2, -h / 2);
+
+  // Render Cinematic Lighting Plate (or Custom User Video)
+  drawCinematicPlate(ctx, w, h, renderTime, onBeatPulse);
+
+  // Apply Non-Corny Optical, Shutter & Film Lab Shader Pass
+  if (state.splitCompare) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(w / 2, 0, w / 2, h);
+    ctx.clip();
+    drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
+    ctx.restore();
+
+    ctx.strokeStyle = 'rgba(225, 29, 72, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w / 2, 0);
+    ctx.lineTo(w / 2, h);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(9, 10, 15, 0.78)';
+    ctx.fillRect(12, 12, 68, 20);
+    ctx.fillRect(w - 92, 12, 80, 20);
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '700 10px monospace';
+    ctx.fillText('RAW LOG', 20, 25);
+    ctx.fillStyle = '#fecdd3';
+    ctx.fillText('GRADED FX', w - 84, 25);
+  } else {
+    drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
+  }
+
+  ctx.restore();
+
+  // Save current frame into offscreen history buffer for 360° Shutter accumulation
+  offscreenCtx.clearRect(0, 0, w, h);
+  offscreenCtx.drawImage(canvas, 0, 0);
+
+  // Draw LYRC.studio Kinetic Typography Overlay (if toggled on)
+  if (state.showLyricsOverlay) {
+    drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse);
+  }
+
+  // Optional 9:16 Reels/TikTok Safe Frame Overlay
+  if (state.vertical916) {
+    const vw = Math.round(h * (9 / 16));
+    const leftPillar = Math.round((w - vw) / 2);
+    ctx.fillStyle = 'rgba(4, 5, 10, 0.84)';
+    ctx.fillRect(0, 0, leftPillar, h);
+    ctx.fillRect(w - leftPillar, 0, leftPillar, h);
+    ctx.strokeStyle = 'rgba(225, 29, 72, 0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(leftPillar, 1, vw, h - 2);
+  }
+
+  ctx.restore();
+}
+
+function drawCinematicPlate(ctx, w, h, t, onBeatPulse) {
+  const videoEl = document.getElementById('customVideoElement');
+  if (state.scene === 'custom_video' && videoEl && videoEl.readyState >= 2) {
+    ctx.drawImage(videoEl, 0, 0, w, h);
+    return;
+  }
+
+  const hueShift = (state.clipShuffleSeed - 1) * 28;
+
+  if (state.scene === 'music_video') {
+    // Anamorphic Night Sodium-Vapor / Wet Asphalt Tunnel & Headlight Plate
+    const sky = ctx.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, `hsl(${215 + hueShift}, 45%, 7%)`);
+    sky.addColorStop(0.52, `hsl(${205 + hueShift}, 38%, 11%)`);
+    sky.addColorStop(0.53, '#07090e');
+    sky.addColorStop(1, '#040508');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, w, h);
+
+    // Perspective tunnel sodium-vapor ceiling lights moving toward camera
+    for (let i = 0; i < 6; i++) {
+      const z = ((t * 0.55 + i / 6) % 1);
+      const persp = Math.pow(z, 2.2);
+      const yTop = h * 0.44 - persp * (h * 0.38);
+      const xLeft = w * 0.5 - persp * (w * 0.46);
+      const xRight = w * 0.5 + persp * (w * 0.46);
+      const radius = 4 + persp * 26;
+
+      // Left & Right overhead sodium-vapor fixtures
+      [xLeft, xRight].forEach((lx) => {
+        const bloom = ctx.createRadialGradient(lx, yTop, 1, lx, yTop, radius * 2.4);
+        bloom.addColorStop(0, '#fff7ed');
+        bloom.addColorStop(0.25, 'rgba(251, 146, 60, 0.85)');
+        bloom.addColorStop(1, 'rgba(234, 88, 12, 0)');
+        ctx.fillStyle = bloom;
+        ctx.beginPath();
+        ctx.arc(lx, yTop, radius * 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    // Distant Anamorphic Oval Bokeh & Twin Headlights
+    const carX = w * 0.5 + Math.sin(t * 0.8) * 18;
+    const horizonY = h * 0.51;
+    [-38, 38].forEach((offset) => {
+      const hx = carX + offset;
+      const headGrad = ctx.createRadialGradient(hx, horizonY, 1, hx, horizonY, 54 + onBeatPulse * 18);
+      headGrad.addColorStop(0, '#ffffff');
+      headGrad.addColorStop(0.2, 'rgba(186, 230, 253, 0.9)');
+      headGrad.addColorStop(0.55, 'rgba(56, 189, 248, 0.28)');
+      headGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = headGrad;
+      ctx.fillRect(hx - 80, horizonY - 60, 160, 120);
+
+      // Horizontal Anamorphic Lens Streak
+      ctx.fillStyle = `rgba(56, 189, 248, ${0.32 + onBeatPulse * 0.25})`;
+      ctx.fillRect(hx - 170, horizonY - 1.5, 340, 3);
+    });
+
+    // Wet Asphalt Specular Reflections on Lower Half
+    for (let y = Math.floor(h * 0.53); y < h; y += 6) {
+      const prog = (y - h * 0.53) / (h * 0.47);
+      const streakW = 60 + prog * 260;
+      const sx = carX - streakW / 2 + Math.sin(y * 0.2 + t * 6) * 8;
+      ctx.fillStyle = `rgba(251, 146, 60, ${0.06 + prog * 0.12})`;
+      ctx.fillRect(sx, y, streakW, 3);
+    }
+  } else if (state.scene === 'talking_head') {
+    // Architectural Editorial Studio Plate (Warm Key + Cool Rim + Bokeh Practicals)
+    const bg = ctx.createLinearGradient(0, 0, w, h);
+    bg.addColorStop(0, '#0c111d');
+    bg.addColorStop(0.55, '#161f30');
+    bg.addColorStop(1, '#070a10');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+
+    // Architectural vertical window blind shafts
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.05)';
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      ctx.moveTo(w * 0.15 + i * 55, 0);
+      ctx.lineTo(w * 0.28 + i * 65, h);
+      ctx.lineTo(w * 0.31 + i * 65, h);
+      ctx.lineTo(w * 0.18 + i * 55, 0);
+      ctx.fill();
+    }
+
+    // Out-of-focus tungsten practicals (Oval Anamorphic Bokeh)
+    const bokehSpots = [
+      { x: w * 0.78, y: h * 0.28, r: 32, c: 'rgba(251, 146, 60, 0.38)' },
+      { x: w * 0.84, y: h * 0.36, r: 22, c: 'rgba(253, 224, 71, 0.28)' },
+      { x: w * 0.22, y: h * 0.32, r: 28, c: 'rgba(56, 189, 248, 0.24)' }
+    ];
+    bokehSpots.forEach((b) => {
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.scale(0.68, 1.15); // 2x Anamorphic squeeze oval bokeh
+      const g = ctx.createRadialGradient(0, 0, b.r * 0.2, 0, 0, b.r);
+      g.addColorStop(0, b.c);
+      g.addColorStop(0.85, b.c);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, b.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+  } else {
+    // Volumetric Studio Spotlight Plate
+    ctx.fillStyle = '#06070b';
+    ctx.fillRect(0, 0, w, h);
+
+    const cone = ctx.createRadialGradient(w * 0.5, -20, 10, w * 0.5, h * 0.55, w * 0.55);
+    cone.addColorStop(0, 'rgba(244, 63, 94, 0.38)');
+    cone.addColorStop(0.45, 'rgba(139, 92, 246, 0.14)');
+    cone.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = cone;
+    ctx.fillRect(0, 0, w, h);
+  }
+}
+
+function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPulse, grainAmount) {
+  // ---------------------------------------------------------------------
+  // TOUCHDESIGNER TOPs + TRANSITIONS & MORPHS → real generative shader pass
+  // ---------------------------------------------------------------------
+  if (window.TD_ENGINE && TD_ENGINE.hasShader(effectType)) {
+    const preset = state.activePreset || { accent: '#e11d48' };
+    // transitions scrub with the playhead so keyframed intensity reads correctly
+    const shaderTime = preset.isTransition ? state.playheadSec : t;
+    TD_ENGINE.render(ctx, w, h, shaderTime, effectType, intensity, onBeatPulse, preset);
+    return;
+  }
+
+  // 1. 500T HALATION BLOOM / LAB LIGHT LEAK
+  if (effectType === 'opt_halation' || effectType === 'lab_leak') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    const halGrad = ctx.createRadialGradient(w * 0.5, h * 0.48, 10, w * 0.5, h * 0.48, w * 0.48);
+    halGrad.addColorStop(0, `rgba(255, 115, 29, ${0.38 * intensity + onBeatPulse * 0.15})`);
+    halGrad.addColorStop(0.5, `rgba(225, 29, 72, ${0.22 * intensity})`);
+    halGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = halGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    if (effectType === 'lab_leak') {
+      const leakX = ((t * 220) % (w * 1.4)) - w * 0.2;
+      const burn = ctx.createLinearGradient(leakX - 90, 0, leakX + 90, 0);
+      burn.addColorStop(0, 'rgba(0,0,0,0)');
+      burn.addColorStop(0.5, `rgba(249, 115, 22, ${0.62 * intensity})`);
+      burn.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = burn;
+      ctx.fillRect(0, 0, w, h);
+    }
+    ctx.restore();
+  }
+
+  // 2. SPLIT-DIOPTER DUAL FOCUS REFRACTION
+  if (effectType === 'opt_diopter') {
+    const splitX = Math.round(w * 0.42);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, splitX, h);
+    ctx.clip();
+    // Draw magnified, slightly shifted left optical plane
+    ctx.translate(splitX / 2, h / 2);
+    ctx.scale(1.16, 1.16);
+    ctx.translate(-splitX / 2 + 14 * intensity, -h / 2);
+    ctx.drawImage(ctx.canvas, 0, 0);
+    ctx.restore();
+
+    // Soft optical glass refraction seam
+    const seam = ctx.createLinearGradient(splitX - 14, 0, splitX + 14, 0);
+    seam.addColorStop(0, 'rgba(255,255,255,0)');
+    seam.addColorStop(0.5, `rgba(186, 230, 253, ${0.32 * intensity})`);
+    seam.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = seam;
+    ctx.fillRect(splitX - 14, 0, 28, h);
+  }
+
+  // 3. PRISM CORNER REFRACTION / ANAMORPHIC FRINGE
+  if (effectType === 'opt_prism' || effectType === 'opt_fringe' || effectType === 'depth_streak') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.34 * intensity;
+    ctx.drawImage(ctx.canvas, -10 * intensity, 0, w + 20 * intensity, h);
+    ctx.restore();
+
+    if (effectType === 'depth_streak') {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      const streak = ctx.createLinearGradient(0, h * 0.48, w, h * 0.48);
+      streak.addColorStop(0, 'rgba(6, 182, 212, 0)');
+      streak.addColorStop(0.5, `rgba(56, 189, 248, ${0.55 * intensity})`);
+      streak.addColorStop(1, 'rgba(6, 182, 212, 0)');
+      ctx.fillStyle = streak;
+      ctx.fillRect(0, h * 0.46, w, 8);
+      ctx.restore();
+    }
+  }
+
+  // 4. BLEACH BYPASS SILVER RETENTION / KODAK 2383 / FLIR / LITHO
+  if (effectType === 'lab_bleach') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.fillStyle = `hsl(0, ${Math.round((1 - 0.68 * intensity) * 100)}%, 50%)`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'contrast';
+    ctx.fillStyle = `rgba(10, 14, 22, ${0.32 * intensity})`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  } else if (effectType === 'lab_flir') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'difference';
+    ctx.fillStyle = `rgba(220, 235, 255, ${0.78 * intensity})`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  } else if (effectType === 'lab_litho') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.fillStyle = 'hsl(0, 0%, 50%)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // 5. 2-FRAME FILM SNIP / TRANSIENT SPLICE FLASH
+  if ((effectType === 'time_snip' && onBeatPulse > 0.68) || state.hitFlashBurst > 0.35) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    const snipAlpha = Math.min(0.65, state.hitFlashBurst * 0.55 + onBeatPulse * 0.38 * intensity);
+    ctx.fillStyle = `rgba(255, 237, 213, ${snipAlpha})`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // 6. EDITORIAL PIP / 2.39:1 SCOPE MATTE
+  if (effectType === 'ed_pip') {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(w * 0.12, h * 0.12, w * 0.76, h * 0.76);
+    ctx.restore();
+  } else if (effectType === 'ed_scope') {
+    const barH = Math.round(h * 0.13);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, w, barH);
+    ctx.fillRect(0, h - barH, w, barH);
+  }
+
+  // 6b. TILT-SHIFT OBLIQUE PLANE (diagonal focus band + creamy defocus)
+  if (effectType === 'opt_tilt') {
+    const amt = Math.min(1, intensity);
+    if (amt > 0.01) {
+      ctx.save();
+      // out-of-focus wedges (top-left & bottom-right of the diagonal)
+      const drawGhost = (shift) => {
+        ctx.globalAlpha = 0.13 * amt;
+        for (let i = 1; i <= 4; i++) {
+          ctx.drawImage(ctx.canvas, shift * i * 1.6, shift * i * 1.1);
+        }
+      };
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(0, 0); ctx.lineTo(w, 0); ctx.lineTo(0, h); ctx.closePath();
+      ctx.clip();
+      drawGhost(2.2 * amt);
+      ctx.restore();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(w, h); ctx.lineTo(w, 0); ctx.lineTo(0, h); ctx.closePath();
+      ctx.clip();
+      drawGhost(-2.2 * amt);
+      ctx.restore();
+
+      // focus falloff along the diagonal
+      const band = ctx.createLinearGradient(0, 0, w, h);
+      band.addColorStop(0, `rgba(2,4,8,${0.20 * amt})`);
+      band.addColorStop(0.5, 'rgba(0,0,0,0)');
+      band.addColorStop(1, `rgba(2,4,8,${0.20 * amt})`);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = band;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+  }
+
+  // 6c. KODAK 2383 PRINT EMULATION (warm highlights / cyan-lifted shadows)
+  if (effectType === 'lab_2383') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.20 * Math.min(1, intensity);
+    ctx.fillStyle = '#ffe3bd';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.globalCompositeOperation = 'screen';
+    const hi = ctx.createLinearGradient(0, 0, 0, h);
+    hi.addColorStop(0, `rgba(255,214,160,${0.16 * intensity})`);
+    hi.addColorStop(0.45, 'rgba(255,236,214,0)');
+    ctx.fillStyle = hi;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.globalCompositeOperation = 'multiply';
+    const lo = ctx.createLinearGradient(0, h * 0.45, 0, h);
+    lo.addColorStop(0, 'rgba(255,255,255,0)');
+    lo.addColorStop(1, `rgba(150,205,225,${0.55 * Math.min(1, intensity)})`);
+    ctx.fillStyle = lo;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // 6d. DEPTH SEPARATION (subject holds, background desaturates + separates)
+  if (effectType === 'depth_sep') {
+    const amt = Math.min(1, intensity);
+    if (amt > 0.01) {
+      ctx.save();
+      const r0 = Math.min(w, h) * 0.16;
+      const r1 = Math.min(w, h) * 0.62;
+      const mask = ctx.createRadialGradient(w * 0.5, h * 0.48, r0, w * 0.5, h * 0.48, r1);
+      mask.addColorStop(0, 'rgba(128,128,128,0)');
+      mask.addColorStop(1, `rgba(128,128,128,${0.95 * amt})`);
+
+      ctx.globalCompositeOperation = 'saturation';
+      ctx.fillStyle = mask;
+      ctx.fillRect(0, 0, w, h);
+
+      const dark = ctx.createRadialGradient(w * 0.5, h * 0.48, r0, w * 0.5, h * 0.48, r1 * 1.05);
+      dark.addColorStop(0, 'rgba(255,255,255,0)');
+      dark.addColorStop(1, `rgba(18,24,34,${0.9 * amt})`);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = dark;
+      ctx.fillRect(0, 0, w, h);
+
+      // subject rim separation
+      ctx.globalCompositeOperation = 'screen';
+      ctx.strokeStyle = `rgba(226,232,240,${0.20 * amt})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(w * 0.5, h * 0.52, r0 * 1.25, r0 * 1.55, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // 7. AUTHENTIC 35MM FILM GRAIN + PERIMETER VIGNETTE
+  const vig = ctx.createRadialGradient(w * 0.5, h * 0.5, w * 0.28, w * 0.5, h * 0.5, w * 0.65);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, `rgba(0,0,0,${0.42 * intensity})`);
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, w, h);
+
+  if (grainAmount > 0.05) {
+    ctx.save();
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.06 * grainAmount})`;
+    for (let i = 0; i < 45; i++) {
+      const gx = ((i * 97 + Math.floor(t * 1000)) % w);
+      const gy = ((i * 53 + Math.floor(t * 777)) % h);
+      ctx.fillRect(gx, gy, 1.5, 1.5);
+    }
+    ctx.restore();
+  }
+}
+
+// ============================================================================
+// LYRC.STUDIO MULTI-WORD SPATIAL KINETIC PRESET ENGINE
+// ============================================================================
+function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
+  if (!state.cues || state.cues.length === 0) return;
+  const activeCue = state.cues.find((c) => state.playheadSec >= c.startSec && state.playheadSec <= c.endSec) || state.cues[0];
+  if (!activeCue) return;
+
+  const words = activeCue.text.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return;
+
+  const phraseProgress = Math.max(0, Math.min(0.999, (state.playheadSec - activeCue.startSec) / Math.max(0.25, activeCue.endSec - activeCue.startSec)));
+  const activeIdx = Math.floor(phraseProgress * words.length);
+  const wordSubProgress = (phraseProgress * words.length) % 1;
+
+  const styleId = state.captionStyle.id;
+  const baseScale = state.fontScale / 100;
+  const centerY = (state.posY / 100) * h;
+  const seed = state.variationSeed;
+
+  ctx.save();
+
+  // 1. BRAT
+  if (styleId === 'brat') {
+    const visibleWords = words.slice(0, activeIdx + 1).map((x) => x.toLowerCase());
+    if (state.backdropMode !== 'clean') {
+      ctx.fillStyle = 'rgba(138, 206, 0, 0.92)';
+      ctx.fillRect(w * 0.22, centerY - 78 * baseScale, w * 0.56, 156 * baseScale);
+    }
+    ctx.filter = 'blur(0.75px)';
+    ctx.fillStyle = state.backdropMode === 'clean' ? '#8ace00' : '#000000';
+    ctx.font = `600 ${Math.round(25 * baseScale)}px Arial, Helvetica, sans-serif`;
+    ctx.textAlign = 'center';
+    const line1 = visibleWords.slice(0, 3).join(' ');
+    const line2 = visibleWords.slice(3, 6).join(' ');
+    const line3 = visibleWords.slice(6).join(' ');
+    ctx.fillText(line1, w / 2, centerY - 26 * baseScale);
+    if (line2) ctx.fillText(line2, w / 2, centerY + 6 * baseScale);
+    if (line3) ctx.fillText(line3, w / 2, centerY + 38 * baseScale);
+    ctx.filter = 'none';
+    ctx.restore();
+    return;
+  }
+
+  // 2. DUET / HEARTLESS
+  if (styleId === 'duet' || styleId === 'heartless') {
+    const rows = [];
+    for (let i = 0; i <= activeIdx; i += 2) {
+      rows.push(words.slice(i, Math.min(activeIdx + 1, i + 2)));
+    }
+    const rowHeight = 40 * baseScale;
+    const startY = centerY - ((rows.length - 1) * rowHeight) / 2;
+
+    rows.forEach((rowWords, rIdx) => {
+      const y = startY + rIdx * rowHeight;
+      let totalRowW = 0;
+      const metrics = rowWords.map((word, wOffset) => {
+        const gIdx = rIdx * 2 + wOffset;
+        const isSerif = ((gIdx + seed) % 2 === 1);
+        const isCurrent = gIdx === activeIdx;
+        const fSize = Math.round((isSerif ? 31 : 28) * baseScale * (isCurrent ? 1.08 : 1.0));
+        ctx.font = isSerif
+          ? `italic 700 ${fSize}px Georgia, "Times New Roman", serif`
+          : `900 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+        const textStr = isSerif ? word.toLowerCase() : word.toUpperCase();
+        const mw = ctx.measureText(textStr).width;
+        totalRowW += mw;
+        return { textStr, isSerif, isCurrent, fSize, mw, gIdx };
+      });
+      totalRowW += Math.max(0, metrics.length - 1) * 14;
+
+      let xCursor = state.alignment === 'left' ? w * 0.16 : state.alignment === 'right' ? w * 0.84 - totalRowW : (w - totalRowW) / 2;
+
+      metrics.forEach((m) => {
+        ctx.save();
+        ctx.font = m.isSerif
+          ? `italic 700 ${m.fSize}px Georgia, "Times New Roman", serif`
+          : `900 ${m.fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+        const popY = m.isCurrent ? -Math.sin(wordSubProgress * Math.PI) * 5 : 0;
+
+        if (state.backdropMode === 'knockout' && m.isCurrent) {
+          ctx.fillStyle = state.accentColor;
+          ctx.fillRect(xCursor - 6, y - m.fSize * 0.78 + popY, m.mw + 12, m.fSize * 1.1);
+          ctx.fillStyle = '#000';
+        } else {
+          ctx.shadowColor = m.isCurrent || styleId === 'heartless' ? state.accentColor : 'rgba(0,0,0,0.85)';
+          ctx.shadowBlur = m.isCurrent ? 18 : 8;
+          ctx.fillStyle = m.isSerif ? state.accentColor : state.primaryColor;
+        }
+        ctx.fillText(m.textStr, xCursor, y + popY);
+        ctx.restore();
+        xCursor += m.mw + 14;
+      });
+    });
+    ctx.restore();
+    return;
+  }
+
+  // 3. REDLINE
+  if (styleId === 'redline') {
+    const visible = words.slice(0, activeIdx + 1);
+    const chunkStart = Math.max(0, visible.length - 4);
+    const stack = visible.slice(chunkStart);
+    const lineH = 38 * baseScale;
+    const startY = centerY - ((stack.length - 1) * lineH) / 2;
+
+    stack.forEach((word, sIdx) => {
+      const gIdx = chunkStart + sIdx;
+      const isCurrent = gIdx === activeIdx;
+      const isKnockout = isCurrent || ((gIdx + seed) % 3 === 0);
+      const upper = word.toUpperCase();
+      const fSize = Math.round((isCurrent ? 32 : 26) * baseScale);
+      ctx.font = `900 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+      const tw = ctx.measureText(upper).width;
+      const x = state.alignment === 'left' ? w * 0.16 : state.alignment === 'right' ? w * 0.84 - tw : (w - tw) / 2;
+      const y = startY + sIdx * lineH;
+
+      if (isKnockout && state.backdropMode !== 'clean') {
+        ctx.fillStyle = state.accentColor;
+        ctx.fillRect(x - 10, y - fSize * 0.82, tw + 20, fSize * 1.08);
+        ctx.fillStyle = '#090a0f';
+      } else {
+        ctx.fillStyle = state.primaryColor;
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur = 10;
+      }
+      ctx.fillText(upper, x, y);
+      ctx.shadowBlur = 0;
+    });
+    ctx.restore();
+    return;
+  }
+
+  // 4. TILED WAVE / FULL SET / LADDER HOUSE
+  if (styleId === 'tiled_wave' || styleId === 'full_set' || styleId === 'ladder_house') {
+    const visible = words.slice(0, activeIdx + 1);
+    const maxTiles = Math.min(visible.length, 6);
+    const slice = visible.slice(visible.length - maxTiles);
+
+    slice.forEach((word, idx) => {
+      const isCurrent = idx === slice.length - 1;
+      const upper = word.toUpperCase();
+      const fSize = Math.round((isCurrent ? 27 : 21) * baseScale);
+      ctx.font = `900 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+      const tw = ctx.measureText(upper).width;
+
+      let tx = w / 2;
+      let ty = centerY;
+
+      if (styleId === 'ladder_house') {
+        tx = w * 0.25 + idx * 46;
+        ty = centerY - 65 + idx * 28;
+      } else {
+        const col = (idx + seed) % 2;
+        const row = Math.floor(idx / 2);
+        const waveShift = Math.sin(t * 4 + idx) * 6;
+        tx = w * 0.34 + col * (w * 0.26) + waveShift;
+        ty = centerY - 46 + row * 42;
+      }
+
+      ctx.save();
+      ctx.fillStyle = isCurrent ? state.accentColor : 'rgba(15, 18, 28, 0.86)';
+      ctx.strokeStyle = isCurrent ? '#ffffff' : 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(tx - tw / 2 - 10, ty - fSize * 0.72, tw + 20, fSize * 1.15, 4);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = isCurrent ? '#090a0f' : state.primaryColor;
+      ctx.textAlign = 'center';
+      ctx.fillText(upper, tx, ty + 2);
+      ctx.restore();
+    });
+    ctx.restore();
+    return;
+  }
+
+  // 5. MARGIN
+  if (styleId === 'margin') {
+    const isRight = state.alignment === 'right';
+    const railX = isRight ? w * 0.82 : w * 0.18;
+    const visible = words.slice(0, activeIdx + 1).slice(-5);
+    const lineH = 34 * baseScale;
+    const topY = centerY - (visible.length * lineH) / 2;
+
+    ctx.fillStyle = state.accentColor;
+    ctx.fillRect(railX, topY - 22, 4, visible.length * lineH + 16);
+
+    visible.forEach((word, idx) => {
+      const isCurrent = idx === visible.length - 1;
+      const fSize = Math.round((isCurrent ? 28 : 22) * baseScale);
+      ctx.font = isCurrent
+        ? `900 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`
+        : `600 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+      ctx.textAlign = isRight ? 'right' : 'left';
+      const slideOffset = isCurrent ? (1 - wordSubProgress) * (isRight ? -18 : 18) : 0;
+      const x = isRight ? railX - 14 + slideOffset : railX + 16 + slideOffset;
+      const y = topY + idx * lineH;
+
+      ctx.fillStyle = isCurrent ? state.accentColor : state.primaryColor;
+      ctx.shadowColor = 'rgba(0,0,0,0.85)';
+      ctx.shadowBlur = 8;
+      ctx.fillText(word.toUpperCase(), x, y);
+    });
+    ctx.restore();
+    return;
+  }
+
+  // 6. RELAY
+  if (styleId === 'relay') {
+    const palette = [state.accentColor, '#ef4444', '#06b6d4', '#f59e0b', '#10b981'];
+    const visible = words.slice(0, activeIdx + 1).slice(-4);
+    const lineH = 38 * baseScale;
+    const startY = centerY - ((visible.length - 1) * lineH) / 2;
+
+    visible.forEach((word, idx) => {
+      const isCurrent = idx === visible.length - 1;
+      const upper = word.toUpperCase();
+      const fSize = Math.round((isCurrent ? 28 : 23) * baseScale);
+      ctx.font = `900 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+      const tw = ctx.measureText(upper).width;
+      const y = startY + idx * lineH;
+      const x = (w - tw) / 2;
+
+      if (state.backdropMode !== 'clean') {
+        ctx.fillStyle = palette[(idx + activeIdx) % palette.length];
+        ctx.beginPath();
+        ctx.roundRect(x - 12, y - fSize * 0.78, tw + 24, fSize * 1.1, 6);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(upper, x, y);
+    });
+    ctx.restore();
+    return;
+  }
+
+  // 7. DEEP FOCUS / AFTERIMAGE / AFTERGLOW / QUIET
+  if (styleId === 'deep_focus' || styleId === 'afterimage' || styleId === 'afterglow' || styleId === 'quiet') {
+    const chunkSize = 5;
+    const chunkStart = Math.floor(activeIdx / chunkSize) * chunkSize;
+    const chunkWords = words.slice(chunkStart, chunkStart + chunkSize);
+    const fSize = Math.round((styleId === 'quiet' ? 20 : 28) * baseScale);
+
+    ctx.font = styleId === 'quiet'
+      ? `500 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`
+      : `800 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+
+    const spaceW = ctx.measureText(' ').width * (styleId === 'quiet' ? 1.8 : 1.25);
+    const formatted = chunkWords.map((wStr) => (styleId === 'quiet' ? wStr.toLowerCase() : wStr.toUpperCase()));
+    const widths = formatted.map((s) => ctx.measureText(s).width);
+    const totalW = widths.reduce((a, b) => a + b, 0) + spaceW * Math.max(0, formatted.length - 1);
+    let cursorX = (w - totalW) / 2;
+
+    formatted.forEach((wText, idx) => {
+      const gIdx = chunkStart + idx;
+      const isCurrent = gIdx === activeIdx;
+      const isPast = gIdx < activeIdx;
+
+      ctx.save();
+      if (styleId === 'deep_focus') {
+        ctx.filter = isCurrent ? 'none' : (isPast ? 'blur(1.5px)' : 'blur(4.5px)');
+        ctx.globalAlpha = isCurrent ? 1.0 : (isPast ? 0.65 : 0.35);
+      } else if (styleId === 'afterimage' && isCurrent) {
+        for (let echo = 1; echo <= 3; echo++) {
+          ctx.globalAlpha = 0.28 / echo;
+          ctx.fillStyle = state.accentColor;
+          ctx.fillText(wText, cursorX, centerY - echo * 14);
+          ctx.fillText(wText, cursorX, centerY + echo * 14);
+        }
+        ctx.globalAlpha = 1.0;
+      } else if (styleId === 'afterglow') {
+        ctx.shadowColor = isCurrent ? state.accentColor : '#ffffff';
+        ctx.shadowBlur = isCurrent ? 26 : 10;
+      }
+
+      ctx.fillStyle = isCurrent ? state.accentColor : state.primaryColor;
+      ctx.fillText(wText, cursorX, centerY);
+      ctx.restore();
+
+      cursorX += widths[idx] + spaceW;
+    });
+
+    ctx.restore();
+    return;
+  }
+
+  // 8. UPLIFT / TICKER / VOLTAGE / OVERDRIVE / LETTERPRESS / HORMOZI / CLEAN PILL
+  const chunkSize = 5;
+  const chunkStart = Math.floor(activeIdx / chunkSize) * chunkSize;
+  const visibleWords = words.slice(chunkStart, chunkStart + chunkSize);
+  const fontSize = Math.round(25 * baseScale);
+
+  ctx.font = styleId === 'overdrive'
+    ? `italic 900 ${fontSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`
+    : `900 ${fontSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+  ctx.textBaseline = 'middle';
+
+  const spaceW = ctx.measureText(' ').width * 1.2;
+  const widths = visibleWords.map((wStr) => ctx.measureText(wStr.toUpperCase()).width);
+  const totalW = widths.reduce((a, b) => a + b, 0) + spaceW * Math.max(0, visibleWords.length - 1);
+  let cursorX = (w - totalW) / 2;
+
+  if (styleId === 'clean_pill' || styleId === 'hormozi_pop' || state.backdropMode === 'solid_cards') {
+    ctx.fillStyle = 'rgba(9, 10, 15, 0.82)';
+    ctx.beginPath();
+    ctx.roundRect(cursorX - 16, centerY - fontSize * 0.88, totalW + 32, fontSize * 1.76, 8);
+    ctx.fill();
+  }
+
+  if (styleId === 'ticker') {
+    ctx.strokeStyle = state.accentColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, centerY - fontSize * 0.95);
+    ctx.lineTo(w, centerY - fontSize * 0.95);
+    ctx.moveTo(0, centerY + fontSize * 0.95);
+    ctx.lineTo(w, centerY + fontSize * 0.95);
+    ctx.stroke();
+  }
+
+  visibleWords.forEach((word, idx) => {
+    const globalIdx = chunkStart + idx;
+    const isCurrent = globalIdx === activeIdx;
+    const displayWord = word.toUpperCase();
+    const wordW = widths[idx];
+
+    ctx.save();
+    let yOffset = 0;
+    let xOffset = 0;
+
+    if (styleId === 'uplift' && isCurrent) {
+      yOffset = -Math.sin(wordSubProgress * Math.PI) * 12;
+    } else if (styleId === 'voltage' && isCurrent) {
+      xOffset = (Math.random() - 0.5) * 4;
+      yOffset = (Math.random() - 0.5) * 4;
+    }
+
+    if (isCurrent) {
+      const pop = 1.08 + onBeatPulse * 0.06;
+      ctx.translate(cursorX + wordW / 2 + xOffset, centerY + yOffset);
+      ctx.scale(pop, pop);
+      ctx.translate(-(cursorX + wordW / 2 + xOffset), -(centerY + yOffset));
+
+      if (styleId === 'clean_pill' || state.backdropMode === 'knockout') {
+        ctx.fillStyle = state.accentColor;
+        ctx.beginPath();
+        ctx.roundRect(cursorX - 5, centerY - fontSize * 0.65, wordW + 10, fontSize * 1.3, 5);
+        ctx.fill();
+        ctx.fillStyle = '#090a0f';
+      } else {
+        ctx.shadowColor = state.accentColor;
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = state.accentColor;
+      }
+    } else {
+      ctx.fillStyle = state.primaryColor;
+    }
+
+    if (styleId === 'letterpress') {
+      ctx.fillStyle = state.accentColor;
+      ctx.fillText(displayWord, cursorX + 3, centerY + 3);
+      ctx.fillStyle = state.primaryColor;
+    } else if (styleId !== 'clean_pill') {
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 3.5;
+      ctx.strokeText(displayWord, cursorX + xOffset, centerY + yOffset);
+    }
+
+    ctx.fillText(displayWord, cursorX + xOffset, centerY + yOffset);
+    ctx.restore();
+
+    cursorX += wordW + spaceW;
+  });
+
+  ctx.restore();
+}
+
+// ============================================================================
+// BRIDGE SETUP MODAL & LIVE STATUS CHECK
+// ============================================================================
+function initBridgeModal() {
+  const modal = document.getElementById('bridgeModal');
+  document.getElementById('openBridgeModalBtn').addEventListener('click', () => {
+    modal.classList.remove('hidden');
+  });
+  document.getElementById('closeBridgeModalBtn').addEventListener('click', () => {
+    modal.classList.add('hidden');
+  });
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.classList.add('hidden');
+  });
+
+  document.getElementById('installBridgeNowBtn').addEventListener('click', async () => {
+    const resBox = document.getElementById('installResultBox');
+    resBox.textContent = 'Installing VFXKit_ResolveFree_Bridge.lua & Fusion .setting macros...';
+    try {
+      const res = await fetch('/api/install-bridge', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+        resBox.innerHTML = `✓ Installed Bridge to: <code>${data.installedTo}</code><br/>✓ Installed ${data.installedMacros.length} native Fusion VFX & LYRC Macros to: <code>${data.effectsDir}</code>`;
+        showToast('Installed Bridge & Fusion Macros for DaVinci Resolve Free 21.1.1');
+        checkResolveStatus();
+      } else {
+        resBox.textContent = 'Error: ' + (data.error || 'Unknown error');
+      }
+    } catch (err) {
+      resBox.textContent = 'Install failed: ' + err.message;
+    }
+  });
+}
+
+async function checkResolveStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    const statusText = document.getElementById('bridgeStatusText');
+    if (data.bridgeSession) {
+      statusText.textContent = `Connected: Resolve ${data.bridgeSession.version || '21.1.1'}`;
+    } else if (data.scriptInstalled) {
+      statusText.textContent = 'Bridge Installed (Ready for Resolve 21.1.1)';
+    } else {
+      statusText.textContent = 'Resolve 21.1.1 Bridge Setup';
+    }
+  } catch (_e) {
+    // Ignore status fetch error
+  }
+}

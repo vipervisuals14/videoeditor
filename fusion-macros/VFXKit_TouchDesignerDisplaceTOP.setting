@@ -1,0 +1,107 @@
+{
+	Tools = ordered() {
+		VFXKit_TouchDesignerDisplaceTOP = MacroOperator {
+			Inputs = ordered() {
+				MainInput1 = InstanceInput {
+					SourceOp = "TD_DisplaceTOP",
+					Source = "Input",
+				},
+				InputIntensity = InstanceInput {
+					SourceOp = "TD_DisplaceTOP",
+					Source = "XRefraction",
+					Name = "TD Displace Intensity (Keyframable)",
+					Default = 0.045,
+				},
+				InputYRefraction = InstanceInput {
+					SourceOp = "TD_DisplaceTOP",
+					Source = "YRefraction",
+					Name = "TD Y-Slope Weight (Keyframable)",
+					Default = 0.045,
+				},
+				InputNoiseScale = InstanceInput {
+					SourceOp = "TD_SimplexNoiseTOP",
+					Source = "XScale",
+					Name = "Simplex Curl Scale",
+					Default = 6.5,
+				},
+				InputNoiseSeethe = InstanceInput {
+					SourceOp = "TD_SimplexNoiseTOP",
+					Source = "SeetheRate",
+					Name = "CHOP Time Seethe Rate",
+					Default = 0.42,
+				},
+				InputFeedbackDecay = InstanceInput {
+					SourceOp = "TD_FeedbackTrailsTOP",
+					Source = "Gain",
+					Name = "Feedback TOP Loop Gain",
+					Default = 0.62,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "TD_FeedbackTrailsTOP",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				TD_SimplexNoiseTOP = FastNoise {
+					Inputs = {
+						GlobalOut = Input { Value = 500, },
+						Width = Input { Value = 1920, },
+						Height = Input { Value = 1080, },
+						Detail = Input { Value = 4.5, },
+						Contrast = Input { Value = 1.65, },
+						XScale = Input { Value = 6.5, },
+						SeetheRate = Input { Value = 0.42, },
+						Color1Red = Input { Value = 0.5, },
+						Color2Red = Input { Value = 1.0, },
+						Color2Green = Input { Value = 0.8, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 220, 40 } },
+				},
+				TD_DisplaceTOP = Displace {
+					Inputs = {
+						Type = Input { Value = 1, },
+						XChannel = Input { Value = 0, },
+						XRefraction = Input {
+							SourceOp = "TD_IntensityBezierSpline",
+							Source = "Value",
+						},
+						YChannel = Input { Value = 1, },
+						YRefraction = Input {
+							SourceOp = "TD_IntensityBezierSpline",
+							Source = "Value",
+						},
+						Foreground = Input {
+							SourceOp = "TD_SimplexNoiseTOP",
+							Source = "Output",
+						},
+					},
+					ViewInfo = OperatorInfo { Pos = { 220, 120 } },
+				},
+				TD_IntensityBezierSpline = BezierSpline {
+					SplineColor = { Red = 225, Green = 29, Blue = 72 },
+					NameSet = true,
+					KeyFrames = {
+						[0] = { 0, RH = { 8, 0.045 }, Flags = { Linear = true } },
+						[24] = { 0.065, LH = { 16, 0.065 }, RH = { 32, 0.065 } },
+						[48] = { 0.015, LH = { 40, 0.015 } }
+					}
+				},
+				TD_FeedbackTrailsTOP = Trails {
+					Inputs = {
+						Gain = Input { Value = 0.62, },
+						XOffset = Input { Value = 0.002, },
+						Rotate = Input { Value = 0.15, },
+						Input = Input {
+							SourceOp = "TD_DisplaceTOP",
+							Source = "Output",
+						},
+					},
+					ViewInfo = OperatorInfo { Pos = { 380, 120 } },
+				}
+			},
+		}
+	}
+}

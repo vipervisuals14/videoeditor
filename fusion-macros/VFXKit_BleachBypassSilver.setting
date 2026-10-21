@@ -1,0 +1,44 @@
+{
+	Tools = ordered() {
+		VFXKit_BleachBypassSilver = MacroOperator {
+			Inputs = ordered() {
+				MainInput1 = InstanceInput {
+					SourceOp = "SilverGrade",
+					Source = "Input",
+				},
+				Input1 = InstanceInput {
+					SourceOp = "SilverGrade",
+					Source = "Saturation",
+					Name = "Silver Desaturation",
+					Default = 0.38,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "SilverGrade",
+					Source = "Contrast",
+					Name = "Metallic Contrast",
+					Default = 0.34,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "SilverGrade",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				SilverGrade = BrightnessContrast {
+					CtrlWZoom = false,
+					Inputs = {
+						Saturation = Input { Value = 0.38, },
+						Contrast = Input { Value = 0.34, },
+						Lift = Input { Value = -0.04, },
+						Gain = Input { Value = 1.06, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "VFXKit_BleachBypassSilver"
+}

@@ -1,0 +1,52 @@
+{
+	Tools = ordered() {
+		VFXKit_500THalationBloom = MacroOperator {
+			Inputs = ordered() {
+				MainInput1 = InstanceInput {
+					SourceOp = "HalationGlow",
+					Source = "Input",
+				},
+				Input1 = InstanceInput {
+					SourceOp = "HalationGlow",
+					Source = "Threshold",
+					Name = "Highlight IRE Threshold",
+					Default = 0.72,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "HalationGlow",
+					Source = "Gain",
+					Name = "500T Red-Orange Halation",
+					Default = 0.65,
+				},
+				Input3 = InstanceInput {
+					SourceOp = "HalationGlow",
+					Source = "XGlowSize",
+					Name = "Emulsion Scatter Radius",
+					Default = 14.0,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "HalationGlow",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				HalationGlow = SoftGlow {
+					CtrlWZoom = false,
+					Inputs = {
+						Threshold = Input { Value = 0.72, },
+						Gain = Input { Value = 0.65, },
+						XGlowSize = Input { Value = 14.0, },
+						RedScale = Input { Value = 1.45, },
+						GreenScale = Input { Value = 0.62, },
+						BlueScale = Input { Value = 0.25, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "VFXKit_500THalationBloom"
+}
