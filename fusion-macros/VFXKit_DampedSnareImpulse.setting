@@ -1,0 +1,56 @@
+{
+	Tools = ordered() {
+		VFXKit_DampedSnareImpulse = MacroOperator {
+			Inputs = ordered() {
+				MainInput1 = InstanceInput {
+					SourceOp = "ImpulseZoom",
+					Source = "Input",
+				},
+				Input1 = InstanceInput {
+					SourceOp = "ImpulseZoom",
+					Source = "Size",
+					Name = "Impulse Scale",
+					Default = 1.025,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "ImpulseGlow",
+					Source = "Gain",
+					Name = "Impact Bloom",
+					Default = 0.22,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "ImpulseGlow",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				ImpulseZoom = Transform {
+					Inputs = {
+						Size = Input { Value = 1.025, },
+						Edges = Input { Value = 3, },
+						MotionBlur = Input { Value = 1, },
+						ShutterAngle = Input { Value = 180, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 275, 49.5 } },
+				},
+				ImpulseGlow = SoftGlow {
+					Inputs = {
+						Threshold = Input { Value = 0.82, },
+						Gain = Input { Value = 0.22, },
+						XGlowSize = Input { Value = 12, },
+						YGlowSize = Input { Value = 12, },
+						Input = Input {
+							SourceOp = "ImpulseZoom",
+							Source = "Output",
+						},
+					},
+					ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "VFXKit_DampedSnareImpulse"
+}
