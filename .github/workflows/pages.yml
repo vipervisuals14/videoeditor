@@ -20,7 +20,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Runs only once Pages has been switched on (Settings ▸ Pages ▸ Source:
+  # GitHub Actions). Until then this workflow is skipped instead of failing, so
+  # a repo that is merely pushed does not show a red X.
   build:
+    if: github.event.repository.has_pages == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
