@@ -32,12 +32,23 @@ StayCreative's VFX Kit (`staycreative.store/pages/vfx-kit-extension`, created by
 
 ## Quick Start (macOS & DaVinci Resolve Free 21.1.1)
 
+**Never used a terminal? Read [INSTALL.md](INSTALL.md) instead — it is a click-by-click manual
+with every download link, and it needs no typing at all.** In short: install
+[Node.js](https://nodejs.org/en/download), then double-click **`Mac 1 - Install Resolve
+Bridge.command`**, then **`Mac 2 - Start VFX Panel.command`**, then click
+`Workspace ▸ Scripts ▸ VFXKit_ResolveFree_Bridge` inside Resolve.
+
+For the terminal-inclined:
+
 ```bash
 # 1. Install the Lua Bridge & Native Fusion .setting Macros into macOS Resolve paths:
 ./install-macos-resolve-free.sh
 
 # 2. Start the PulseVFX Pop-Up Panel Server:
 npm start
+
+# 3. Optional: floating app-style window instead of a browser tab
+open -na "Google Chrome" --args --app=http://localhost:3000 --window-size=480,1120
 ```
 
 3. In **DaVinci Resolve Free 21.1.1**, open your project and click once per session:
