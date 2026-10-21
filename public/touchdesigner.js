@@ -707,7 +707,7 @@ const TD_ENGINE = (() => {
         // 0 at the valley, 1 at the lens crest
         const s2 = 0.5 - 0.5 * Math.cos(u * Math.PI * 2);
         const shade = Math.pow(s2, 0.8);
-        const v = Math.round(118 + shade * 137);
+        const v = Math.round(172 + shade * 83);
         rc.fillStyle = `rgb(${v},${v},${v})`;
         rc.fillRect(x, 0, 1, 8);
       }
@@ -722,7 +722,7 @@ const TD_ENGINE = (() => {
     // multiply the lens ramp: valleys darken, crests stay put, so the rib
     // structure survives even inside blown highlights (overlay erased them)
     t.globalCompositeOperation = 'multiply';
-    t.globalAlpha = clamp(0.3 + strength * 0.9, 0, 1);
+    t.globalAlpha = clamp(0.35 + strength * 0.75, 0, 1);
     t.fillStyle = pat;
     t.fillRect(0, 0, w, h);
     t.restore();
@@ -732,8 +732,8 @@ const TD_ENGINE = (() => {
       t.save();
       t.globalCompositeOperation = 'screen';
       t.strokeStyle = '#e8f0fb';
-      t.lineWidth = Math.max(1, p * 0.10);
-      t.globalAlpha = clamp(lift, 0, 0.24);
+      t.lineWidth = Math.max(1, p * 0.06);
+      t.globalAlpha = clamp(lift, 0, 0.16);
       t.beginPath();
       for (let x = -p; x < w + p; x += p) {
         const xx = Math.round(x + p * 0.5 + (phase || 0) % p) + 0.5;
@@ -1570,7 +1570,7 @@ const TD_ENGINE = (() => {
       const step = h / bands;
 
       // 1. mono print plate → PLATE (dedicated buffer, no 4K copy needed)
-      const plate = monoPrintPlate(w, h, 1.45 + I * 0.45, 1.02);
+      const plate = monoPrintPlate(w, h, 1.12 + I * 0.30, 0.94);
 
       // 2. slab decomposition onto black, each slab shoved by its own noise
       T2.setTransform(1, 0, 0, 1, 0, 0);
@@ -1617,9 +1617,9 @@ const TD_ENGINE = (() => {
       ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = '#03040a';
       ctx.fillRect(0, 0, w, h);
-      ctx.globalAlpha = Math.min(1, 0.06 + I * 0.30);
+      ctx.globalAlpha = Math.min(1, 0.04 + I * 0.16);
       ctx.drawImage(SRC, 0, 0, w, h);
-      ctx.globalAlpha = Math.min(0.9, 0.18 + I * 0.62);
+      ctx.globalAlpha = Math.min(1, 0.55 + I * 0.45);
       ctx.drawImage(TMP2, 0, 0, w, h);
       ctx.restore();
 
@@ -1633,7 +1633,7 @@ const TD_ENGINE = (() => {
       const k = 1.02 + 0.05 * Math.min(1.4, I);
 
       // mono print plate, overscanned so the rib sheet can parallax
-      const plate = monoPrintPlate(w, h, 1.30 + I * 0.40, 1.0);
+      const plate = monoPrintPlate(w, h, 1.10 + I * 0.28, 0.92);
       T1.setTransform(1, 0, 0, 1, 0, 0);
       T1.globalCompositeOperation = 'source-over';
       T1.globalAlpha = 1;
@@ -1648,7 +1648,7 @@ const TD_ENGINE = (() => {
       ctx.save();
       ctx.fillStyle = '#03040a';
       ctx.fillRect(0, 0, w, h);
-      ctx.globalAlpha = 0.55 + 0.42 * Math.min(1, I);
+      ctx.globalAlpha = 1;
       ctx.drawImage(TMP1, 0, 0, w, h);
       ctx.restore();
 
@@ -1776,11 +1776,11 @@ const TD_ENGINE = (() => {
       // grain lattice: pitch is authored in FRAME pixels (2.1 ref px) so the
       // stipple keeps the same visible grain from 1080p through 4K instead of
       // turning into sub-pixel noise; dots grow with the pitch.
-      const pitch = Math.max(2.0, rpx(1.56) * bufScale);
+      const pitch = Math.max(2.0, rpx(1.18) * bufScale);
       const cols = Math.floor(SW / pitch), rows = Math.floor(SH / pitch);
       const density = 0.9 + Math.min(1, I) * 0.35;
       const shearK = (1.1 * Math.min(1.5, I)) * bufScale;
-      const dotBase = Math.max(1, Math.round(pitch * 0.56));
+      const dotBase = Math.max(2, Math.round(pitch * 0.62));
 
       for (let cy = 0; cy < rows; cy++) {
         for (let cx = 0; cx < cols; cx++) {
@@ -1816,6 +1816,11 @@ const TD_ENGINE = (() => {
             for (let ox = 0; ox < rad; ox++) {
               const xx = ix + ox;
               if (xx >= SW) break;
+              // irregular ink blot: one corner is eaten away so the grain
+              // does not read as square pixels after the buffer upscale
+              if (rad > 2 && ((ox === 0 && oy === 0) || (ox === rad - 1 && oy === rad - 1))) {
+                if (hash2(seed + ox * 3.1, oy * 7.7) < 0.62) continue;
+              }
               const o = (yy * SW + xx) * 4;
               buf[o] = val; buf[o + 1] = val; buf[o + 2] = val; buf[o + 3] = alpha;
             }
@@ -2509,9 +2514,11 @@ const TD_ENGINE = (() => {
       ctx.fillRect(0, 0, w, h);
       ctx.globalAlpha = 1;
       ctx.imageSmoothingEnabled = false;
-      const bands = 70;
+      // slice count follows frame height so the tear reads identically at 1080
+      // and 4K (70 bands at 4K meant 31px stair-steps)
+      const bands = Math.max(70, Math.round(h / 11));
       const bandH = h / bands;
-      const amp = 4 + 20 * Math.min(1.4, I);
+      const amp = (4 + 20 * Math.min(1.4, I)) * Math.max(0.5, Math.min(1.6, rpx(1) / 6));
       for (let i = 0; i < bands; i++) {
         const v = i / bands;
         const off = Math.sin(v * 8 + t * 1.15) * amp

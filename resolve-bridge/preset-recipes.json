@@ -1,0 +1,2301 @@
+{
+  "v": 1,
+  "generatedBy": "tools/gen-recipes.js",
+  "target": "DaVinci Resolve Free 21.1.1",
+  "count": 77,
+  "families": [
+    "td",
+    "print",
+    "glitch",
+    "optical",
+    "shutter",
+    "film",
+    "camera",
+    "depth",
+    "transition",
+    "editorial",
+    "text"
+  ],
+  "familyCounts": {
+    "td": 10,
+    "print": 12,
+    "optical": 7,
+    "glitch": 5,
+    "transition": 5,
+    "shutter": 1,
+    "depth": 4,
+    "camera": 3,
+    "editorial": 6,
+    "film": 4,
+    "text": 20
+  },
+  "recipes": {
+    "td_displace": {
+      "label": "TD Simplex UV Displace TOP",
+      "category": "TouchDesigner TOPs",
+      "family": "td",
+      "accent": "#e11d48",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 4.5,
+            "XScale": 6.5,
+            "SeetheRate": 0.42
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.14
+        }
+      ],
+      "marker": "Purple"
+    },
+    "td_feedback": {
+      "label": "Feedback Slope Loop TOP",
+      "category": "TouchDesigner TOPs",
+      "family": "td",
+      "accent": "#f43f5e",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 4.5,
+            "XScale": 6.5,
+            "SeetheRate": 0.42
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.14
+        }
+      ],
+      "marker": "Purple"
+    },
+    "td_blobtrack": {
+      "label": "Blob Track CV Telemetry",
+      "category": "TouchDesigner TOPs",
+      "family": "td",
+      "accent": "#22d3ee",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 4.5,
+            "XScale": 6.5,
+            "SeetheRate": 0.42
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.14
+        }
+      ],
+      "marker": "Purple"
+    },
+    "td_ruttetra": {
+      "label": "Rutt-Etra Z-Scanline Extrusion",
+      "category": "TouchDesigner TOPs",
+      "family": "td",
+      "accent": "#38bdf8",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 4.5,
+            "XScale": 6.5,
+            "SeetheRate": 0.42
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.14
+        }
+      ],
+      "marker": "Purple"
+    },
+    "td_pixelsort": {
+      "label": "Luma Pixel-Sort Slicer",
+      "category": "TouchDesigner TOPs",
+      "family": "td",
+      "accent": "#a855f7",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 4.5,
+            "XScale": 6.5,
+            "SeetheRate": 0.42
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.14
+        }
+      ],
+      "marker": "Purple"
+    },
+    "td_slitscan": {
+      "label": "Slit-Scan Time Machine",
+      "category": "TouchDesigner TOPs",
+      "family": "td",
+      "accent": "#f59e0b",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 4.5,
+            "XScale": 6.5,
+            "SeetheRate": 0.42
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.14
+        }
+      ],
+      "marker": "Purple"
+    },
+    "td_rdmelt": {
+      "label": "Reaction-Diffusion Edge Melt",
+      "category": "TouchDesigner TOPs",
+      "family": "td",
+      "accent": "#10b981",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 4.5,
+            "XScale": 6.5,
+            "SeetheRate": 0.42
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.14
+        }
+      ],
+      "marker": "Purple"
+    },
+    "td_ascii": {
+      "label": "ASCII Matrix Raster",
+      "category": "TouchDesigner TOPs",
+      "family": "print",
+      "accent": "#4ade80",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_kaleido": {
+      "label": "Kaleidoscope Mirror TOP",
+      "category": "TouchDesigner TOPs",
+      "family": "optical",
+      "accent": "#c084fc",
+      "chain": [
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.55,
+            "GlowSize": 1.2
+          },
+          "optional": true
+        },
+        {
+          "tool": "Blur",
+          "bg": true,
+          "set": {
+            "BlurSize": 1.4
+          },
+          "key": true,
+          "input": "BlurSize",
+          "scale": 3.2
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "td_flowwarp": {
+      "label": "Optical Flow Vector Warp",
+      "category": "TouchDesigner TOPs",
+      "family": "td",
+      "accent": "#60a5fa",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 4.5,
+            "XScale": 6.5,
+            "SeetheRate": 0.42
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.14
+        }
+      ],
+      "marker": "Purple"
+    },
+    "td_chladni": {
+      "label": "Chladni Cymatic Plate",
+      "category": "TouchDesigner TOPs",
+      "family": "td",
+      "accent": "#facc15",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 4.5,
+            "XScale": 6.5,
+            "SeetheRate": 0.42
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.14
+        }
+      ],
+      "marker": "Purple"
+    },
+    "td_datamosh": {
+      "label": "Datamosh Macroblock Drift",
+      "category": "TouchDesigner TOPs",
+      "family": "td",
+      "accent": "#fb7185",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 4.5,
+            "XScale": 6.5,
+            "SeetheRate": 0.42
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.14
+        }
+      ],
+      "marker": "Purple"
+    },
+    "td_inkstipple": {
+      "label": "Ink Stipple Print",
+      "category": "Glitch & Bitmap TOPs",
+      "family": "print",
+      "accent": "#111827",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_lumakey": {
+      "label": "Luma-Key Silhouette Streak",
+      "category": "Glitch & Bitmap TOPs",
+      "family": "glitch",
+      "accent": "#f8fafc",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0.35
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 1.15
+        },
+        {
+          "tool": "Duplicator",
+          "set": {
+            "Copies": 2,
+            "Angle": 0.4
+          },
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_palette": {
+      "label": "Palette Mosaic Quantize",
+      "category": "Glitch & Bitmap TOPs",
+      "family": "glitch",
+      "accent": "#ec4899",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0.35
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 1.15
+        },
+        {
+          "tool": "Duplicator",
+          "set": {
+            "Copies": 2,
+            "Angle": 0.4
+          },
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_dirsmear": {
+      "label": "Directional Zoom Smear",
+      "category": "Glitch & Bitmap TOPs",
+      "family": "optical",
+      "accent": "#22c55e",
+      "chain": [
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.55,
+            "GlowSize": 1.2
+          },
+          "optional": true
+        },
+        {
+          "tool": "Blur",
+          "bg": true,
+          "set": {
+            "BlurSize": 1.4
+          },
+          "key": true,
+          "input": "BlurSize",
+          "scale": 3.2
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "td_datamosh_echo": {
+      "label": "Datamosh Text Echo",
+      "category": "Glitch & Bitmap TOPs",
+      "family": "glitch",
+      "accent": "#a855f7",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0.35
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 1.15
+        },
+        {
+          "tool": "Duplicator",
+          "set": {
+            "Copies": 2,
+            "Angle": 0.4
+          },
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_newsprint": {
+      "label": "Newsprint Ripple Halftone",
+      "category": "Glitch & Bitmap TOPs",
+      "family": "print",
+      "accent": "#e5e7eb",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_windowslice": {
+      "label": "Window Slice Displace",
+      "category": "Glitch & Bitmap TOPs",
+      "family": "glitch",
+      "accent": "#84cc16",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0.35
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 1.15
+        },
+        {
+          "tool": "Duplicator",
+          "set": {
+            "Copies": 2,
+            "Angle": 0.4
+          },
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_chromableed": {
+      "label": "Chroma Bleed Ghost",
+      "category": "Glitch & Bitmap TOPs",
+      "family": "glitch",
+      "accent": "#f472b6",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0.35
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 1.15
+        },
+        {
+          "tool": "Duplicator",
+          "set": {
+            "Copies": 2,
+            "Angle": 0.4
+          },
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "tr_lumawipe": {
+      "label": "Luma-Wipe Exposure Dissolve",
+      "category": "Transitions & Morphs",
+      "family": "transition",
+      "accent": "#fda4af",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 3.2,
+            "XScale": 9
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.18
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "tr_feedbackzoom": {
+      "label": "Feedback Zoom Morph",
+      "category": "Transitions & Morphs",
+      "family": "optical",
+      "accent": "#f43f5e",
+      "chain": [
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.55,
+            "GlowSize": 1.2
+          },
+          "optional": true
+        },
+        {
+          "tool": "Blur",
+          "bg": true,
+          "set": {
+            "BlurSize": 1.4
+          },
+          "key": true,
+          "input": "BlurSize",
+          "scale": 3.2
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "tr_slitwipe": {
+      "label": "Slit-Scan Curtain Wipe",
+      "category": "Transitions & Morphs",
+      "family": "transition",
+      "accent": "#fbbf24",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 3.2,
+            "XScale": 9
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.18
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "tr_glasspush": {
+      "label": "Refractive Glass Push",
+      "category": "Transitions & Morphs",
+      "family": "optical",
+      "accent": "#38bdf8",
+      "chain": [
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.55,
+            "GlowSize": 1.2
+          },
+          "optional": true
+        },
+        {
+          "tool": "Blur",
+          "bg": true,
+          "set": {
+            "BlurSize": 1.4
+          },
+          "key": true,
+          "input": "BlurSize",
+          "scale": 3.2
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "tr_mirrorfold": {
+      "label": "Mirror Fold Flip",
+      "category": "Transitions & Morphs",
+      "family": "transition",
+      "accent": "#a78bfa",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 3.2,
+            "XScale": 9
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.18
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "tr_chromaslide": {
+      "label": "Chromatic Split Slide",
+      "category": "Transitions & Morphs",
+      "family": "transition",
+      "accent": "#22d3ee",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 3.2,
+            "XScale": 9
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.18
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "tr_rollershutter": {
+      "label": "Rolling Shutter Skew Wipe",
+      "category": "Transitions & Morphs",
+      "family": "shutter",
+      "accent": "#fb923c",
+      "chain": [
+        {
+          "tool": "Trails",
+          "set": {
+            "TrailLength": 0.35
+          },
+          "optional": true
+        },
+        {
+          "tool": "MotionBlur",
+          "bg": true,
+          "key": true,
+          "input": "Length",
+          "scale": 0.35
+        }
+      ],
+      "marker": "Green"
+    },
+    "td_bandslice": {
+      "label": "Band-Split Slice Cabinet",
+      "category": "Data & Print TOPs",
+      "family": "print",
+      "accent": "#94a3b8",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_lenticular": {
+      "label": "Lenticular Rib Line-Screen",
+      "category": "Data & Print TOPs",
+      "family": "print",
+      "accent": "#cbd5e1",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_barcode": {
+      "label": "Barcode Block Halftone",
+      "category": "Data & Print TOPs",
+      "family": "print",
+      "accent": "#f8fafc",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_bayer": {
+      "label": "Bayer 8×8 Ordered Dither",
+      "category": "Data & Print TOPs",
+      "family": "print",
+      "accent": "#e2e8f0",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_stipple": {
+      "label": "Flow-Field Stipple Portrait",
+      "category": "Data & Print TOPs",
+      "family": "print",
+      "accent": "#e5e7eb",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_ringstipple": {
+      "label": "Contour Ring Stipple",
+      "category": "Data & Print TOPs",
+      "family": "print",
+      "accent": "#d1d5db",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_engrave": {
+      "label": "Copperplate Engrave Hatch",
+      "category": "Data & Print TOPs",
+      "family": "print",
+      "accent": "#cbd5e1",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "td_dashfield": {
+      "label": "Flow Dash Glyph Field",
+      "category": "Data & Print TOPs",
+      "family": "print",
+      "accent": "#f1f5f9",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "tr_blobmorph": {
+      "label": "Blob Track Contour Morph",
+      "category": "Transitions & Morphs",
+      "family": "transition",
+      "accent": "#34d399",
+      "chain": [
+        {
+          "tool": "FastNoise",
+          "set": {
+            "Detail": 3.2,
+            "XScale": 9
+          },
+          "optional": true
+        },
+        {
+          "tool": "Displace",
+          "bg": true,
+          "key": true,
+          "input": "XRefraction",
+          "scale": 0.18
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "opt_halation": {
+      "label": "Luma-Key Highlight Burn",
+      "category": "Depth & Subject",
+      "family": "depth",
+      "accent": "#f97316",
+      "chain": [
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.4,
+            "GlowSize": 2.4
+          },
+          "optional": true
+        },
+        {
+          "tool": "Blur",
+          "bg": true,
+          "key": true,
+          "input": "BlurSize",
+          "scale": 4
+        },
+        {
+          "tool": "DepthMap",
+          "set": {
+            "Channel": 0
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Purple"
+    },
+    "opt_fringe": {
+      "label": "Vertigo Counter-Dolly Warp",
+      "category": "Camera Weight",
+      "family": "camera",
+      "accent": "#8b5cf6",
+      "chain": [
+        {
+          "tool": "CameraShake",
+          "set": {
+            "OverallStrength": 0.3,
+            "Decay": 2.2
+          },
+          "optional": true
+        },
+        {
+          "tool": "Transform",
+          "bg": true,
+          "key": true,
+          "input": "Size",
+          "scale": 0.05
+        }
+      ],
+      "marker": "Red"
+    },
+    "opt_diopter": {
+      "label": "Dual-Take Vertical Split Frame",
+      "category": "Editorial Polish",
+      "family": "editorial",
+      "accent": "#06b6d4",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 1.02
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.7
+        },
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.7,
+            "GlowSize": 0.8
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Green"
+    },
+    "opt_prism": {
+      "label": "Prism Corner Refraction",
+      "category": "Optical & Glass",
+      "family": "optical",
+      "accent": "#a855f7",
+      "chain": [
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.55,
+            "GlowSize": 1.2
+          },
+          "optional": true
+        },
+        {
+          "tool": "Blur",
+          "bg": true,
+          "set": {
+            "BlurSize": 1.4
+          },
+          "key": true,
+          "input": "BlurSize",
+          "scale": 3.2
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "opt_gateweave": {
+      "label": "16mm Gate Weave & Breath",
+      "category": "Optical & Glass",
+      "family": "optical",
+      "accent": "#f59e0b",
+      "chain": [
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.55,
+            "GlowSize": 1.2
+          },
+          "optional": true
+        },
+        {
+          "tool": "Blur",
+          "bg": true,
+          "set": {
+            "BlurSize": 1.4
+          },
+          "key": true,
+          "input": "BlurSize",
+          "scale": 3.2
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "opt_tilt": {
+      "label": "Tilt-Shift Oblique Plane",
+      "category": "Optical & Glass",
+      "family": "optical",
+      "accent": "#60a5fa",
+      "chain": [
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.55,
+            "GlowSize": 1.2
+          },
+          "optional": true
+        },
+        {
+          "tool": "Blur",
+          "bg": true,
+          "set": {
+            "BlurSize": 1.4
+          },
+          "key": true,
+          "input": "BlurSize",
+          "scale": 3.2
+        }
+      ],
+      "marker": "Cyan"
+    },
+    "time_smear": {
+      "label": "Offset Shadow Silhouette",
+      "category": "Depth & Subject",
+      "family": "depth",
+      "accent": "#64748b",
+      "chain": [
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.4,
+            "GlowSize": 2.4
+          },
+          "optional": true
+        },
+        {
+          "tool": "Blur",
+          "bg": true,
+          "key": true,
+          "input": "BlurSize",
+          "scale": 4
+        },
+        {
+          "tool": "DepthMap",
+          "set": {
+            "Channel": 0
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Purple"
+    },
+    "time_snip": {
+      "label": "Pre-Drop Cutout Pre-Echo",
+      "category": "Depth & Subject",
+      "family": "depth",
+      "accent": "#ec4899",
+      "chain": [
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.4,
+            "GlowSize": 2.4
+          },
+          "optional": true
+        },
+        {
+          "tool": "Blur",
+          "bg": true,
+          "key": true,
+          "input": "BlurSize",
+          "scale": 4
+        },
+        {
+          "tool": "DepthMap",
+          "set": {
+            "Channel": 0
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Purple"
+    },
+    "time_velocity": {
+      "label": "Crash-Zoom Barrel Snap",
+      "category": "Camera Weight",
+      "family": "camera",
+      "accent": "#f59e0b",
+      "chain": [
+        {
+          "tool": "CameraShake",
+          "set": {
+            "OverallStrength": 0.3,
+            "Decay": 2.2
+          },
+          "optional": true
+        },
+        {
+          "tool": "Transform",
+          "bg": true,
+          "key": true,
+          "input": "Size",
+          "scale": 0.05
+        }
+      ],
+      "marker": "Red"
+    },
+    "lab_bleach": {
+      "label": "35mm Tri-X Midtone Silver Grain",
+      "category": "Film Lab & Grade",
+      "family": "film",
+      "accent": "#a1a1aa",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 1.04,
+            "Gain": 1.02
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Gain",
+          "scale": 1.1
+        },
+        {
+          "tool": "FilmGrain",
+          "set": {
+            "GrainSize": 1.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Sand"
+    },
+    "lab_2383": {
+      "label": "Kodak 2383 Print Stock Curve",
+      "category": "Film Lab & Grade",
+      "family": "film",
+      "accent": "#f59e0b",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 1.04,
+            "Gain": 1.02
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Gain",
+          "scale": 1.1
+        },
+        {
+          "tool": "FilmGrain",
+          "set": {
+            "GrainSize": 1.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Sand"
+    },
+    "lab_flir": {
+      "label": "FLIR Monochrome Thermal Map",
+      "category": "Film Lab & Grade",
+      "family": "film",
+      "accent": "#38bdf8",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 1.04,
+            "Gain": 1.02
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Gain",
+          "scale": 1.1
+        },
+        {
+          "tool": "FilmGrain",
+          "set": {
+            "GrainSize": 1.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Sand"
+    },
+    "lab_litho": {
+      "label": "Threshold Silver Litho Print",
+      "category": "Film Lab & Grade",
+      "family": "print",
+      "accent": "#e5e7eb",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 0
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.9
+        },
+        {
+          "tool": "Bitmap",
+          "set": {
+            "Level": 0.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Slate"
+    },
+    "lab_leak": {
+      "label": "End-of-Roll Lab Light Leak",
+      "category": "Film Lab & Grade",
+      "family": "film",
+      "accent": "#ea580c",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 1.04,
+            "Gain": 1.02
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Gain",
+          "scale": 1.1
+        },
+        {
+          "tool": "FilmGrain",
+          "set": {
+            "GrainSize": 1.5
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Sand"
+    },
+    "cam_float": {
+      "label": "Weighted Shoulder-Rig Float",
+      "category": "Camera Weight",
+      "family": "camera",
+      "accent": "#10b981",
+      "chain": [
+        {
+          "tool": "CameraShake",
+          "set": {
+            "OverallStrength": 0.3,
+            "Decay": 2.2
+          },
+          "optional": true
+        },
+        {
+          "tool": "Transform",
+          "bg": true,
+          "key": true,
+          "input": "Size",
+          "scale": 0.05
+        }
+      ],
+      "marker": "Red"
+    },
+    "cam_thump": {
+      "label": "2-Cam Jump-Cut Switch (1.08x)",
+      "category": "Editorial Polish",
+      "family": "editorial",
+      "accent": "#10b981",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 1.02
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.7
+        },
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.7,
+            "GlowSize": 0.8
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Green"
+    },
+    "cam_whip": {
+      "label": "Editorial Whip + Flash Bridge",
+      "category": "Editorial Polish",
+      "family": "editorial",
+      "accent": "#f59e0b",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 1.02
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.7
+        },
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.7,
+            "GlowSize": 0.8
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Green"
+    },
+    "depth_sep": {
+      "label": "Studio Soft-Knee Perimeter Falloff",
+      "category": "Editorial Polish",
+      "family": "editorial",
+      "accent": "#a855f7",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 1.02
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.7
+        },
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.7,
+            "GlowSize": 0.8
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Green"
+    },
+    "depth_streak": {
+      "label": "Anamorphic Highlight Streak",
+      "category": "Depth & Subject",
+      "family": "depth",
+      "accent": "#06b6d4",
+      "chain": [
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.4,
+            "GlowSize": 2.4
+          },
+          "optional": true
+        },
+        {
+          "tool": "Blur",
+          "bg": true,
+          "key": true,
+          "input": "BlurSize",
+          "scale": 4
+        },
+        {
+          "tool": "DepthMap",
+          "set": {
+            "Channel": 0
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Purple"
+    },
+    "ed_pip": {
+      "label": "Documentary Frame-in-Frame",
+      "category": "Editorial Polish",
+      "family": "editorial",
+      "accent": "#38bdf8",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 1.02
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.7
+        },
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.7,
+            "GlowSize": 0.8
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Green"
+    },
+    "ed_scope": {
+      "label": "2.39:1 Scope Matte + Rounded Gate",
+      "category": "Editorial Polish",
+      "family": "editorial",
+      "accent": "#e5e7eb",
+      "chain": [
+        {
+          "tool": "ColorCorrector",
+          "set": {
+            "Saturation": 1.02
+          },
+          "optional": true
+        },
+        {
+          "tool": "BrightnessContrast",
+          "bg": true,
+          "key": true,
+          "input": "Contrast",
+          "scale": 0.7
+        },
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.7,
+            "GlowSize": 0.8
+          },
+          "bg": true,
+          "optional": true
+        }
+      ],
+      "marker": "Green"
+    },
+    "lyrc_duet": {
+      "label": "Duet",
+      "category": "Bold",
+      "family": "text",
+      "accent": "#f472b6",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.15,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Glow",
+          "set": {
+            "Glow": 1,
+            "Threshold": 0.55
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_redline": {
+      "label": "Redline",
+      "category": "Bold",
+      "family": "text",
+      "accent": "#ef4444",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.15,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Glow",
+          "set": {
+            "Glow": 1,
+            "Threshold": 0.55
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_tiled_wave": {
+      "label": "Tiled Wave",
+      "category": "Layered",
+      "family": "text",
+      "accent": "#38bdf8",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.12,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Transform",
+          "set": {
+            "Size": 1.04
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_margin": {
+      "label": "Margin",
+      "category": "Layered",
+      "family": "text",
+      "accent": "#a855f7",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.12,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Transform",
+          "set": {
+            "Size": 1.04
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_relay": {
+      "label": "Relay",
+      "category": "Layered",
+      "family": "text",
+      "accent": "#a855f7",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.12,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Transform",
+          "set": {
+            "Size": 1.04
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": false
+    },
+    "lyrc_brat": {
+      "label": "Brat",
+      "category": "Bold",
+      "family": "text",
+      "accent": "#8ace00",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.15,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Glow",
+          "set": {
+            "Glow": 1,
+            "Threshold": 0.55
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": false
+    },
+    "lyrc_uplift": {
+      "label": "Uplift",
+      "category": "Bold",
+      "family": "text",
+      "accent": "#facc15",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.15,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Glow",
+          "set": {
+            "Glow": 1,
+            "Threshold": 0.55
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_full_set": {
+      "label": "Full Set",
+      "category": "Layered",
+      "family": "text",
+      "accent": "#ec4899",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.12,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Transform",
+          "set": {
+            "Size": 1.04
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_heartless": {
+      "label": "Heartless",
+      "category": "Bold",
+      "family": "text",
+      "accent": "#f87171",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.15,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Glow",
+          "set": {
+            "Glow": 1,
+            "Threshold": 0.55
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_ticker": {
+      "label": "Ticker",
+      "category": "Layered",
+      "family": "text",
+      "accent": "#22d3ee",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.12,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Transform",
+          "set": {
+            "Size": 1.04
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_deep_focus": {
+      "label": "Deep Focus",
+      "category": "Minimal",
+      "family": "text",
+      "accent": "#67e8f9",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.1
+          }
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_afterimage": {
+      "label": "Afterimage",
+      "category": "Minimal",
+      "family": "text",
+      "accent": "#c084fc",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.1
+          }
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": false
+    },
+    "lyrc_afterglow": {
+      "label": "Afterglow",
+      "category": "Minimal",
+      "family": "text",
+      "accent": "#f472b6",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.1
+          }
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": false
+    },
+    "lyrc_quiet": {
+      "label": "Quiet",
+      "category": "Minimal",
+      "family": "text",
+      "accent": "#fde68a",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.1
+          }
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": false
+    },
+    "lyrc_voltage": {
+      "label": "VOLTAGE",
+      "category": "Bold",
+      "family": "text",
+      "accent": "#22d3ee",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.15,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Glow",
+          "set": {
+            "Glow": 1,
+            "Threshold": 0.55
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": false
+    },
+    "lyrc_overdrive": {
+      "label": "Overdrive",
+      "category": "Bold",
+      "family": "text",
+      "accent": "#fb923c",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.15,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Glow",
+          "set": {
+            "Glow": 1,
+            "Threshold": 0.55
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_ladder_house": {
+      "label": "Ladder House",
+      "category": "Layered",
+      "family": "text",
+      "accent": "#a78bfa",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.12,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Transform",
+          "set": {
+            "Size": 1.04
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_letterpress": {
+      "label": "Letterpress",
+      "category": "Bold",
+      "family": "text",
+      "accent": "#ec4899",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.15,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "Glow",
+          "set": {
+            "Glow": 1,
+            "Threshold": 0.55
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": true
+    },
+    "lyrc_hormozi_pop": {
+      "label": "Hormozi Brand",
+      "category": "Talking",
+      "family": "text",
+      "accent": "#facc15",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.09,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.65,
+            "GlowSize": 0.6
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": false
+    },
+    "lyrc_clean_pill": {
+      "label": "Creator Pill",
+      "category": "Talking",
+      "family": "text",
+      "accent": "#10b981",
+      "chain": [
+        {
+          "tool": "TextPlus",
+          "set": {
+            "Size": 0.09,
+            "Style": "Bold"
+          }
+        },
+        {
+          "tool": "SoftGlow",
+          "set": {
+            "Threshold": 0.65,
+            "GlowSize": 0.6
+          },
+          "optional": true
+        },
+        {
+          "tool": "Merge",
+          "fg": true,
+          "source": true,
+          "key": true,
+          "input": "Blend",
+          "scale": 0.01
+        }
+      ],
+      "marker": "Yellow",
+      "lyric": true,
+      "variation": false
+    }
+  }
+}

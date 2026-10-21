@@ -10,9 +10,38 @@ const HOST = '0.0.0.0';
 // ============================================================================
 // DaVinci Resolve Free 21.1.1 File-Mailbox + Fusion.prefs Bridge Driver
 // ============================================================================
-const HOME_DIR = os.homedir();
+// VFXKIT_HOME lets the whole Resolve path chain be redirected, which is what
+// the end-to-end simulator (tools/e2e_sim.py) uses to stand in for a real Mac.
+const HOME_DIR = process.env.VFXKIT_HOME || os.homedir();
 const STATE_DIR = process.env.VFXKIT_STATE_DIR || path.join(HOME_DIR, '.vfxkit-resolve-free');
 const REQ_FILE = path.join(STATE_DIR, 'request.lua');
+const RECIPES_FILE = path.join(__dirname, 'resolve-bridge', 'preset-recipes.json');
+
+// Native Fusion graphs per preset (tools/gen-recipes.js). The bridge is a dumb
+// interpreter of this table, so graphs are re-tunable without reinstalling Lua
+// into Resolve.
+let PRESET_RECIPES = { recipes: {} };
+try {
+  PRESET_RECIPES = JSON.parse(fs.readFileSync(RECIPES_FILE, 'utf8'));
+} catch (err) {
+  console.warn('[pulse] preset-recipes.json missing or invalid:', err.message);
+}
+
+function recipeFor(presetId, category) {
+  const hit = presetId && PRESET_RECIPES.recipes && PRESET_RECIPES.recipes[presetId];
+  if (hit) return hit;
+  // Generic fallback so even an unknown/new card still produces a real graph
+  if (!category) return null;
+  return {
+    label: presetId || category,
+    category,
+    family: 'generic',
+    chain: [
+      { tool: 'BrightnessContrast', bg: true, key: true, input: 'Gain', scale: 1.0 }
+    ],
+    marker: 'Fuchsia'
+  };
+}
 
 function getResolvePaths() {
   const platform = process.platform;
@@ -125,68 +154,85 @@ function generateResolveLuaSnippet(action, payload) {
     const category = payload.category || 'TouchDesigner TOPs';
     const intensity = Number(payload.intensity ?? 85);
     const keyframes = Array.isArray(payload.keyframes) ? payload.keyframes : [];
-    const zoom = (1 + (intensity / 100) * 0.08).toFixed(3);
-    const fusionToolName =
-      category === 'TouchDesigner TOPs' ? 'Displace' :
-      category === 'Transitions & Morphs' ? 'Displace' :
-      category === 'Data & Print TOPs' ? 'BrightnessContrast' :
-      category === 'Glitch & Bitmap TOPs' ? 'BrightnessContrast' :
-      category === 'Optical & Glass' ? 'SoftGlow' :
-      category === 'Shutter & Time' ? 'Trails' :
-      category === 'Camera Weight' ? 'CameraShake' : 'ColorCorrector';
-    const paramName =
-      fusionToolName === 'Displace' ? 'XRefraction' :
-      fusionToolName === 'SoftGlow' ? 'Gain' :
-      fusionToolName === 'Trails' ? 'Gain' :
-      fusionToolName === 'BrightnessContrast' ? 'Gain' :
-      fusionToolName === 'CameraShake' ? 'OverallStrength' : 'MasterRGBGain';
-    // Data & Print TOPs are a mono 1-bit family: build the chain in the snippet
-    const printChain = (category === 'Data & Print TOPs' || category === 'Glitch & Bitmap TOPs')
-      ? `
-        -- Data & Print TOPs: desaturate → hard print contrast (intensity keyframed)
-        local bw = comp:AddTool("ColorCorrector", -32768, -32768)
-        pcall(function() bw.Saturation = 0 end)
-        pcall(function() tool.Background = bw.Output end)`
-      : '';
+    const recipe = payload.recipe || recipeFor(payload.presetId, category);
+    const chain = (recipe && Array.isArray(recipe.chain)) ? recipe.chain : [];
+    const markerColor = (recipe && recipe.marker) || 'Purple';
+    const fps = Number(payload.fps) || 24;
 
-    const kfLuaLines = keyframes.length > 0
+    const lines = [];
+    let prevVar = null;      // last created node (bg/fg semantics)
+    let keyVar = null;
+    let keyInput = 'Gain';
+    let keyScale = 1;
+    const graphNames = [];
+
+    // `img` is emitted as a live Lua variable so generators (Bitmap, TextPlus,
+    // FastNoise) simply drop out of the image path instead of blacking it out.
+    const srcVar = 'src';
+    chain.forEach((step, i) => {
+      const v = 'n' + (i + 1);
+      graphNames.push(step.tool);
+      lines.push(`        local ${v} = comp:AddTool(${luaQuote(step.tool)}, -32768, -32768)`);
+      lines.push(`        if ${v} then`);
+      if (step.set && typeof step.set === 'object') {
+        for (const [k, val] of Object.entries(step.set)) {
+          const lit = typeof val === 'number' ? String(val) : luaQuote(String(val));
+          lines.push(`            pcall(function() ${v}.${k} = ${lit} end)`);
+        }
+      }
+      if (step.fg && prevVar) {
+        lines.push(`            if pcall(function() ${v}.Foreground = ${prevVar}.Output end) then img = ${v} end`);
+      } else if (step.source) {
+        lines.push(`            if pcall(function() ${v}.Background = ${srcVar}.Output end) then img = ${v} end`);
+      } else if (step.bg && prevVar) {
+        lines.push(`            if pcall(function() ${v}.Background = ${prevVar}.Output end) then img = ${v} end`);
+      } else {
+        lines.push(`            if img and pcall(function() ${v}.Input = img.Output end) then img = ${v} end`);
+      }
+      lines.push('        end');
+      if (step.key) {
+        keyVar = v;
+        keyInput = step.input || 'Gain';
+        keyScale = Number(step.scale) || 1;
+      }
+      prevVar = v;
+    });
+
+    const kfBody = keyframes.length
       ? keyframes.map((kf) => {
-          const frame = Math.round((Number(kf.timeSec) || 0) * 24);
-          const kfScale = fusionToolName === 'Displace' ? 0.14 : 1.3;
-          const normVal = ((Number(kf.value) || 0) / 100 * kfScale).toFixed(4);
-          return `            [${frame}] = { ${normVal} }`;
+          const frame = Math.round((Number(kf.timeSec) || 0) * fps);
+          const val = (Number(kf.value) || 0) / 100 * keyScale;
+          return `            [${frame}] = { ${val.toFixed(4)} }`;
         }).join(',\n')
-      : `            [0] = { 0.0 },\n            [12] = { ${(intensity / 100 * 0.09).toFixed(4)} },\n            [24] = { 0.0 }`;
+      : `            [0] = { 0.0000 },\n            [${Math.round(fps / 2)}] = { ${(intensity / 100 * keyScale).toFixed(4)} },\n            [${fps}] = { 0.0000 }`;
+
+    const keyBlock = keyVar
+      ? `        local spline = comp:BezierSpline()
+        ${keyVar}.${keyInput} = spline
+        spline:SetKeyFrames({
+${kfBody}
+        })`
+      : '        -- (no keyframable input in this graph)';
 
     return `-- Paste in DaVinci Resolve Free 21.1.1: Workspace > Console > Lua
--- Applies "${preset}" (${category}) with ${keyframes.length || 3} BezierSpline Intensity Keyframes
-local pm = resolve:GetProjectManager()
-local proj = pm:GetCurrentProject()
-local tl = proj:GetCurrentTimeline()
-local item = tl:GetCurrentVideoItem() or (tl:GetItemListInTrack("video", 1) or {})[1]
+-- "${preset}" (${category}) at ${intensity}% with ${keyframes.length || 3} BezierSpline keyframes
+-- native graph: MediaIn1 -> ${graphNames.join(' -> ') || '(none)'} -> MediaOut1
+local proj = resolve:GetProjectManager():GetCurrentProject()
+local tl = proj and proj:GetCurrentTimeline()
+local item = tl and (tl:GetCurrentVideoItem() or (tl:GetItemListInTrack("video", 1) or {})[1])
 if item then
-    item:SetProperty("ZoomX", ${zoom})
-    item:SetProperty("ZoomY", ${zoom})
     local comp = item:GetFusionCompCount() > 0 and item:GetFusionCompByIndex(1) or item:AddFusionComp()
     if comp then
         comp:Lock()
-        local tool = comp:AddTool(${luaQuote(fusionToolName)}, -32768, -32768)
-${printChain}
-        if ${luaQuote(fusionToolName)} == "Displace" then
-            local noise = comp:AddTool("FastNoise", -32768, -32768)
-            noise.Detail = 4.5
-            noise.XScale = 6.5
-            noise.SeetheRate = 0.42
-            tool.Foreground = noise.Output
-        end
-        local spline = comp:BezierSpline()
-        tool[${luaQuote(paramName)}] = spline
-        spline:SetKeyFrames({
-${kfLuaLines}
-        })
+        local src = comp:FindTool("MediaIn1")
+        local dst = comp:FindTool("MediaOut1")
+        local img = src
+${lines.join('\n')}
+${keyBlock}
+        if dst and img and img ~= src then pcall(function() dst.Input = img.Output end) end
         comp:Unlock()
     end
-    item:AddMarker(12, "Purple", ${luaQuote('VFX: ' + preset)}, ${luaQuote(category + ' @ ' + intensity + '% (' + (keyframes.length || 3) + ' Keyframes)')}, 1)
+    item:AddMarker(12, ${luaQuote(markerColor)}, ${luaQuote('VFX: ' + preset)}, ${luaQuote(category + ' @ ' + intensity + '%')}, 1)
 end`;
   }
 
@@ -210,20 +256,62 @@ end`;
   }
 
   if (action === 'add_captions_lyrics') {
-    const lines = payload.lines || [];
+    const lines = (payload.lines || []).slice(0, 16);
     const style = payload.style || 'Kinetic Pop';
-    const markerCalls = lines.slice(0, 15).map((l) => {
+    const intensity = Number(payload.intensity ?? 100);
+    const fps = Number(payload.fps) || 24;
+    const markerCalls = lines.map((l) => {
       const f = Math.round((Number(l.startSec) || 0) * 24);
       const dur = Math.max(1, Math.round(((Number(l.endSec) || 2) - (Number(l.startSec) || 0)) * 24));
       return `    tl:AddMarker(sf + ${f}, "Yellow", ${luaQuote(l.text)}, ${luaQuote('Style: ' + style)}, ${dur})`;
     }).join('\n');
+
+    const nodeLines = [];
+    lines.forEach((l, i) => {
+      const t0 = Number(l.startSec) || i * 2;
+      const t1 = Math.max(t0 + 0.4, Number(l.endSec) || t0 + 2);
+      const fIn = Math.max(0, Math.round((t0 - 0.12) * fps));
+      const fOn = Math.max(fIn + 1, Math.round(t0 * fps));
+      const fOut = Math.max(fOn + 1, Math.round(t1 * fps));
+      const peak = Math.min(1, Math.max(0.05, intensity / 100)).toFixed(3);
+      nodeLines.push(`        local t${i + 1} = comp:AddTool("TextPlus", -32768, -32768)
+        if t${i + 1} then
+            pcall(function() t${i + 1}.Text = ${luaQuote(String(l.text || 'Lyric ' + (i + 1)))} end)
+            pcall(function() t${i + 1}.Size = ${(0.11).toFixed(3)} end)
+            pcall(function() t${i + 1}.Style = "Bold" end)
+            local s${i + 1} = comp:BezierSpline()
+            s${i + 1}:SetKeyFrames({ [${fIn}] = { 0 }, [${fOn}] = { ${peak} }, [${fOut}] = { 0 } })
+            pcall(function() t${i + 1}.Opacity = s${i + 1} end)
+            local m${i + 1} = comp:AddTool("Merge", -32768, -32768)
+            if m${i + 1} then
+                pcall(function() m${i + 1}.Foreground = t${i + 1}.Output end)
+                pcall(function() m${i + 1}.Background = plate.Output end)
+                plate = m${i + 1}
+            end
+        end`);
+    });
+
     return `-- Paste in DaVinci Resolve Free 21.1.1: Workspace > Console > Lua
--- Places ${lines.length} synced Lyric / Caption markers & ranges on active timeline
+-- LYRC "${style}" — ${lines.length} kinetic type cards, ${lines.length * 3} native BezierSpline keys
+-- each cue is a TextPlus merged over MediaIn1, spliced into MediaOut1
 local proj = resolve:GetProjectManager():GetCurrentProject()
-local tl = proj:GetCurrentTimeline()
+local tl = proj and proj:GetCurrentTimeline()
+local sf = tl and tl:GetStartFrame() or 0
 if tl then
-    local sf = tl:GetStartFrame() or 0
 ${markerCalls}
+end
+local item = tl and (tl:GetCurrentVideoItem() or (tl:GetItemListInTrack("video", 1) or {})[1])
+if item then
+    local comp = item:GetFusionCompCount() > 0 and item:GetFusionCompByIndex(1) or item:AddFusionComp()
+    if comp then
+        comp:Lock()
+        local src = comp:FindTool("MediaIn1")
+        local dst = comp:FindTool("MediaOut1")
+        local plate = src
+${nodeLines.join('\n')}
+        if dst and plate and plate ~= src then pcall(function() dst.Input = plate.Output end) end
+        comp:Unlock()
+    end
 end`;
   }
 
@@ -316,7 +404,22 @@ const server = http.createServer(async (req, res) => {
       osPlatform: paths.platform,
       paths,
       scriptInstalled,
-      bridgeSession: sessionPref ? sessionPref.data : null
+      bridgeSession: sessionPref ? sessionPref.data : null,
+      recipeCoverage: {
+        presets: Object.keys(PRESET_RECIPES.recipes || {}).length,
+        families: PRESET_RECIPES.families || []
+      }
+    });
+  }
+
+  // API: native Fusion graph recipes (one per preset)
+  if (pathname === '/api/recipes' && req.method === 'GET') {
+    return sendJson(res, 200, {
+      ok: true,
+      target: PRESET_RECIPES.target || 'DaVinci Resolve Free 21.1.1',
+      count: Object.keys(PRESET_RECIPES.recipes || {}).length,
+      families: PRESET_RECIPES.families || [],
+      recipes: PRESET_RECIPES.recipes || {}
     });
   }
 
@@ -360,13 +463,26 @@ const server = http.createServer(async (req, res) => {
     const body = await parseBody(req);
     const action = body.action || 'ping';
     const payload = body.payload || {};
-    const bridgeResult = await sendBridgeCommand(action, payload, 700);
-    const luaSnippet = generateResolveLuaSnippet(action, payload);
+    const wirePayload = { ...payload };
+    if (action === 'apply_vfx') {
+      const recipe = recipeFor(payload.presetId, payload.category);
+      if (recipe) wirePayload.recipe = recipe;
+    }
+    if (action === 'add_captions_lyrics') {
+      // caption ids arrive bare ("redline"); the LYRC recipes ship as lyrc_*
+      const recipe = recipeFor('lyrc_' + payload.presetId, payload.category)
+        || recipeFor(payload.presetId, payload.category);
+      if (recipe) wirePayload.recipe = recipe;
+    }
+    const bridgeResult = await sendBridgeCommand(action, wirePayload, 700);
+    const luaSnippet = generateResolveLuaSnippet(action, wirePayload);
     return sendJson(res, 200, {
       ok: true,
       action,
       liveBridgeConnected: bridgeResult.liveBridge,
+      bridgeReason: bridgeResult.reason || null,
       bridgeResponse: bridgeResult.response || null,
+      recipe: wirePayload.recipe || null,
       luaSnippet,
       timestamp: new Date().toISOString()
     });

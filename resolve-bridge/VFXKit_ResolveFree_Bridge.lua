@@ -140,11 +140,32 @@ local function get_fusion(res)
     return nil
 end
 
+-- Resolve Free has been seen with `os` partially or fully stripped, so every
+-- os.* access goes through these guards instead of assuming the table exists.
+local function os_getenv(name)
+    if type(os) ~= "table" or type(os.getenv) ~= "function" then return nil end
+    local ok, v = pcall(os.getenv, name)
+    if ok and type(v) == "string" and #v > 0 then return v end
+    return nil
+end
+
+local FALLBACK_CLOCK = 1728000000
+local function os_time()
+    if type(os) == "table" and type(os.time) == "function" then
+        local ok, v = pcall(os.time)
+        if ok and type(v) == "number" then return v end
+    end
+    -- deterministic fallback when os.time is missing: a monotonically
+    -- increasing counter, still usable as a unique-ish name suffix
+    FALLBACK_CLOCK = FALLBACK_CLOCK + 1
+    return FALLBACK_CLOCK
+end
+
 local function get_state_dir(fus)
-    local env_dir = os.getenv and os.getenv("VFXKIT_STATE_DIR")
-    if env_dir and #env_dir > 0 then return env_dir end
-    local home = os.getenv and (os.getenv("HOME") or os.getenv("USERPROFILE"))
-    if home and #home > 0 then
+    local env_dir = os_getenv("VFXKIT_STATE_DIR")
+    if env_dir then return (env_dir:gsub("[/\\]+$", "")) end
+    local home = os_getenv("HOME") or os_getenv("USERPROFILE")
+    if home then
         return (home:gsub("[/\\]+$", "")) .. "/.vfxkit-resolve-free"
     end
     if fus then
@@ -329,10 +350,130 @@ Handlers.apply_vfx = function(res, _fus, args)
 
     local node_added = "InspectorZoom+Marker"
     local keyframes = type(args.keyframes) == "table" and args.keyframes or {}
+    local recipe = args.recipe
 
     if comp then
         pcall(function()
             comp:Lock()
+
+            -- ---------------------------------------------------------------
+            -- Recipe path: the panel ships a native-Fusion node graph per preset
+            -- (resolve-bridge/preset-recipes.json), so graphs can be re-tuned in
+            -- JS without reinstalling this file into Resolve. The bridge is only
+            -- an interpreter: create tools, wire Background, key the primary
+            -- input, and never fail hard when an optional Free-edition tool is
+            -- missing from the build.
+            -- ---------------------------------------------------------------
+            if type(recipe) == "table" and type(recipe.chain) == "table" and #recipe.chain > 0 then
+                local built = {}
+                local skipped = {}
+                local keyed_tool = nil
+                local keyed_input = nil
+                local keyed_scale = 1.0
+
+                -- The comp Resolve created for this clip already owns MediaIn1 /
+                -- MediaOut1. A graph that is not spliced between them renders
+                -- nothing, so every recipe is wired source -> chain -> output.
+                local src = nil
+                local dst = nil
+                pcall(function()
+                    src = comp:FindTool("MediaIn1") or comp:FindTool("MediaIn")
+                    dst = comp:FindTool("MediaOut1") or comp:FindTool("MediaOut")
+                end)
+                local prev = src      -- last node created (Background/Foreground semantics)
+                local image = src     -- last node that actually carries an image
+                local wired = 0
+
+                for step_i = 1, #recipe.chain do
+                    local step = recipe.chain[step_i]
+                    local tool = nil
+                    if type(step) == "table" and type(step.tool) == "string" then
+                        tool = comp:AddTool(step.tool, -32768, -32768)
+                        if not tool and not step.optional then
+                            -- universal fallback: BrightnessContrast ships with
+                            -- every Resolve Free build
+                            tool = comp:AddTool("BrightnessContrast", -32768, -32768)
+                            if tool then
+                                skipped[#skipped + 1] = step.tool .. "->BrightnessContrast"
+                                step = { tool = "BrightnessContrast", bg = step.bg,
+                                         key = step.key, input = "Gain",
+                                         scale = step.scale or 1.0 }
+                            end
+                        end
+                    end
+
+                    if tool then
+                        if type(step.set) == "table" then
+                            for k, v in pairs(step.set) do
+                                pcall(function() tool[k] = v end)
+                            end
+                        end
+                        -- image plumbing: explicit Background / Foreground / source
+                        -- first, then a plain Input for filter-style nodes.
+                        local linked = false
+                        if step.fg and prev then
+                            if pcall(function() tool.Foreground = prev.Output end) then linked = true end
+                        end
+                        if step.source and src then
+                            if pcall(function() tool.Background = src.Output end) then linked = true end
+                        elseif step.bg and prev then
+                            if pcall(function() tool.Background = prev.Output end) then linked = true end
+                        elseif not step.fg and not step.source and image then
+                            if pcall(function() tool.Input = image.Output end) then linked = true end
+                        end
+                        if linked then
+                            wired = wired + 1
+                            image = tool
+                        end
+                        if step.key then
+                            keyed_tool = tool
+                            keyed_input = step.input or "Gain"
+                            keyed_scale = tonumber(step.scale) or 1.0
+                        end
+                        built[#built + 1] = step.tool
+                        prev = tool
+                    elseif step.optional then
+                        skipped[#skipped + 1] = step.tool
+                    end
+                end
+
+                if keyed_tool and keyed_input then
+                    if #keyframes > 0 then
+                        local spline = comp:BezierSpline()
+                        keyed_tool[keyed_input] = spline
+                        local kf_table = {}
+                        for k_i = 1, #keyframes do
+                            local kf = keyframes[k_i]
+                            local f_num = math.floor((tonumber(kf.timeSec) or 0) * 24)
+                            local v_num = ((tonumber(kf.value) or intensity) / 100.0) * keyed_scale
+                            kf_table[f_num] = { v_num }
+                        end
+                        spline:SetKeyFrames(kf_table)
+                        built[#built + 1] = "BezierSpline(" .. #keyframes .. " KF)"
+                    else
+                        keyed_tool[keyed_input] = (intensity / 100.0) * keyed_scale
+                    end
+                end
+
+                -- splice the tail into MediaOut1 so the clip actually renders
+                -- through the new graph
+                local spliced = false
+                if dst and image and image ~= src then
+                    spliced = pcall(function() dst.Input = image.Output end)
+                    if spliced then wired = wired + 1 end
+                end
+
+                node_added = (#built > 0) and table.concat(built, " -> ") or "no nodes"
+                if #skipped > 0 then
+                    node_added = node_added .. " [skipped: " .. table.concat(skipped, ", ") .. "]"
+                end
+                if spliced then
+                    node_added = node_added .. " [wired " .. wired .. " links to MediaOut1]"
+                end
+                comp:Unlock()
+                return
+            end
+
             local tool = nil
             local param_name = nil
             local scale_mult = 1.0
@@ -512,7 +653,7 @@ Handlers.cut_silences = function(res, _fus, args)
         }
     end
 
-    local new_tl_name = (tl:GetName() or "Timeline") .. " - Silence Cut (" .. os.time() .. ")"
+    local new_tl_name = (tl:GetName() or "Timeline") .. " - Silence Cut (" .. os_time() .. ")"
     local new_tl = mp:CreateEmptyTimeline(new_tl_name)
     if new_tl then
         proj:SetCurrentTimeline(new_tl)
@@ -525,6 +666,11 @@ Handlers.cut_silences = function(res, _fus, args)
 end
 
 -- 6. Add Subtitles / Music Video Lyrics
+-- Builds a real kinetic-type Fusion comp: one TextPlus card per cue, each
+-- opacity-keyed with a native BezierSpline, merged over the clip's source.
+-- Markers are still stamped so the editor can navigate the lyric sheet.
+local MAX_LYRIC_NODES = 16
+
 Handlers.add_captions_lyrics = function(res, _fus, args)
     local pm = res:GetProjectManager()
     local proj = pm and pm:GetCurrentProject()
@@ -536,6 +682,7 @@ Handlers.add_captions_lyrics = function(res, _fus, args)
     local style = args.style or "TikTok Kinetic Pop"
     local start_f = tl:GetStartFrame() or 0
     local fps = tonumber(proj:GetSetting("timelineFrameRate")) or 24
+    local intensity = tonumber(args.intensity) or 100
 
     for i = 1, #lines do
         local line = lines[i]
@@ -551,10 +698,100 @@ Handlers.add_captions_lyrics = function(res, _fus, args)
         end)
     end
 
+    -- ---- native Fusion lyric comp -----------------------------------------
+    local item = tl:GetCurrentVideoItem()
+    if not item then
+        local list = tl:GetItemListInTrack("video", 1) or {}
+        item = list[1]
+    end
+    if not item or #lines == 0 then
+        return { ok = true, linesAdded = #lines, style = style, fusionNode = "markers only" }
+    end
+
+    local comp = nil
+    pcall(function()
+        if item:GetFusionCompCount() == 0 then
+            comp = item:AddFusionComp()
+        else
+            comp = item:GetFusionCompByIndex(1)
+        end
+    end)
+    if not comp then
+        return { ok = true, linesAdded = #lines, style = style, fusionNode = "markers only (no comp)" }
+    end
+
+    local built, keys_added = {}, 0
+    local merged = 0
+    pcall(function()
+        comp:Lock()
+        local src = comp:FindTool("MediaIn1") or comp:FindTool("MediaIn")
+        local dst = comp:FindTool("MediaOut1") or comp:FindTool("MediaOut")
+        local plate = src
+
+        local count = math.min(#lines, MAX_LYRIC_NODES)
+        for i = 1, count do
+            local line = lines[i]
+            local t0 = tonumber(line.startSec) or ((i - 1) * 2.0)
+            local t1 = tonumber(line.endSec) or (t0 + 2.0)
+            if t1 <= t0 then t1 = t0 + 0.4 end
+
+            local text = comp:AddTool("TextPlus", -32768, -32768)
+            if text then
+                pcall(function() text.Text = tostring(line.text or ("Lyric " .. i)) end)
+                pcall(function() text.Size = tonumber(args.fontSize) or 0.11 end)
+                pcall(function() text.Style = "Bold" end)
+                -- stacked vertical layout so every cue stays inspectable
+                pcall(function() text.Center = { 0.5, 0.78 - (i - 1) * 0.02 } end)
+                built[#built + 1] = "TextPlus"
+
+                -- punch-in / punch-out opacity, native BezierSpline
+                local spline = comp:BezierSpline()
+                if spline then
+                    local f_in = math.floor((t0 - 0.12) * fps)
+                    local f_on = math.floor(t0 * fps)
+                    local f_out = math.floor(t1 * fps)
+                    local peak = math.min(1.0, math.max(0.05, intensity / 100.0))
+                    if f_in < 0 then f_in = 0 end
+                    if f_on <= f_in then f_on = f_in + 1 end
+                    if f_out <= f_on then f_out = f_on + 1 end
+                    local kf = {}
+                    kf[f_in] = { 0 }
+                    kf[f_on] = { peak }
+                    kf[f_out] = { 0 }
+                    pcall(function() spline:SetKeyFrames(kf) end)
+                    pcall(function() text.Opacity = spline end)
+                    keys_added = keys_added + 3
+                    built[#built + 1] = "BezierSpline(3 KF)"
+                end
+
+                if plate then
+                    local merge = comp:AddTool("Merge", -32768, -32768)
+                    if merge then
+                        pcall(function() merge.Foreground = text.Output end)
+                        pcall(function() merge.Background = plate.Output end)
+                        plate = merge
+                        merged = merged + 1
+                        built[#built + 1] = "Merge"
+                    end
+                end
+            end
+        end
+
+        if dst and plate and plate ~= src then
+            if pcall(function() dst.Input = plate.Output end) then
+                built[#built + 1] = "MediaOut1"
+            end
+        end
+        comp:Unlock()
+    end)
+
     return {
         ok = true,
         linesAdded = #lines,
-        style = style
+        style = style,
+        fusionNode = (#built > 0) and table.concat(built, " -> ") or "markers only",
+        lyricNodes = merged,
+        keyframes = keys_added
     }
 end
 
@@ -609,7 +846,7 @@ Handlers.auto_edit_timeline = function(res, _fus, args)
         }
     end
 
-    local tl_name = (edit_mode == "music_video" and "AI Music Video Cut " or "AI Vlog Cut ") .. os.time()
+    local tl_name = (edit_mode == "music_video" and "AI Music Video Cut " or "AI Vlog Cut ") .. os_time()
     local new_tl = mp:CreateEmptyTimeline(tl_name)
     if new_tl then
         proj:SetCurrentTimeline(new_tl)
@@ -660,15 +897,29 @@ local function main()
     local req_path = state_dir .. "/request.lua"
     local last_id = ""
 
-    -- Announce active session in Fusion.prefs
+    -- Announce active session in Fusion.prefs. The panel polls /api/status,
+    -- which reads this record, so the header can name the open project.
+    local project_name, timeline_name = nil, nil
+    pcall(function()
+        local pm = res:GetProjectManager()
+        local proj = pm and pm:GetCurrentProject()
+        if proj then
+            project_name = proj:GetName()
+            local tl = proj:GetCurrentTimeline()
+            timeline_name = tl and tl:GetName() or nil
+        end
+    end)
+
     write_pref_response(fus, "Session", {
         id = "init",
         ok = true,
         bridge = BRIDGE_VERSION,
         product = res:GetProductName() or "DaVinci Resolve",
         version = res:GetVersionString() or "21.1.1",
+        projectName = project_name or "No project open",
+        timelineName = timeline_name or "",
         stateDir = state_dir,
-        startedAt = os.time()
+        startedAt = os_time()
     })
 
     while true do

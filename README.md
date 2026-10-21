@@ -116,6 +116,10 @@ fixed a whole class of "looks fine at 720p, falls apart at 4K" bugs:
 | Feedback drawn onto itself | `ctx.drawImage(fb)` through a transform is undefined in canvas and produced stair-step garbage once the source moved | new `feedbackStep()` transforms the previous buffer into a scratch canvas first, then rebuilds it as a bounded **EMA** `FB = FB·decay + src·(1−decay)` |
 | Low-key footage killed print effects | a dark plate sits entirely below the ink threshold, so stipple / halftone / engrave / mosaic rendered almost black | every tonal shader now runs **auto-levels** (5–98 percentile of the current plate, with a small raw blend) before mapping tone |
 | Soft 1400px mono plates | band-slice / lenticular plates were upscaled ~3× and looked like oil paintings | plate now renders at ~45–60% of frame width (up to 2600px) with a filmic shoulder instead of clipping |
+| Rib screen read as a grid overlay | isolated specular lines floated over a muddy plate | rib shading is a cosine **lens ramp** multiplied into the plate with a thin crest, and the plate is composited at full strength |
+| Coarse halftone tear | 70 fixed bands meant 31px stair-steps at 4K | band count now follows frame height (`h/11`) with the ripple amplitude in frame pixels |
+| Blocky stipple grain | square 4px blots at 0.75 buffer scale read as pixel art | finer frame-space lattice + one eroded corner per blot so the ink grain stays irregular |
+| Print plates crushed to black | high contrast + high gamma clipped everything below the ink threshold | band-slice / lenticular plates now use 1.10–1.42 contrast at gamma 0.92–0.95 |
 | Skyline in the transition B-plate | every transition preview slid a bar-chart of black rectangles over the shot | replaced with an atmospheric plate (curved horizon, lone figure, sun, bokeh) |
 
 Token/technique changes made during the pass: `Contour Ring Stipple` was rebuilt to place
@@ -131,11 +135,97 @@ Raster` became a true full-frame glyph raster with a gamma-lifted ramp, and
 
 | Path | Resolution | Total for all 72 | Average | Worst |
 | --- | --- | --- | --- | --- |
-| Interactive preview | 1280×720, `preview` | ~0.6 s | ~8 ms | 30 ms (`td_lenticular`) |
-| Full export render | 3840×2160, `export` | ~6.0 s | ~83 ms | 459 ms (`td_dirsmear`) |
+| Interactive preview | 1280×720, `preview` | — | ~36 ms | 78 ms (`td_engrave`) |
+| Full export render | 3840×2160, `export` | 6.10 s | ~85 ms | 442 ms (`tr_rollershutter`) |
 
 The panel renders cards at preview quality, so scrolling and slider drags stay interactive;
 export quality is used for the large preview, the still grab and the Resolve render.
+
+---
+
+## Native Resolve Integration — from a click to a real Fusion graph
+
+Clicking **Apply** in the panel no longer sends a guessed node list. The server owns a
+**per-preset recipe table** and the resident bridge is a small interpreter, so the exact
+graph a preset produces can be retuned in JavaScript without re-installing anything into
+Resolve.
+
+```
+public/app.js  ──POST /api/dispatch {action:"apply_vfx", presetId, intensity, keyframes}──▶ server.js
+                                                                                            │
+        resolve-bridge/preset-recipes.json ◀── recipeFor(presetId)                          │
+                                                                                            ▼
+     ~/.vfxkit-resolve-free/request.lua  ◀── write + rename (atomic) ────────────────────────┘
+                     │
+                     ▼
+  VFXKit_ResolveFree_Bridge.lua  (Workspace ▸ Scripts, resident, 50 ms poll)
+        comp:AddTool(...)  →  MediaIn1 → n1 → n2 → … → MediaOut1
+                            + comp:BezierSpline():SetKeyFrames({[frame]={value}})
+                     │
+                     ▼
+     Fusion.prefs  "VFXKitBridge.Response" = "<id>:<hex json>"  ──▶  panel toast + wire strip
+```
+
+### 77 native recipes across 11 families
+
+`node tools/gen-recipes.js` regenerates `resolve-bridge/preset-recipes.json` from the panel's
+own preset sources (`TD_PRESETS`, the `VFX_PRESETS` array, and the 20 `CAPTION_STYLES`), so
+every card that ships is guaranteed to have a graph:
+
+| family | count | family | count | family | count |
+| --- | --- | --- | --- | --- | --- |
+| `td` | 10 | `print` | 12 | `glitch` | 5 |
+| `optical` | 7 | `transition` | 5 | `shutter` | 1 |
+| `film` | 4 | `camera` | 3 | `depth` | 4 |
+| `editorial` | 6 | `text` (LYRC) | 20 | | |
+
+A recipe step is `{ tool, set?, bg?, fg?, source?, optional?, key?, input?, scale? }`:
+
+- `bg` / `fg` / `source` select which input of a compositing node receives the previous
+  node, the clip's `MediaIn1`, or both (that is how a `Merge` puts a TextPlus card over the
+  plate).
+- plain steps are wired through `Input`; generators (`Bitmap`, `TextPlus`, `FastNoise`)
+  simply drop out of the image path instead of blacking the frame out.
+- `optional` tools are skipped with `[skipped: X]`; a missing **required** tool falls back
+  to `BrightnessContrast` and still applies.
+- `key` marks the node whose input receives either the slider value
+  (`intensity/100 * scale`) or a native `BezierSpline` at `frame = timeSec * 24`.
+- the tail is always spliced into `MediaOut1`, and the result string reports the link count
+  (`[wired 4 links to MediaOut1]`) so the panel can prove the graph is live.
+
+### Kinetic lyrics become a real text comp
+
+`add_captions_lyrics` creates one `TextPlus` card per cue (capped at 16), gives each card a
+3-key `BezierSpline` on **Opacity** (out → in → out around its cue), merges every card over
+`MediaIn1`, splices the stack into `MediaOut1`, and still stamps the yellow lyric markers.
+The panel sends the cue list, the LYRC style id, the font size and the intensity, so the
+same Song Template / Shuffle Clips arrangement that plays in the preview becomes native
+Fusion nodes on the timeline.
+
+### The panel knows whether Resolve is really listening
+
+`GET /api/status` reads the bridge's `Session` pref, so the header pill turns green with the
+**open project name** (`Live: Client Music Video · Resolve 21.1.1`), names the install target
+when the bridge is not running, and shows the recipe coverage. Every dispatch prints the
+graph that was wired in the strip above the Lua console, plus the `bridgeReason` when the
+bridge did not answer.
+
+---
+
+## Verification harnesses
+
+| Suite | Command | Result |
+| --- | --- | --- |
+| Bridge scenarios (mock Resolve/Fusion, real bridge) | `/tmp/luaenv/bin/python tools/test_bridge.py --verbose` | **16/16** |
+| End-to-end (real server + real bridge + real prefs mailbox) | `/tmp/luaenv/bin/python tools/e2e_sim.py --verbose` | **22/22** |
+| Panel DOM suite (jsdom) | `timeout 200 node /tmp/domtest/run.js` | **13 PASS**, 72 presets, 0 failures |
+
+`tools/e2e_sim.py` boots a throwaway `server.js` against a fake Mac home
+(`VFXKIT_HOME`) plus `tools/mock_resolve_daemon.py`, which runs the **unmodified bridge**
+inside LuaJIT with `io`/`os.execute`/`require` stripped, and flushes `fusion:SavePrefs()`
+into a real `Fusion.prefs` file. It asserts ping → project/timeline, a keyframed
+`apply_vfx` that reaches `MediaOut1`, a live Media Pool scan, the auto-editor, the lyric
+comp, and it **executes both generated "copy to Console" Lua snippets** against the mock.
 
 ---
 

@@ -836,7 +836,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initMediaPoolTab();
   initMonitorAndTimeline();
   initBridgeModal();
-  checkResolveStatus();
+  startBridgeStatusPoll();
   requestAnimationFrame(renderLivePreviewLoop);
 });
 
@@ -847,6 +847,29 @@ function showToast(msg) {
   el.textContent = msg;
   container.appendChild(el);
   setTimeout(() => el.remove(), 3400);
+}
+
+// Paints the wire strip above the Lua drawer: what graph was sent to Resolve,
+// whether the resident bridge answered, and how many native recipes ship today.
+function paintWireStrip({ live, chain, mode, error } = {}) {
+  const stateEl = document.getElementById('wireState');
+  const chainEl = document.getElementById('wireChain');
+  if (stateEl) {
+    stateEl.className = 'wire-pill ' + (live ? 'ok' : 'warn');
+    stateEl.textContent = error
+      ? 'Resolve: ' + error
+      : (live ? 'Live Resolve 21.1.1' : 'Lua queued (bridge not running)');
+  }
+  if (chainEl) {
+    chainEl.textContent = chain || mode || 'No graph dispatched yet';
+    chainEl.title = chainEl.textContent;
+  }
+}
+
+function graphLabel(recipe, fallback) {
+  if (!recipe || !Array.isArray(recipe.chain)) return fallback || '';
+  const tools = recipe.chain.map((s) => (typeof s === 'string' ? s : s.tool)).filter(Boolean);
+  return tools.join(' → ');
 }
 
 async function dispatchToResolve(action, payload, toastMsg) {
@@ -860,14 +883,27 @@ async function dispatchToResolve(action, payload, toastMsg) {
     if (data.luaSnippet) {
       document.getElementById('luaCodeOutput').textContent = data.luaSnippet;
     }
+
+    const result = (data.bridgeResponse && data.bridgeResponse.result) || null;
+    const live = !!data.liveBridgeConnected;
+    const chain = graphLabel(data.recipe, data.recipe ? '' : '');
+    paintWireStrip({
+      live,
+      chain: chain ? `MediaIn → ${chain} → MediaOut` : '',
+      error: result && (result.error || data.bridgeResponse && data.bridgeResponse.error)
+    });
+
     if (toastMsg) {
-      const modeTag = data.liveBridgeConnected
-        ? 'Live Resolve 21.1.1 Bridge'
-        : 'Live Monitor + Resolve Lua Ready';
-      showToast(`${toastMsg} (${modeTag})`);
+      const famTag = data.recipe && data.recipe.family ? ` · ${data.recipe.family.toUpperCase()} graph` : '';
+      const modeTag = live ? 'LIVE in Resolve 21.1.1' : 'Lua + monitor ready';
+      const appended = result && result.fusionNode
+        ? ` | ${String(result.fusionNode).slice(0, 90)}`
+        : '';
+      showToast(`${toastMsg}${famTag} (${modeTag})${appended}`);
     }
     return data;
   } catch (_err) {
+    paintWireStrip({ live: false, error: 'server unreachable' });
     if (toastMsg) showToast(toastMsg);
     return null;
   }
@@ -1104,13 +1140,15 @@ function renderVfxGrid() {
 function applyPresetToResolve(preset) {
   if (!preset) return;
   const kfs = (KF.tracks[preset.id] || []).map((k) => ({ timeSec: +k.t.toFixed(3), value: Math.round(k.v) }));
-  dispatchToResolve('apply_vfx', {
-    presetId: preset.id,
+  // presetId is enough: the server looks the native Fusion graph up in
+  // resolve-bridge/preset-recipes.json and attaches it to the wire payload.
+  return dispatchToResolve('apply_vfx', {
+    presetId: preset.effectType || preset.id,
     presetName: preset.name,
     category: preset.category,
     intensity: Math.round(effectiveIntensity(preset.id, state.playheadSec)),
     keyframes: kfs,
-    toolChain: preset.node
+    fps: 24
   }, `Applied "${preset.name}"${kfs.length ? ` + ${kfs.length} BezierSpline KFs` : ''} at playhead`);
 }
 
@@ -1860,8 +1898,11 @@ function initCaptionsTab() {
       style: `${state.captionStyle.name} (Var #${state.variationSeed})`,
       alignment: state.alignment,
       backdropMode: state.backdropMode,
+      intensity: Math.round(state.fontScale),
+      fontSize: +(0.075 * (state.fontScale / 100)).toFixed(3),
+      fps: 24,
       lines: state.cues
-    }, `Placed ${state.cues.length} LYRC "${state.captionStyle.name}" kinetic blocks onto Resolve Timeline`);
+    }, `Built ${state.cues.length} native LYRC "${state.captionStyle.name}" TextPlus cards`);
   });
 
   document.getElementById('exportSrtBtn').addEventListener('click', downloadSrtFile);
@@ -3178,14 +3219,44 @@ async function checkResolveStatus() {
     const res = await fetch('/api/status');
     const data = await res.json();
     const statusText = document.getElementById('bridgeStatusText');
-    if (data.bridgeSession) {
-      statusText.textContent = `Connected: Resolve ${data.bridgeSession.version || '21.1.1'}`;
-    } else if (data.scriptInstalled) {
-      statusText.textContent = 'Bridge Installed (Ready for Resolve 21.1.1)';
+    const dot = document.getElementById('bridgeStatusDot');
+    const session = data.bridgeSession;
+
+    if (session) {
+      const proj = session.projectName || 'project';
+      statusText.textContent = `Live: ${proj} · Resolve ${session.version || '21.1.1'}`;
+      statusText.title = `Bridge ${session.bridge || ''} · state ${session.stateDir || ''}`;
+      if (dot) dot.className = 'status-dot live';
+      if (state.resolveLive !== true) {
+        state.resolveLive = true;
+        showToast(`Resolve bridge connected — ${proj}`);
+      }
     } else {
-      statusText.textContent = 'Resolve 21.1.1 Bridge Setup';
+      state.resolveLive = false;
+      statusText.textContent = data.scriptInstalled
+        ? 'Bridge installed · run it in Resolve'
+        : 'Resolve 21.1.1 Bridge Setup';
+      statusText.title = data.paths ? `Install target: ${data.paths.scriptsDir}` : '';
+      if (dot) dot.className = 'status-dot ' + (data.scriptInstalled ? 'installed' : 'idle');
+    }
+
+    const cov = data.recipeCoverage;
+    const countEl = document.getElementById('wireRecipeCount');
+    if (countEl && cov) {
+      countEl.textContent = `${cov.presets} native recipes · ${(cov.families || []).length} families`;
+    }
+    if (cov && cov.presets && state.recipeCount !== cov.presets) {
+      state.recipeCount = cov.presets;
     }
   } catch (_e) {
     // Ignore status fetch error
   }
+}
+
+function startBridgeStatusPoll() {
+  checkResolveStatus();
+  setInterval(() => {
+    if (document.hidden) return;
+    checkResolveStatus();
+  }, 4000);
 }
