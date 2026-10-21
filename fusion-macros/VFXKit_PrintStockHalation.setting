@@ -1,0 +1,73 @@
+{
+	Tools = ordered() {
+		VFXKit_PrintStockHalation = MacroOperator {
+			Inputs = ordered() {
+				MainInput1 = InstanceInput {
+					SourceOp = "PrintCurve",
+					Source = "Input",
+				},
+				Input1 = InstanceInput {
+					SourceOp = "PrintCurve",
+					Source = "Contrast",
+					Name = "Print Contrast",
+					Default = 1.12,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "PrintCurve",
+					Source = "Saturation",
+					Name = "Colour Density",
+					Default = 1.08,
+				},
+				Input3 = InstanceInput {
+					SourceOp = "PrintGlow",
+					Source = "Threshold",
+					Name = "Halation Threshold",
+					Default = 0.68,
+				},
+				Input4 = InstanceInput {
+					SourceOp = "PrintGlow",
+					Source = "Gain",
+					Name = "Halation Strength",
+					Default = 0.55,
+				},
+				Input5 = InstanceInput {
+					SourceOp = "PrintGlow",
+					Source = "XGlowSize",
+					Name = "Halation Spread",
+					Default = 34,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "PrintGlow",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				PrintCurve = BrightnessContrast {
+					Inputs = {
+						Gain = Input { Value = 1.02, },
+						Contrast = Input { Value = 1.12, },
+						Saturation = Input { Value = 1.08, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 275, 49.5 } },
+				},
+				PrintGlow = SoftGlow {
+					Inputs = {
+						Threshold = Input { Value = 0.68, },
+						Gain = Input { Value = 0.55, },
+						XGlowSize = Input { Value = 34, },
+						YGlowSize = Input { Value = 30, },
+						Input = Input {
+							SourceOp = "PrintCurve",
+							Source = "Output",
+						},
+					},
+					ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "VFXKit_PrintStockHalation"
+}

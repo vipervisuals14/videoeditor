@@ -1,0 +1,59 @@
+{
+	Tools = ordered() {
+		VFXKit_AnamorphicStreak = MacroOperator {
+			Inputs = ordered() {
+				MainInput1 = InstanceInput {
+					SourceOp = "StreakMerge",
+					Source = "Background",
+				},
+				Input1 = InstanceInput {
+					SourceOp = "StreakGlow",
+					Source = "Gain",
+					Name = "Streak Intensity",
+					Default = 0.4,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "StreakGlow",
+					Source = "XGlowSize",
+					Name = "Horizontal Stretch",
+					Default = 120,
+				},
+				Input3 = InstanceInput {
+					SourceOp = "StreakMerge",
+					Source = "Blend",
+					Name = "Streak Opacity",
+					Default = 0.5,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "StreakMerge",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				StreakGlow = SoftGlow {
+					Inputs = {
+						Threshold = Input { Value = 0.72, },
+						Gain = Input { Value = 0.4, },
+						XGlowSize = Input { Value = 120, },
+						YGlowSize = Input { Value = 2, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 275, 82.5 } },
+				},
+				StreakMerge = Merge {
+					Inputs = {
+						Blend = Input { Value = 0.5, },
+						Foreground = Input {
+							SourceOp = "StreakGlow",
+							Source = "Output",
+						},
+					},
+					ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "VFXKit_AnamorphicStreak"
+}

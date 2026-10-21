@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Extension & LYRC Engine</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- TOP APPLICATION BAR -->
+  <header class="topbar">
+    <div class="brand-group">
+      <div class="brand-logo">
+        <span class="logo-mark">PV</span>
+      </div>
+      <div>
+        <div class="brand-title-row">
+          <h1 class="brand-title">PULSEVFX STUDIO</h1>
+          <span class="badge-version">RESOLVE FREE 21.1.1</span>
+          <span class="badge-os" id="osBadge">macOS • Native Fusion Engine</span>
+        </div>
+        <p class="brand-subtitle">Optical & Film VFX • LYRC.studio Kinetic Typography • Silence Cutter • Media Pool Director</p>
+      </div>
+    </div>
+
+    <!-- CINEMA PLATE / LOCAL VIDEO UPLOAD SWITCHER -->
+    <div class="scene-switcher" title="Switch camera plate or load your own MP4/MOV video to preview effects live">
+      <span class="scene-label">Plate:</span>
+      <button class="scene-btn active" data-scene="music_video">Stage • Practicals</button>
+      <button class="scene-btn" data-scene="night_rollers">Night • Rollers</button>
+      <button class="scene-btn" data-scene="talking_head">Window • Interview</button>
+      <button class="scene-btn" data-scene="lyric_canvas">Neutral Slate</button>
+      <label class="scene-upload-btn" title="Load any local .mp4 / .mov / .webm video from your Mac to test VFX & Lyrics on your own footage">
+        <span>Load Footage</span>
+        <input type="file" id="localVideoInput" accept="video/*,image/*" hidden />
+      </label>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="btn-ghost" id="toggleCompactBtn" title="Shrink into a narrow floating pop-up dock to place beside DaVinci Resolve">
+        <span id="compactBtnLabel">Pop-Up Dock Mode</span>
+      </button>
+      <button class="btn-bridge" id="openBridgeModalBtn">
+        <span class="status-dot" id="bridgeStatusDot"></span>
+        <span id="bridgeStatusText">Resolve 21.1.1 Bridge</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE GRID -->
+  <main class="workspace" id="workspaceRoot">
+    <!-- LEFT / MAIN: EXTENSION PANEL -->
+    <section class="popup-panel" id="popupPanel">
+      <!-- EXTENSION WINDOW HEADER -->
+      <div class="panel-window-bar">
+        <div class="window-dots">
+          <span class="wdot red"></span>
+          <span class="wdot yellow"></span>
+          <span class="wdot green"></span>
+        </div>
+        <span class="window-title">Workspace ▸ Scripts ▸ PulseVFX_Studio (DaVinci Resolve Free 21.1.1)</span>
+        <span class="window-fps">24.00 fps • 32-Bit Float Fusion</span>
+      </div>
+
+      <!-- 4 MAIN WORKFLOW TABS -->
+      <nav class="main-tabs" role="tablist">
+        <button class="main-tab active" data-tab="vfx">
+          <div class="tab-text">
+            <span class="tab-name">01 • Optical & VFX</span>
+            <span class="tab-meta">52 Film & Rig Presets</span>
+          </div>
+        </button>
+        <button class="main-tab" data-tab="captions">
+          <div class="tab-text">
+            <span class="tab-name">02 • LYRC Typography</span>
+            <span class="tab-meta">20 Kinetic Layouts</span>
+          </div>
+        </button>
+        <button class="main-tab" data-tab="silences">
+          <div class="tab-text">
+            <span class="tab-name">03 • Cut Silences</span>
+            <span class="tab-meta">VAD & L-Cut Trim</span>
+          </div>
+        </button>
+        <button class="main-tab" data-tab="mediapool">
+          <div class="tab-text">
+            <span class="tab-name">04 • Media Pool Cut</span>
+            <span class="tab-meta">Beat & Story Assembly</span>
+          </div>
+        </button>
+      </nav>
+
+      <!-- ================================================================== -->
+      <!-- TAB 1: OPTICAL, CAMERA RIG & FILM VFX                              -->
+      <!-- ================================================================== -->
+      <div class="tab-pane active" id="tab-vfx">
+        <!-- AI LOOK DIRECTOR BAR -->
+        <div class="ai-prompt-card">
+          <div class="ai-prompt-header">
+            <span class="ai-sparkle">LOOK & RHYTHM ARCHITECT</span>
+            <span class="ai-hint">Describe the optical treatment & editorial cadence — auto-maps nodes across timeline cuts</span>
+          </div>
+          <div class="ai-prompt-input-row">
+            <input
+              type="text"
+              id="vfxPromptInput"
+              class="prompt-input"
+              placeholder="e.g., Kodak 2383 halation, Wong Kar-Wai 6fps step-print on hooks, damped snare impulse..."
+              value="Kodak 2383 red halation, Wong Kar-Wai step-print trails, damped snare micro-impulse on beat"
+            />
+            <button class="btn-primary" id="runAiVfxBtn">Build Timeline Pass</button>
+          </div>
+          <div class="quick-vibe-pills">
+            <span class="pill-label">Editorial Profiles:</span>
+            <button class="vibe-pill" data-prompt="Kodak 2383 red halation, damped snare micro-impulse, velocity optical flow snap, 35mm gate weave">pgLang / 35mm Anamorphic</button>
+            <button class="vibe-pill" data-prompt="Wong Kar-Wai 6fps step-print shutter drag, bleach bypass silver retention, 1-frame luma dip">AWGE / Step-Print Shutter</button>
+            <button class="vibe-pill" data-prompt="2-frame stutter cadence, thermal FLIR luma map, SnorriCam chest lock, lateral chromatic fringe">Opium / Percussive Industrial</button>
+            <button class="vibe-pill" data-prompt="Pro-Mist 1/4 bloom, match-zoom 24mm to 50mm focal snap, subtle 35mm 500T grain">A24 / Commercial Editorial</button>
+          </div>
+        </div>
+
+        <!-- QUICK-ADJUST PARAMETERS -->
+        <details class="tweaker-drawer" open>
+          <summary class="tweaker-summary">
+            <span>Optical & Temporal Parameters</span>
+            <span class="tweaker-sub">Live shader & Fusion node calibration</span>
+          </summary>
+          <div class="tweaker-grid">
+            <div class="slider-group">
+              <div class="slider-head"><span>Effect Mix / Gain</span><strong id="masterIntensityVal">78%</strong></div>
+              <input type="range" id="masterIntensitySlider" min="10" max="100" value="78" />
+            </div>
+            <div class="slider-group">
+              <div class="slider-head"><span>Project Tempo</span><strong id="shakeSpeedVal">138 BPM</strong></div>
+              <input type="range" id="shakeSpeedSlider" min="70" max="190" value="138" />
+            </div>
+            <div class="slider-group">
+              <div class="slider-head"><span>Shutter / Trail Decay</span><strong id="mixShakesVal">270°</strong></div>
+              <input type="range" id="mixShakesSlider" min="45" max="360" value="270" />
+            </div>
+            <div class="slider-group">
+              <div class="slider-head"><span>Halation & Bloom</span><strong id="mixStylizedVal">65%</strong></div>
+              <input type="range" id="mixStylizedSlider" min="0" max="100" value="65" />
+            </div>
+          </div>
+        </details>
+
+        <!-- 7 CATEGORY SUB-TABS -->
+        <div class="vfx-subtabs-bar">
+          <div class="vfx-subtabs" id="vfxCategoryTabs">
+            <button class="vfx-subtab active" data-cat="ALL">All (52)</button>
+            <button class="vfx-subtab" data-cat="Optical & Film">Optical & Film</button>
+            <button class="vfx-subtab" data-cat="Shutter & Time">Shutter & Time</button>
+            <button class="vfx-subtab" data-cat="Camera Rig">Camera Rig</button>
+            <button class="vfx-subtab" data-cat="Hits">Impact & Exposure</button>
+            <button class="vfx-subtab" data-cat="Roto & Matte">Roto & Matte</button>
+            <button class="vfx-subtab" data-cat="Transitions">Transitions</button>
+            <button class="vfx-subtab" data-cat="Analog Signal">Analog & Print</button>
+          </div>
+          <input type="search" id="vfxSearchInput" class="vfx-search" placeholder="Filter nodes & looks..." />
+        </div>
+
+        <!-- LIVE PRESET CARDS GRID -->
+        <div class="vfx-grid" id="vfxPresetGrid"></div>
+        <div class="grid-footnote">
+          <span>Click a card to preview · <strong>Apply</strong> queues the native Fusion node on the current frame</span>
+          <button class="btn-mini" id="openStyleLabInlineBtn">Compare 8 looks in Style Lab →</button>
+        </div>
+      </div>
+
+      <!-- ================================================================== -->
+      <!-- TAB 2: LYRC.STUDIO KINETIC LYRIC STYLES & SUBTITLES                -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-captions">
+        <div class="pane-card">
+          <div class="pane-card-header">
+            <div>
+              <h3>LYRC.studio Kinetic Typography & Editorial Captions</h3>
+              <p>Phrase-level spatial compositions: two-font role trading (Duet), selective knockout (Redline), shifting bento grids (Tiled Wave), and reusable Song Templates.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="exportSrtBtn">Export .SRT</button>
+              <button class="btn-primary" id="pushCaptionsResolveBtn">Place on Resolve Timeline</button>
+            </div>
+          </div>
+
+          <!-- LYRC SONG TEMPLATE & VARIATION BAR -->
+          <div class="lyrc-template-bar">
+            <div class="lyrc-template-info">
+              <span class="template-badge">TEMPLATE LOCKED</span>
+              <strong id="songTemplateTitle">midnight_atari.wav • 138 BPM (8 Phrases + Cut Markers)</strong>
+            </div>
+            <div class="lyrc-template-actions">
+              <button class="btn-variation" id="lyricVariationBtn" title="Generate a new spatial arrangement seed for this LYRC preset">
+                Arrangement Variation <span id="variationSeedBadge">#1</span>
+              </button>
+              <button class="btn-shuffle" id="lyricShuffleClipsBtn" title="Keep lyrics & beat timing locked, and shuffle Media Pool clips underneath">
+                Shuffle Footage Clips
+              </button>
+            </div>
+          </div>
+
+          <!-- MODE + LYRC CATEGORY FILTER BAR -->
+          <div class="lyrc-filter-row">
+            <div class="lyrc-cat-pills" id="lyrcCategoryPills">
+              <button class="lyrc-cat-pill active" data-lcat="ALL">All (20)</button>
+              <button class="lyrc-cat-pill" data-lcat="Bold">Bold (Duet, Redline, Brat...)</button>
+              <button class="lyrc-cat-pill" data-lcat="Layered">Layered (Tiled Wave, Margin, Relay...)</button>
+              <button class="lyrc-cat-pill" data-lcat="Minimal">Minimal (Deep Focus, Afterimage, Quiet...)</button>
+              <button class="lyrc-cat-pill" data-lcat="Talking">Editorial Captions</button>
+              <button class="lyrc-cat-pill" data-lcat="FAV">Saved ★</button>
+            </div>
+          </div>
+
+          <!-- LYRC PRESET GALLERY GRID -->
+          <div class="lyrc-presets-grid" id="captionStyleStrip"></div>
+
+          <!-- CONTEXTUAL PRESET SETTINGS BAR -->
+          <div class="lyrc-contextual-bar" id="lyrcContextualBar">
+            <div class="ctx-left">
+              <span class="ctx-preset-label" id="ctxPresetLabel">Active Preset: <strong>Duet</strong> — Two font roles trade emphasis as words arrive</span>
+            </div>
+            <div class="ctx-controls">
+              <label class="ctx-field">
+                <span>Typography Roles</span>
+                <select id="lyrcFontPairSelect" class="select-input">
+                  <option value="sans_serif" selected>Helvetica Neue Bold + Editorial Serif Italic</option>
+                  <option value="condensed_mono">Druk Condensed + JetBrains Mono</option>
+                  <option value="editorial_display">Garamond Premier + Swiss Grotesque</option>
+                  <option value="lowercase_brat">Stretched Arial Lowercase</option>
+                </select>
+              </label>
+              <label class="ctx-field">
+                <span>Frame Alignment</span>
+                <select id="lyrcAlignSelect" class="select-input">
+                  <option value="center" selected>Center Lockup</option>
+                  <option value="left">Left Editorial Margin</option>
+                  <option value="right">Right Editorial Margin</option>
+                </select>
+              </label>
+              <label class="ctx-field">
+                <span>Knockout / Surface</span>
+                <select id="lyrcBackdropSelect" class="select-input">
+                  <option value="auto" selected>Preset Default (Selective Knockout)</option>
+                  <option value="knockout">Force Inverted Knockout Box</option>
+                  <option value="solid_cards">Matte Phrase Cards</option>
+                  <option value="clean">Pure Typography (No Box)</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <!-- LYRIC / TRANSCRIPT INPUT + TIMED CUES -->
+          <div class="caption-editor-split">
+            <div class="caption-input-col">
+              <div class="col-header">
+                <span id="captionInputLabel">Lyrics / Transcript Lines</span>
+                <div style="display:flex; gap:5px;">
+                  <button class="btn-mini" id="loadSampleLyricsBtn">Song Hook</button>
+                  <button class="btn-mini" id="loadSampleTalkingBtn">Editorial Script</button>
+                  <button class="btn-mini accent" id="autoSyncLyricsBtn">Re-Sync to BPM</button>
+                </div>
+              </div>
+              <textarea id="lyricsRawInput" class="lyrics-textarea" rows="6"></textarea>
+              <div class="caption-customizers">
+                <label class="color-Field">
+                  <span>Primary</span>
+                  <input type="color" id="capPrimaryColor" value="#ffffff" />
+                </label>
+                <label class="color-Field">
+                  <span>Accent / Box</span>
+                  <input type="color" id="capAccentColor" value="#ef4444" />
+                </label>
+                <label class="range-mini">
+                  <span>Scale</span>
+                  <input type="range" id="capFontSizeSlider" min="70" max="150" value="105" />
+                </label>
+                <label class="range-mini">
+                  <span>Y-Axis</span>
+                  <input type="range" id="capPosYSlider" min="20" max="85" value="52" />
+                </label>
+              </div>
+            </div>
+
+            <div class="caption-cues-col">
+              <div class="col-header">
+                <span>Synced Phrase Blocks (Click to scrub)</span>
+                <span class="cue-count" id="cueCountBadge">8 Phrases</span>
+              </div>
+              <div class="cues-scroll" id="captionCuesList"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================== -->
+      <!-- TAB 3: CUT SILENCES (TALKING HEAD & BRAND CONTENT)                 -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-silences">
+        <div class="pane-card">
+          <div class="pane-card-header">
+            <div>
+              <h3>Dialogue Silence & Dead-Air Cutter</h3>
+              <p>Detects dialogue pauses, applies J/L-cut room-tone handles, and builds a subclip timeline in Resolve Free 21.1.1.</p>
+            </div>
+            <button class="btn-primary" id="applySilenceCutBtn">Execute Silence Cut in Resolve</button>
+          </div>
+
+          <div class="stats-strip">
+            <div class="stat-box">
+              <span class="stat-label">Source Duration</span>
+              <strong class="stat-val" id="silenceOrigDur">00:36.0s</strong>
+            </div>
+            <div class="stat-box accent">
+              <span class="stat-label">Trimmed Duration</span>
+              <strong class="stat-val" id="silenceNewDur">00:24.8s</strong>
+            </div>
+            <div class="stat-box success">
+              <span class="stat-label">Dead Air Stripped</span>
+              <strong class="stat-val" id="silenceSavedPct">31% (-11.2s)</strong>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Subclip Splice Count</span>
+              <strong class="stat-val" id="silenceCutCount">7 splices</strong>
+            </div>
+          </div>
+
+          <div class="waveform-container">
+            <div class="waveform-header">
+              <span>Track A1 Dialogue Envelope — Click any region below to toggle Keep / Cut</span>
+              <span class="waveform-badge" id="thresholdBadge">Gate: -32 dB</span>
+            </div>
+            <canvas id="silenceWaveformCanvas" width="760" height="115"></canvas>
+          </div>
+
+          <div class="controls-grid-3">
+            <div class="slider-group">
+              <div class="slider-head"><span>Noise Floor Gate</span><strong id="silenceDbVal">-32 dB</strong></div>
+              <input type="range" id="silenceDbSlider" min="-50" max="-18" value="-32" />
+              <span class="control-help">dBFS threshold below which audio is marked as pause</span>
+            </div>
+            <div class="slider-group">
+              <div class="slider-head"><span>Min Pause Window</span><strong id="silenceMinMsVal">300 ms</strong></div>
+              <input type="range" id="silenceMinMsSlider" min="120" max="900" step="20" value="300" />
+              <span class="control-help">Preserves natural phrasing shorter than window</span>
+            </div>
+            <div class="slider-group">
+              <div class="slider-head"><span>Pre/Post Roll Handles</span><strong id="silencePadMsVal">60 ms</strong></div>
+              <input type="range" id="silencePadMsSlider" min="0" max="220" step="10" value="60" />
+              <span class="control-help">Prevents clipped consonants on entry/exit</span>
+            </div>
+          </div>
+
+          <div class="toggle-row">
+            <label class="checkbox-pill">
+              <input type="checkbox" id="autoZoomJumpCut" checked />
+              <span>Focal Length Reframe (1.08x / 50mm Punch) on Alternating Jump Cuts</span>
+            </label>
+            <label class="checkbox-pill">
+              <input type="checkbox" id="jCutOverlap" checked />
+              <span>2-Frame J-Cut Dialogue Lead-In</span>
+            </label>
+          </div>
+
+          <div class="segments-list-header">
+            <span>Dialogue & Pause Decision List (Click to override)</span>
+          </div>
+          <div class="segments-list" id="silenceSegmentsList"></div>
+        </div>
+      </div>
+
+      <!-- ================================================================== -->
+      <!-- TAB 4: MEDIA POOL AI AUTO-EDITOR                                   -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-mediapool">
+        <div class="pane-card">
+          <div class="pane-card-header">
+            <div>
+              <h3>Media Pool Timeline Assembler</h3>
+              <p>Queries your open DaVinci Resolve Media Pool bins and builds a beat-locked Music Video rough cut or A/B-Roll Editorial timeline.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="syncMediaPoolBtn">Scan Resolve Media Pool</button>
+              <button class="btn-primary" id="autoAssembleBtn">Assemble Timeline in Resolve</button>
+            </div>
+          </div>
+
+          <div class="director-cards">
+            <div class="director-card active" data-director="music_video" id="dirMusicVideo">
+              <div class="dir-top">
+                <div>
+                  <h4>Music Video Beat & Transient Cut</h4>
+                  <p>Locks subclip in/out points to bar/beat divisions, interleaves Performance sync angles with B-Roll inserts, and places optical/shutter nodes on downbeats.</p>
+                </div>
+              </div>
+              <div class="dir-settings">
+                <label>
+                  <span>Master Tempo (BPM)</span>
+                  <input type="number" id="mvBpmInput" value="138" min="60" max="220" class="num-input" />
+                </label>
+                <label>
+                  <span>Editorial Cadence</span>
+                  <select id="mvPacingSelect" class="select-input">
+                    <option value="1">1-Beat Rapid Cut (Double-Time Hook)</option>
+                    <option value="2" selected>2-Beat Half-Bar Lock (Standard)</option>
+                    <option value="4">4-Beat Full-Bar Hold (Anamorphic Slow)</option>
+                    <option value="dynamic">Dynamic Acceleration (Verse ▸ Hook)</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Downbeat Treatment</span>
+                  <select id="mvAutoVfxSelect" class="select-input">
+                    <option value="drill" selected>Kodak Halation + Snare Micro-Impulse</option>
+                    <option value="grunge">Step-Print 6fps + Bleach Bypass</option>
+                    <option value="crt">Sony PVM Scan + Match-Zoom</option>
+                    <option value="none">Straight Cuts Only</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="director-card" data-director="vlog" id="dirVlog">
+              <div class="dir-top">
+                <div>
+                  <h4>Editorial A-Roll + B-Roll Story Cut</h4>
+                  <p>Strings together A-Cam dialogue selects, removes dead air, applies 1.08x focal punch-ins, and checkerboards B-Roll selects on Track V2.</p>
+                </div>
+              </div>
+              <div class="dir-settings">
+                <label>
+                  <span>V2 B-Roll Checkerboard</span>
+                  <select id="vlogBrollFreq" class="select-input">
+                    <option value="every_2" selected>Every 2nd Dialogue Select</option>
+                    <option value="every_3">Every 3rd Dialogue Select</option>
+                    <option value="intro_outro">Cold Open + Tail B-Roll</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Dialogue Polish</span>
+                  <select id="vlogPolishMode" class="select-input">
+                    <option value="full" selected>Trim Pauses + Sync Editorial Captions</option>
+                    <option value="silences_only">Trim Pauses Only</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mediapool-toolbar">
+            <div class="mp-bins" id="mediaPoolBinTabs">
+              <button class="mp-bin active" data-bin="ALL">All Bins (10)</button>
+              <button class="mp-bin" data-bin="Performance">Performance Sync</button>
+              <button class="mp-bin" data-bin="B-Roll">B-Roll Selects</button>
+              <button class="mp-bin" data-bin="Talking Head">Dialogue A-Cam</button>
+              <button class="mp-bin" data-bin="Audio">Audio Stems</button>
+            </div>
+            <button class="btn-mini" id="addCustomPoolClipBtn">+ Add Test Media Pool Item</button>
+          </div>
+
+          <div class="mediapool-grid" id="mediaPoolGrid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT / LIVE RESOLVE MONITOR + MULTI-TRACK TIMELINE SIMULATOR -->
+    <aside class="monitor-column" id="monitorColumn">
+      <!-- LIVE VIEWER CARD -->
+      <div class="viewer-card">
+        <div class="viewer-topbar">
+          <div class="viewer-tc" id="viewerTimecode">01:00:02:14</div>
+          <div class="viewer-active-badges">
+            <span class="active-fx-pill" id="activeFxPill">Node: Kodak 2383 Halation</span>
+            <span class="active-cap-pill" id="activeCapPill">LYRC: Duet (#1)</span>
+          </div>
+          <div class="viewer-controls-right">
+            <button class="btn-mini" id="aspectRatioBtn" title="Toggle 9:16 Vertical Social Crop Guides">9:16 Guides: OFF</button>
+            <button class="btn-mini accent" id="openStyleLabBtn" title="Render A/B/C/D candidate looks at three beats">Style Lab</button>
+            <button class="btn-mini" id="compareSplitBtn" title="Before / After Split Wipe">Split Wipe: OFF</button>
+          </div>
+        </div>
+
+        <!-- HTML5 REAL-TIME VFX & LYRIC RENDERING CANVAS -->
+        <div class="canvas-stage" id="canvasStage">
+          <canvas id="livePreviewCanvas" width="720" height="405"></canvas>
+          <video id="userUploadedVideo" loop muted playsinline style="display:none;"></video>
+        </div>
+
+        <!-- TRANSPORT BAR -->
+        <div class="transport-bar">
+          <button class="transport-btn" id="playPauseBtn">Pause</button>
+          <button class="transport-btn" id="triggerHitNowBtn" title="Trigger transient impulse at current frame">Trigger Transient</button>
+          <div class="scrubber-wrap">
+            <input type="range" id="timelineScrubber" min="0" max="1000" value="180" />
+          </div>
+          <span class="transport-dur" id="transportDurLabel">02.9s / 16.0s</span>
+          <span class="preview-quality" id="previewQuality" title="Adaptive preview resolution — drops before frame rate does">Preview 100%</span>
+        </div>
+      </div>
+
+      <!-- MULTI-TRACK DAVINCI RESOLVE TIMELINE PREVIEW -->
+      <div class="timeline-card">
+        <div class="timeline-header">
+          <div class="tl-title-group">
+            <strong id="activeTimelineTitle">Timeline 1 — MASTER_EDIT_2398fps</strong>
+          </div>
+          <div class="tl-actions">
+            <button class="btn-mini" id="clearVfxTrackBtn">Clear V3 Nodes</button>
+            <button class="btn-mini accent" id="openLuaDrawerBtn">Resolve 21.1.1 Lua</button>
+          </div>
+        </div>
+
+        <div class="timeline-tracks" id="timelineTracksContainer">
+          <div class="tl-playhead" id="tlPlayhead" style="left: 18%;"></div>
+
+          <div class="tl-track">
+            <div class="tl-track-label vfx-label">V3 • Fusion FX</div>
+            <div class="tl-track-lane" id="laneV3"></div>
+          </div>
+
+          <div class="tl-track">
+            <div class="tl-track-label sub-label">V2/ST • LYRC</div>
+            <div class="tl-track-lane" id="laneSub"></div>
+          </div>
+
+          <div class="tl-track">
+            <div class="tl-track-label v2-label">V2 • B-Roll</div>
+            <div class="tl-track-lane" id="laneV2"></div>
+          </div>
+
+          <div class="tl-track">
+            <div class="tl-track-label v1-label">V1 • Picture</div>
+            <div class="tl-track-lane" id="laneV1"></div>
+          </div>
+
+          <div class="tl-track">
+            <div class="tl-track-label a1-label">A1 • Master</div>
+            <div class="tl-track-lane" id="laneA1"></div>
+          </div>
+        </div>
+
+        <!-- LIVE RESOLVE LUA / BRIDGE LOG DRAWER -->
+        <div class="lua-drawer" id="luaDrawer">
+          <div class="lua-drawer-head">
+            <span>DaVinci Resolve Free 21.1.1 — Live Bridge & Console Output</span>
+            <div class="lua-drawer-btns">
+              <button class="btn-mini" id="copyLuaBtn">Copy Lua Snippet</button>
+              <a class="btn-mini" href="/download/bridge.lua" download="VFXKit_ResolveFree_Bridge.lua">Download Bridge .lua</a>
+            </div>
+          </div>
+          <pre class="lua-code-box" id="luaCodeOutput">-- Click any optical preset, LYRC style, Silence Cut, or Media Pool Assembly
+-- to dispatch via the Resolve Free 21.1.1 File-Mailbox Bridge
+-- or copy the generated Lua snippet into Workspace > Console > Lua.</pre>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- STYLE LAB: A/B/C/D LOOK COMPARISON SHEET -->
+  <section class="style-lab hidden" id="styleLab">
+    <div class="style-lab-head">
+      <div>
+        <div class="sl-kicker">STYLE LAB</div>
+        <h2 id="styleLabTitle">Pick a look, side by side</h2>
+        <p id="styleLabSub">Eight candidates rendered at three beats each. Click one to apply it to the monitor and the Resolve timeline.</p>
+      </div>
+      <div class="style-lab-actions">
+        <button class="btn-secondary" id="styleLabRefreshBtn">Re-render Set</button>
+        <button class="btn-ghost" id="styleLabCloseBtn">Close</button>
+      </div>
+    </div>
+    <div class="style-lab-tabs">
+      <button class="sl-tab active" data-lab="vfx">Optical Looks</button>
+      <button class="sl-tab" data-lab="lyrc">LYRC Styles</button>
+      <span class="sl-note">Same three timestamps across every candidate — judge the look, not the frame.</span>
+    </div>
+    <div class="style-lab-grid" id="styleLabGrid"></div>
+  </section>
+
+  <!-- MODAL: HOW THE RESOLVE FREE 21.1.1 MACOS BRIDGE WORKS + 1-CLICK INSTALL -->
+  <div class="modal-backdrop hidden" id="bridgeModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2>DaVinci Resolve Free 21.1.1 — macOS Bridge Architecture</h2>
+          <p>File-Mailbox (loadfile) + Fusion.prefs two-way IPC for Resolve Free 21.1.1</p>
+        </div>
+        <button class="modal-close" id="closeBridgeModalBtn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="callout-warning">
+          <strong>Technical Architecture for DaVinci Resolve Free 21.1 / 21.1.1:</strong>
+          <p>
+            Resolve 19.1 restricted <code>UIManager</code> to Studio, and Resolve 21.1 disabled Python (<code>.py</code>) scripts in the Free tier while sandboxing Lua (blocking <code>io.open</code>, <code>os.execute</code>, and <code>require</code>).
+          </p>
+          <p style="margin-top:6px;">
+            <strong>How Our Bridge Works:</strong> Resolve Free 21.1.1 still runs <code>.lua</code> scripts from <code>Workspace ▸ Scripts</code> with access to <code>resolve</code>, <code>MediaPool</code>, <code>Timeline</code>, <code>Fusion</code>, <code>loadfile()</code>, and <code>fusion:SavePrefs()</code>. Our resident script (<code>VFXKit_ResolveFree_Bridge.lua</code>) polls commands via <code>loadfile()</code> and returns JSON through <code>Fusion.prefs</code> in ~50ms.
+          </p>
+        </div>
+
+        <div class="setup-steps">
+          <div class="setup-step">
+            <span class="step-num">1</span>
+            <div>
+              <h4>Install Bridge & Native Fusion Macros (macOS)</h4>
+              <p>Copies <code>VFXKit_ResolveFree_Bridge.lua</code> to <code>~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/</code> and installs our native <code>.setting</code> macros.</p>
+              <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn-primary" id="installBridgeNowBtn">Install to macOS Resolve Paths</button>
+                <a class="btn-secondary" href="/download/bridge.lua" download="VFXKit_ResolveFree_Bridge.lua">Download VFXKit_ResolveFree_Bridge.lua</a>
+              </div>
+              <div id="installResultBox" class="install-result"></div>
+            </div>
+          </div>
+
+          <div class="setup-step">
+            <span class="step-num">2</span>
+            <div>
+              <h4>Start Bridge in DaVinci Resolve Free 21.1.1</h4>
+              <p>Open your project in DaVinci Resolve 21.1.1 and select:</p>
+              <code class="path-code">Workspace ▸ Scripts ▸ VFXKit_ResolveFree_Bridge</code>
+            </div>
+          </div>
+
+          <div class="setup-step">
+            <span class="step-num">3</span>
+            <div>
+              <h4>Use Pop-Up Dock Mode Alongside Resolve</h4>
+              <p>Click <strong>"Pop-Up Dock Mode"</strong> in the top bar to dock this window beside your Resolve viewer.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+{
+	Tools = ordered() {
+		VFXKit_AnalogGateWeave = MacroOperator {
+			Inputs = ordered() {
+				MainInput1 = InstanceInput {
+					SourceOp = "GateShake",
+					Source = "Input",
+				},
+				Input1 = InstanceInput {
+					SourceOp = "GateShake",
+					Source = "OverallStrength",
+					Name = "Weave Amplitude",
+					Default = 0.2,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "GateScan",
+					Source = "ScanLines",
+					Name = "Print Flicker",
+					Default = 0.08,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "GateScan",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				GateShake = CameraShake {
+					Inputs = {
+						XDeviation = Input { Value = 0.006, },
+						YDeviation = Input { Value = 0.005, },
+						RotationDeviation = Input { Value = 0.28, },
+						OverallStrength = Input { Value = 0.2, },
+						Speed = Input { Value = 3.2, },
+						MotionBlur = Input { Value = 1, },
+						ShutterAngle = Input { Value = 120, },
+						Edges = Input { Value = 3, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 275, 49.5 } },
+				},
+				GateScan = TV {
+					Inputs = {
+						ScanLines = Input { Value = 0.08, },
+						Horizontal = Input { Value = 0, },
+						Vertical = Input { Value = 0, },
+						Skew = Input { Value = 0, },
+						BarStrength = Input { Value = 0, },
+						Input = Input {
+							SourceOp = "GateShake",
+							Source = "Output",
+						},
+					},
+					ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "VFXKit_AnalogGateWeave"
+}

@@ -1,0 +1,51 @@
+{
+	Tools = ordered() {
+		VFXKit_ChromaBleedVHS = MacroOperator {
+			Inputs = ordered() {
+				MainInput1 = InstanceInput {
+					SourceOp = "TapeNode",
+					Source = "Input",
+				},
+				Input1 = InstanceInput {
+					SourceOp = "TapeNode",
+					Source = "ScanLines",
+					Name = "Line Softness",
+					Default = 0.18,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "TapeNode",
+					Source = "BarStrength",
+					Name = "Head Switch Tear",
+					Default = 0.12,
+				},
+				Input3 = InstanceInput {
+					SourceOp = "TapeNode",
+					Source = "Skew",
+					Name = "Chroma Skew",
+					Default = 0.05,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "TapeNode",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				TapeNode = TV {
+					Inputs = {
+						ScanLines = Input { Value = 0.18, },
+						Horizontal = Input { Value = 0.03, },
+						Vertical = Input { Value = 0.012, },
+						Skew = Input { Value = 0.05, },
+						BarStrength = Input { Value = 0.12, },
+						BarSize = Input { Value = 0.09, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "VFXKit_ChromaBleedVHS"
+}

@@ -1,0 +1,46 @@
+{
+	Tools = ordered() {
+		VFXKit_CRTRetroSignal = MacroOperator {
+			Inputs = ordered() {
+				MainInput1 = InstanceInput {
+					SourceOp = "CRTNode",
+					Source = "Input",
+				},
+				Input1 = InstanceInput {
+					SourceOp = "CRTNode",
+					Source = "ScanLines",
+					Name = "Scanline Density",
+					Default = 0.65,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "CRTNode",
+					Source = "BarStrength",
+					Name = "VHS Roll Bar",
+					Default = 0.25,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "CRTNode",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				CRTNode = TV {
+					CtrlWZoom = false,
+					Inputs = {
+						ScanLines = Input { Value = 0.65, },
+						Horizontal = Input { Value = 0.04, },
+						Vertical = Input { Value = 0.02, },
+						Skew = Input { Value = 0.08, },
+						BarStrength = Input { Value = 0.25, },
+						BarSize = Input { Value = 0.18, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "VFXKit_CRTRetroSignal"
+}

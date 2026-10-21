@@ -1,0 +1,92 @@
+{
+	Tools = ordered() {
+		VFXKit_LyrcKineticEngine = MacroOperator {
+			Inputs = ordered() {
+				Input1 = InstanceInput {
+					SourceOp = "PrimaryLyricText",
+					Source = "StyledText",
+					Name = "Phrase Text",
+					DefaultText = "BLAME IT ON YOU",
+				},
+				Input2 = InstanceInput {
+					SourceOp = "PrimaryLyricText",
+					Source = "Size",
+					Name = "Text Size",
+					Default = 0.095,
+				},
+				Input3 = InstanceInput {
+					SourceOp = "KnockoutBox",
+					Source = "TopLeftRed",
+					Name = "Redline Accent Red",
+					Default = 0.93,
+				},
+				Input4 = InstanceInput {
+					SourceOp = "KineticTransform",
+					Source = "Size",
+					Name = "Entrance Pop Scale",
+					Default = 1.0,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "KineticTransform",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				KnockoutBox = Background {
+					Inputs = {
+						Width = Input { Value = 1920, },
+						Height = Input { Value = 1080, },
+						TopLeftRed = Input { Value = 0.93, },
+						TopLeftGreen = Input { Value = 0.16, },
+						TopLeftBlue = Input { Value = 0.22, },
+						TopLeftAlpha = Input { Value = 0.92, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 275, 16.5 } },
+				},
+				PrimaryLyricText = TextPlus {
+					Inputs = {
+						Width = Input { Value = 1920, },
+						Height = Input { Value = 1080, },
+						StyledText = Input { Value = "BLAME IT ON YOU", },
+						Font = Input { Value = "Open Sans", },
+						Style = Input { Value = "Extrabold", },
+						Size = Input { Value = 0.095, },
+						VerticalJustificationNew = Input { Value = 3, },
+						HorizontalJustificationNew = Input { Value = 3, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 275, 82.5 } },
+				},
+				MergeLyric = Merge {
+					Inputs = {
+						Background = Input {
+							SourceOp = "KnockoutBox",
+							Source = "Output",
+						},
+						Foreground = Input {
+							SourceOp = "PrimaryLyricText",
+							Source = "Output",
+						},
+					},
+					ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+				},
+				KineticTransform = Transform {
+					Inputs = {
+						Size = Input { Value = 1.0, },
+						MotionBlur = Input { Value = 1, },
+						Quality = Input { Value = 6, },
+						ShutterAngle = Input { Value = 180, },
+						Input = Input {
+							SourceOp = "MergeLyric",
+							Source = "Output",
+						},
+					},
+					ViewInfo = OperatorInfo { Pos = { 495, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "VFXKit_LyrcKineticEngine"
+}

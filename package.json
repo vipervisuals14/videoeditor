@@ -1,0 +1,15 @@
+{
+  "name": "pulsevfx-resolve-free-studio",
+  "version": "1.0.0",
+  "description": "StayCreative VFX Kit-style Pop-Up Extension & AI Timeline Suite for DaVinci Resolve Free 21.1.1 (macOS/Win/Linux)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "install-resolve-mac": "bash ./install-macos-resolve-free.sh"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

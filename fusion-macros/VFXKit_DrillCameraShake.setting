@@ -1,0 +1,55 @@
+{
+	Tools = ordered() {
+		VFXKit_DrillCameraShake = MacroOperator {
+			Inputs = ordered() {
+				MainInput1 = InstanceInput {
+					SourceOp = "ShakeNode",
+					Source = "Input",
+				},
+				Input1 = InstanceInput {
+					SourceOp = "ShakeNode",
+					Source = "OverallStrength",
+					Name = "Shake Intensity",
+					Default = 0.45,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "ShakeNode",
+					Source = "Speed",
+					Name = "Shake Speed (Beat Sync)",
+					Default = 0.85,
+				},
+				Input3 = InstanceInput {
+					SourceOp = "ShakeNode",
+					Source = "Edges",
+					Name = "Motion Mirror Edges",
+					Default = 3,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "ShakeNode",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				ShakeNode = CameraShake {
+					CtrlWZoom = false,
+					Inputs = {
+						XDeviation = Input { Value = 0.08, },
+						YDeviation = Input { Value = 0.06, },
+						RotationDeviation = Input { Value = 2.5, },
+						OverallStrength = Input { Value = 0.45, },
+						Speed = Input { Value = 0.85, },
+						MotionBlur = Input { Value = 1, },
+						Quality = Input { Value = 6, },
+						ShutterAngle = Input { Value = 240, },
+						Edges = Input { Value = 3, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "VFXKit_DrillCameraShake"
+}

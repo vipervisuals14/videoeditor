@@ -1,0 +1,72 @@
+{
+	Tools = ordered() {
+		VFXKit_ImpactEnergyHit = MacroOperator {
+			Inputs = ordered() {
+				MainInput1 = InstanceInput {
+					SourceOp = "HitFlash",
+					Source = "Input",
+				},
+				Input1 = InstanceInput {
+					SourceOp = "HitFlash",
+					Source = "Gain",
+					Name = "Flash Punch Gain",
+					Default = 2.1,
+				},
+				Input2 = InstanceInput {
+					SourceOp = "HitZoom",
+					Source = "Size",
+					Name = "Punch-In Scale",
+					Default = 1.14,
+				},
+				Input3 = InstanceInput {
+					SourceOp = "HitGlow",
+					Source = "Gain",
+					Name = "Aura Glow Hit",
+					Default = 1.4,
+				},
+			},
+			Outputs = {
+				MainOutput1 = InstanceOutput {
+					SourceOp = "HitGlow",
+					Source = "Output",
+				}
+			},
+			ViewInfo = GroupInfo { Pos = { 0, 0 } },
+			Tools = ordered() {
+				HitFlash = BrightnessContrast {
+					Inputs = {
+						Gain = Input { Value = 2.1, },
+						Contrast = Input { Value = 0.22, },
+						Saturation = Input { Value = 1.25, },
+					},
+					ViewInfo = OperatorInfo { Pos = { 275, 49.5 } },
+				},
+				HitZoom = Transform {
+					Inputs = {
+						Size = Input { Value = 1.14, },
+						Edges = Input { Value = 3, },
+						MotionBlur = Input { Value = 1, },
+						Input = Input {
+							SourceOp = "HitFlash",
+							Source = "Output",
+						},
+					},
+					ViewInfo = OperatorInfo { Pos = { 385, 49.5 } },
+				},
+				HitGlow = SoftGlow {
+					Inputs = {
+						Threshold = Input { Value = 0.45, },
+						Gain = Input { Value = 1.4, },
+						XGlowSize = Input { Value = 22, },
+						Input = Input {
+							SourceOp = "HitZoom",
+							Source = "Output",
+						},
+					},
+					ViewInfo = OperatorInfo { Pos = { 495, 49.5 } },
+				}
+			},
+		}
+	},
+	ActiveTool = "VFXKit_ImpactEnergyHit"
+}
