@@ -477,6 +477,7 @@ const state = {
   bloom: 0.65,
   scene: 'music_video',
   userVideo: null,
+  userImage: null,
   lyricsText: DEFAULT_LYRICS,
   lyricPreset: LYRC_PRESETS[0],
   lyricCategory: 'ALL',
@@ -1313,14 +1314,15 @@ function computeRenderConfig(t, effects, amt) {
 
 function renderPlate(rt, cfg) {
   envCtx.clearRect(0, 0, VIEW.w, VIEW.h);
-  const video = state.userVideo;
-  if (state.scene === 'upload' && video && video.readyState >= 2 && video.videoWidth) {
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
-    const scale = Math.max(VIEW.w / vw, VIEW.h / vh);
-    const dw = vw * scale;
-    const dh = vh * scale;
-    envCtx.drawImage(video, (VIEW.w - dw) / 2, (VIEW.h - dh) / 2, dw, dh);
+  const media = state.userImage || state.userVideo;
+  const mediaW = state.userImage ? state.userImage.naturalWidth : (state.userVideo ? state.userVideo.videoWidth : 0);
+  const mediaH = state.userImage ? state.userImage.naturalHeight : (state.userVideo ? state.userVideo.videoHeight : 0);
+  const mediaReady = state.userImage ? state.userImage.complete : (state.userVideo && state.userVideo.readyState >= 2);
+  if (state.scene === 'upload' && media && mediaReady && mediaW && mediaH) {
+    const scale = Math.max(VIEW.w / mediaW, VIEW.h / mediaH);
+    const dw = mediaW * scale;
+    const dh = mediaH * scale;
+    envCtx.drawImage(media, (VIEW.w - dw) / 2, (VIEW.h - dh) / 2, dw, dh);
   } else {
     drawEnvironment(envCtx, VIEW.w, VIEW.h, rt, state.scene);
   }
@@ -3681,7 +3683,7 @@ function candidateSet(kind) {
       id: p.id, name: p.name, spec: p.cat.toUpperCase(), desc: p.desc, preset: p, kind: 'lyrc'
     }));
   }
-  const picks = ['print2383', 'anamorphic', 'bleach', 'stepprint', 'snorricam', 'pvm', 'splitdiopter', 'vhs'];
+  const picks = ['print2383', 'bleach', 'dayfornight', 'stepprint', 'snorricam', 'pvm', 'vhs', 'splitdiopter'];
   return picks.map((id) => {
     const p = VFX_PRESETS.find((x) => x.id === id) || VFX_PRESETS[0];
     return { id: p.id, name: p.name, spec: p.spec, desc: p.desc, preset: p, kind: 'vfx' };
@@ -3805,14 +3807,28 @@ function initScenes() {
       const file = input.files && input.files[0];
       if (!file) return;
       const url = URL.createObjectURL(file);
-      const video = $('userUploadedVideo');
-      video.src = url;
-      video.style.display = 'block';
-      video.play().catch(() => {});
-      state.userVideo = video;
-      state.scene = 'upload';
       document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
-      showToast('Loaded ' + file.name + ' — preview now reads your footage');
+      state.scene = 'upload';
+
+      if (file.type.startsWith('image/')) {
+        const img = new Image();
+        img.onload = () => {
+          state.userImage = img;
+          state.userVideo = null;
+          showToast('Still plate loaded: ' + file.name);
+        };
+        img.src = url;
+      } else {
+        const video = $('userUploadedVideo');
+        video.src = url;
+        video.style.display = 'block';
+        video.loop = true;
+        video.muted = true;
+        video.play().catch(() => {});
+        state.userVideo = video;
+        state.userImage = null;
+        showToast('Loaded ' + file.name + ' — preview now reads your footage');
+      }
     });
   }
 }
