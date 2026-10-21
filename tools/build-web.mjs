@@ -11,6 +11,7 @@
  * you to paste into Workspace ▸ Console.
  */
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -62,6 +63,18 @@ async function main() {
     path.join(ROOT, 'resolve-bridge', 'VFXKit_ResolveFree_Bridge.lua'),
     path.join(OUT, 'VFXKit_ResolveFree_Bridge.lua')
   );
+
+  // A ready-to-upload zip, so "deploy" can be: download one file, drag it onto
+  // a host. Built with the system zip binary (present on macOS + CI images).
+  const zipPath = path.join(ROOT, 'web-deploy.zip');
+  try {
+    await rm(zipPath, { force: true });
+    execFileSync('zip', ['-qr', zipPath, '.'], { cwd: OUT });
+    await cp(zipPath, path.join(OUT, 'web-deploy.zip'));
+    console.log('\n  web-deploy.zip written (' + ((await stat(zipPath)).size / 1024).toFixed(0) + ' KB)');
+  } catch (err) {
+    console.warn('\n  (skipped web-deploy.zip: ' + (err && err.message) + ')');
+  }
 
   const files = await readdir(OUT);
   let total = 0;
