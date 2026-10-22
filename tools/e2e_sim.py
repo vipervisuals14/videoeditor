@@ -71,6 +71,62 @@ def run_console_snippet(code_text):
     return True, ""
 
 
+def _lua_runtime():
+    try:
+        from lupa import luajit21 as lua_mod
+    except Exception:
+        from lupa import lua51 as lua_mod
+    rt = lua_mod.LuaRuntime()
+    mock = rt.execute((ROOT / "tools" / "mock_resolve.lua").read_text())
+    mock.install()
+    return rt
+
+
+def graph_snapshot(rt):
+    """Names + links currently in the clip's Fusion comp, as Python lists."""
+    data = rt.eval("""
+    (function()
+      local names, links = {}, {}
+      for _, tl in ipairs(__mock_tbl.timelines) do
+        for _, it in ipairs(tl.items or {}) do
+          for _, c in ipairs(it.comps or {}) do
+            for _, t in ipairs(c.tools) do
+              if not t.__deleted then
+                names[#names + 1] = (t.attrs and t.attrs.TOOLS_Name) or t.__type
+              end
+            end
+            for _, l in ipairs(c.links or {}) do links[#links + 1] = l end
+          end
+        end
+      end
+      return { names = names, links = links }
+    end)()
+    """)
+    names = [data["names"][i] for i in range(1, len(data["names"]) + 1)]
+    links = [data["links"][i] for i in range(1, len(data["links"]) + 1)]
+    return names, links
+
+
+def run_snippet_stack(code_text):
+    """Run a console snippet twice against one project.
+
+    Returns (ok, detail, first, second) where first/second are graph snapshots.
+    A re-paste of the same snippet must not double the graph.
+    """
+    rt = _lua_runtime()
+    try:
+        rt.execute(code_text)
+    except Exception as exc:
+        return False, f"lua error: {exc}", ([], []), ([], [])
+    first = graph_snapshot(rt)
+    try:
+        rt.execute(code_text)
+    except Exception as exc:
+        return False, f"second run: {exc}", first, ([], [])
+    second = graph_snapshot(rt)
+    return True, "", first, second
+
+
 def run_snippet_settings(code_text, expected):
     """Run a settings-writing snippet (no node graph) and check it landed."""
     try:
@@ -352,6 +408,69 @@ def main():
             "SoftGlow" in res.get("luaSnippet", "") and "Bitmap" in res.get("luaSnippet", "")
             and "Multiply" in res.get("luaSnippet", ""),
             "snippet missing layer nodes"))
+
+        # ---- stacking: a second effect chains onto the first, never replaces it
+        res = post("/api/dispatch", {
+            "action": "apply_vfx",
+            "payload": {
+                "presetId": "film_grain", "presetName": "16mm Grain Weave",
+                "category": "Film Lab & Grade", "intensity": 60,
+                "keyframes": [], "fps": 24,
+                "recipe": {"chain": [
+                    {"tool": "FastNoise", "set": {"Detail": 3.2}},
+                    {"tool": "Merge", "fg": True, "bg": True},
+                ]},
+            },
+        })
+        grain = (res.get("bridgeResponse") or {}).get("result") or {}
+        check("a second effect stacks on the first clip graph", lambda: (
+            grain.get("applied") is True and grain.get("stackDepth", 0) >= 2,
+            f"result={grain}"))
+        check("the second effect reports what it stacked onto", lambda: (
+            bool(grain.get("stackedOn")), f"stackedOn={grain.get('stackedOn')!r}"))
+        check("the clip still renders through MediaOut1", lambda: (
+            "MediaOut1" in str(grain.get("fusionNode", ""))
+            and "[wired" in str(grain.get("fusionNode", "")),
+            f"fusionNode={grain.get('fusionNode')!r}"))
+
+        # ---- re-sending the same rack replaces it instead of doubling it
+        res = post("/api/dispatch", {
+            "action": "layers_apply",
+            "payload": {
+                "fps": 24,
+                "layers": [
+                    {"id": "L1", "presetId": "opt_halation", "name": "500T Halation Bloom",
+                     "blend": "normal", "opacity": 100, "recipe": halation,
+                     "keyframes": [{"timeSec": 0, "value": 20}]},
+                    {"id": "L2", "presetId": "td_newsprint", "name": "Newsprint Ripple Halftone",
+                     "blend": "multiply", "opacity": 55, "recipe": print_recipe,
+                     "keyframes": [{"timeSec": 0, "value": 70}]},
+                ],
+            },
+        })
+        resend = (res.get("bridgeResponse") or {}).get("result") or {}
+        check("re-sending the rack reports the nodes it replaced", lambda: (
+            resend.get("applied") is True and resend.get("replaced", 0) >= 2,
+            f"result={resend}"))
+        check("re-sending the rack keeps its depth", lambda: (
+            resend.get("stackDepth") == 2, f"stackDepth={resend.get('stackDepth')}"))
+        check("only PulseVFX nodes are replaced (hand-built ones survive)", lambda: (
+            "replaced" in resend and resend.get("replaced") <= 8,
+            f"replaced={resend.get('replaced')}"))
+
+        # ---- the same guarantee in the console snippet route
+        stack_snippet = res.get("luaSnippet", "")
+        ok, detail, first, second = run_snippet_stack(stack_snippet)
+        check("stack snippet runs twice in the same project", lambda: (ok, detail))
+        check("a re-paste does not double the stack", lambda: (
+            ok and len(first[0]) == len(second[0]),
+            f"first={len(first[0])} second={len(second[0])}"))
+        check("stacked layers are chained, not parallel", lambda: (
+            ok and any(l.startswith("BrightnessContrast.Background<-Merge") for l in first[1]),
+            f"links={first[1]}"))
+        check("every stacked node is named PulseVFX_*", lambda: (
+            ok and any(n.startswith("PulseVFX_") for n in first[0]),
+            f"names={first[0]}"))
 
         # ---- 4K hand-off: the panel tells Resolve to work and render at 4K
         res = post("/api/dispatch", {

@@ -188,6 +188,27 @@
           <span><strong>Pick an effect below</strong> to open its intensity curve and keyframes.</span>
         </div>
 
+        <!-- STACK: every look you stack runs after the one before it, in this
+             order, on one clip. Collapsed until the first look is stacked. -->
+        <div class="stack-panel" id="stackPanel" data-module="layers" data-label="Effect Stack">
+          <div class="stack-head">
+            <div class="stack-headline">
+              <span class="stack-kicker">Stack</span>
+              <strong id="stackSummary">Nothing stacked yet</strong>
+            </div>
+            <div class="stack-chips" id="stackChips"></div>
+            <div class="stack-actions">
+              <button class="btn-mini" id="addLayerBtn" title="Stack the look you are previewing">+ Stack current</button>
+              <button class="btn-mini" id="stackToggleBtn" aria-expanded="false" aria-controls="layerRack">Details</button>
+              <button class="btn-mini" id="clearLayersBtn" title="Empty the stack (nothing in Resolve or on the timeline changes)">Clear</button>
+              <button class="btn-primary" id="applyLayersBtn" disabled>Send stack to Resolve</button>
+            </div>
+          </div>
+          <div class="stack-body">
+            <div class="layer-rack" id="layerRack"></div>
+          </div>
+        </div>
+
         <!-- 8 CATEGORY SUB-TABS (INCLUDING TOUCHDESIGNER TOPs & TRANSITIONS) -->
         <div class="vfx-subtabs-bar" data-module="presets" data-label="Effect Browser">
           <div class="vfx-subtabs" id="vfxCategoryTabs">
@@ -278,7 +299,7 @@
 
         <!-- ADVANCED TOOLS: collapsed until asked for -->
         <button class="advanced-toggle" id="advancedToolsBtn" aria-expanded="false">
-          <span>More tools — Look Director (type a look) · Effect Layers (stack looks)</span>
+          <span>More tools — Look Director (type a look)</span>
           <span class="adv-caret">▾</span>
         </button>
         <div class="advanced-tools hidden" id="advancedTools">
@@ -306,21 +327,6 @@
           </div>
         </div>
 
-        <!-- EFFECT LAYER STACK: layer any looks, in order, with opacity + blend -->
-        <div class="layer-panel" data-module="layers" data-label="Effect Layers">
-          <div class="layer-panel-head">
-            <div>
-              <h3>Effect Layers <span class="layer-count-badge hidden" id="layerCountBadge">0</span></h3>
-              <p>Stack looks on top of each other. Each layer keeps its own intensity, opacity and blend mode, and the whole rack goes to Resolve as one ordered graph.</p>
-            </div>
-            <div class="header-btn-group">
-              <button class="btn-secondary" id="addLayerBtn" title="Add the highlighted effect card as a new layer">＋ Add Current Effect</button>
-              <button class="btn-mini" id="clearLayersBtn" title="Remove every layer">Clear</button>
-              <button class="btn-primary" id="applyLayersBtn">Send Stack to Resolve</button>
-            </div>
-          </div>
-          <div class="layer-rack" id="layerRack"></div>
-        </div>
         </div>
       </div>
 

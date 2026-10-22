@@ -32,10 +32,42 @@ local GENERATORS = {
   FastNoise = true, ColorSolid = true, Rectangle = true, Ellipse = true
 }
 
+local function str_serial(n) return "_" .. tostring(n) end
+
 local function new_tool(comp, tool_type, x, y)
-  local t = { __type = tool_type, __inputs = {}, Output = { __out = tool_type } }
+  -- raw fields, because the metatable's __index returns a callable proxy for any
+  -- unknown key: a missing flag would read as truthy and hide the tool
+  local t = { __type = tool_type, __inputs = {}, Output = { __out = tool_type },
+              attrs = { TOOLS_Type = tool_type }, __deleted = false }
+  local serial = (comp.__serial or 0) + 1
+  comp.__serial = serial
+  t.attrs.TOOLS_Name = tool_type .. str_serial(serial)
+  t.Name = t.attrs.TOOLS_Name
+  -- Fusion's Output objects know which tool produced them. pvfx_tail() reads
+  -- MediaOut1.Input:GetTool() to find the end of the stack.
+  t.Output.GetTool = function() return t end
   t.SetInput = function(self, name, value) self.__inputs[name] = value; rec("SetInput", tool_type .. "." .. tostring(name)); return true end
   t.GetInput = function(self, name) return self.__inputs[name] end
+  t.SetAttrs = function(self, tbl)
+    for k, v in pairs(tbl or {}) do self.attrs[k] = v end
+    if self.attrs.TOOLS_Name then
+      self.Name = self.attrs.TOOLS_Name
+      if comp.by_name then comp.by_name[self.attrs.TOOLS_Name] = self end
+    end
+    rec("tool:SetAttrs", tostring(tool_type) .. "=" .. tostring(self.attrs.TOOLS_Name))
+    return true
+  end
+  t.GetAttrs = function(self) return self.attrs end
+  t.Delete = function(self)
+    rawset(self, "__deleted", true)
+    for _, other in ipairs(comp.tools) do
+      for name, val in pairs(other.__inputs) do
+        if val == self.Output then other.__inputs[name] = nil end
+      end
+    end
+    rec("tool:Delete", tool_type)
+    return true
+  end
   t.__index_fallback = true
   setmetatable(t, {
     __newindex = function(tbl, k, v)
@@ -46,12 +78,22 @@ local function new_tool(comp, tool_type, x, y)
         rec("Link", tool_type .. "." .. tostring(k) .. "<-" .. tostring(v.__out))
         comp.links[#comp.links + 1] = tool_type .. "." .. tostring(k) .. "<-" .. tostring(v.__out)
       end
+      -- Image inputs stay in __inputs only. Fusion lets you re-assign the same
+      -- input repeatedly, which is exactly how an effect is stacked, so the mock
+      -- must not freeze the first value as a raw field (that would skip
+      -- __newindex on the second assignment).
+      if tbl.__inputs and type(v) == "table" and v.__out then
+        tbl.__inputs[k] = v
+        return
+      end
+      if tbl.__inputs then tbl.__inputs[k] = v end
       rawset(tbl, k, v)
       rec("ToolSet", tool_type .. "." .. tostring(k))
     end,
     __index = function(tbl, k)
       local v = rawget(tbl, k)
       if v ~= nil then return v end
+      if tbl.__inputs[k] ~= nil then return tbl.__inputs[k] end
       if k == "Output" then return { __out = tool_type } end
       -- Unknown members act like Fusion methods (Paint:ApplyBrush, Tracker:Track…):
       -- keep them addressable and record the call so the harness can assert on it.
@@ -98,6 +140,13 @@ local function new_comp(item)
     if name == "MediaIn1" or name == "MediaIn" then return self.media_in end
     if name == "MediaOut1" or name == "MediaOut" then return self.media_out end
     return self.by_name[name]
+  end
+  comp.GetToolList = function(self, selected, regid)
+    local list = {}
+    for _, tool in ipairs(self.tools) do
+      if not rawget(tool, "__deleted") then list[#list + 1] = tool end
+    end
+    return list
   end
   comp.BezierSpline = function(self)
     local sp = { __type = "BezierSpline", frames = {} }

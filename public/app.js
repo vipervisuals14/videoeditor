@@ -1228,9 +1228,7 @@ function loadUiPrefs() {
     // "on" because the app used to default to on, so they are ignored once.
     if (prefs.v >= 2 && typeof prefs.lyrics === 'boolean') state.showLyricsOverlay = prefs.lyrics;
     if (prefs.hidden && typeof prefs.hidden === 'object') state.hiddenModules = prefs.hidden;
-    if (prefs.depthEngine === 'ai' || prefs.depthEngine === 'ai-hq' || prefs.depthEngine === 'fast') {
-      state.depthEnginePref = prefs.depthEngine;
-    }
+    if (prefs.depthEngine === 'ai' || prefs.depthEngine === 'fast') state.depthEnginePref = prefs.depthEngine;
   } catch (_e) { /* ignore corrupt prefs */ }
 }
 
@@ -1815,12 +1813,15 @@ function renderVfxGrid() {
     const isSel = state.activePreset && state.activePreset.id === p.id;
     const kfs = KF.tracks[p.id] || [];
     const val = Math.round(kfs.length ? evalKeyframes(kfs, state.playheadSec) : baseIntensity(p.id));
+    const stackIdx = stackIndexOf(p.id);
+    const inStack = stackIdx >= 0;
     return `
-      <div class="vfx-card ${isSel ? 'selected' : ''}" data-id="${p.id}">
+      <div class="vfx-card ${isSel ? 'selected' : ''} ${inStack ? 'stacked' : ''}" data-id="${p.id}">
         <div class="vfx-thumb">
           <canvas class="vfx-thumb-canvas" width="180" height="62" data-thumbtype="${p.effectType}" data-accent="${p.accent}"></canvas>
           <span class="vfx-thumb-badge">${p.category}</span>
           <span class="vfx-thumb-spec" style="background:${p.accent};">${p.spec}</span>
+          ${inStack ? `<span class="vfx-stack-badge" title="Position in the stack">${stackIdx + 1}</span>` : ''}
         </div>
         <div class="vfx-card-body">
           <div class="vfx-card-title">${p.name}</div>
@@ -1835,7 +1836,8 @@ function renderVfxGrid() {
           </div>
           <div class="vfx-card-foot">
             <span class="vfx-node-tag">${p.node}</span>
-            <button class="vfx-apply-btn" data-apply="${p.id}">+ Apply</button>
+            <button class="vfx-apply-btn ${inStack ? 'in-stack' : ''}" data-apply="${p.id}"
+              title="${inStack ? 'Add another copy of this look on top of the stack' : 'Add this look to the stack'}">${inStack ? '+ Stack again' : '+ Stack'}</button>
           </div>
         </div>
       </div>
@@ -1863,6 +1865,13 @@ function renderVfxGrid() {
       if (track && track.length) {
         addKeyframe(id, state.playheadSec, v);
       }
+      // A stacked look has a layer, and the layer is what Resolve builds. Slide
+      // here and the pass you will send moves with it.
+      const stacked = stackLayersFor(id);
+      if (stacked.length) {
+        stacked.forEach((layer) => { layer.intensity = v; });
+        renderLayerRack();
+      }
       if (out) out.textContent = `${v}%`;
       if (state.activePreset && state.activePreset.id === id) {
         syncKeyframeInspector();
@@ -1870,32 +1879,19 @@ function renderVfxGrid() {
     });
   });
 
-  // Per-card keyframe button — stamps a keyframe at the playhead
-  // + Apply is the only thing that sends a graph to Resolve and writes a clip
-  // onto the V3 lane.
+  // + Stack is the only control that touches the stack. Nothing reaches Resolve
+  // and nothing lands on the V3 lane until the whole stack is sent, so two,
+  // three or eight looks compound into one graph in one press.
   grid.querySelectorAll('[data-apply]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const preset = VFX_PRESETS.find((x) => x.id === btn.dataset.apply);
       if (!preset) return;
-      state.activePreset = preset;
+      addEffectLayer(preset);
+      selectPreset(preset);
       state.presetPicked = true;
-      state.hitFlashBurst = 0.85;
       revealKeyframeEditor();
-      document.getElementById('activeFxPill').textContent = `Applied: ${preset.name}`;
-      renderVfxGrid();
-      syncKeyframeInspector();
-
-      const span = Math.max(1, state.totalDurSec || 1);
-      const playheadPct = Math.min(84, Math.max(0, Math.round((state.playheadSec / span) * 100)));
-      state.timelineTracks.v3.push({
-        left: playheadPct,
-        width: 15,
-        label: preset.name,
-        presetId: preset.id
-      });
-      renderTimelineTracks();
-      applyPresetToResolve(preset);
+      document.getElementById('activeFxPill').textContent = `Stacked: ${preset.name}`;
     });
   });
 
@@ -1911,6 +1907,16 @@ function renderVfxGrid() {
       revealKeyframeEditor();
       const current = effectiveIntensity(id, state.playheadSec);
       addKeyframe(id, state.playheadSec, current);
+      // keyframing a stacked look also keys its pass, so the animation is what
+      // Resolve receives as a BezierSpline on that layer
+      stackLayersFor(id).forEach((layer) => {
+        const sec = +state.playheadSec.toFixed(3);
+        const hit = layer.keys.findIndex((k) => Math.abs(k.sec - sec) < 0.001);
+        if (hit >= 0) layer.keys[hit].value = Math.round(current);
+        else layer.keys.push({ sec, value: Math.round(current) });
+        layer.keys.sort((a, b) => a.sec - b.sec);
+      });
+      renderLayerRack();
       document.getElementById('activeFxPill').textContent = `Preview: ${preset.name}`;
       renderVfxGrid();
       syncKeyframeInspector();
@@ -1929,7 +1935,7 @@ function renderVfxGrid() {
     });
 
     // Clicking a card PREVIEWS it. Nothing is applied and nothing lands on the
-    // timeline until the card's own + Apply is pressed.
+    // timeline until a look is stacked and the stack is sent.
     card.addEventListener('click', (e) => {
       if (!preset) return;
       if (e.target.closest('.vfx-card-slider-row')) return;
@@ -1940,25 +1946,30 @@ function renderVfxGrid() {
       document.getElementById('activeFxPill').textContent = `Previewing: ${preset.name}`;
       renderVfxGrid();
       syncKeyframeInspector();
+      renderStackChips();
       e.stopPropagation();
     });
+
+    // + Stack: adds this look on top of whatever is already stacked. The stack
+    // is sent to Resolve in one go, so two looks compound into one graph.
   });
 }
 
-function applyPresetToResolve(preset) {
+function selectPreset(preset) {
   if (!preset) return;
-  const kfs = (KF.tracks[preset.id] || []).map((k) => ({ timeSec: +k.t.toFixed(3), value: Math.round(k.v) }));
-  // presetId is enough: the server looks the native Fusion graph up in
-  // resolve-bridge/preset-recipes.json and attaches it to the wire payload.
-  return dispatchToResolve('apply_vfx', {
-    presetId: preset.effectType || preset.id,
-    presetName: preset.name,
-    category: preset.category,
-    intensity: Math.round(effectiveIntensity(preset.id, state.playheadSec)),
-    keyframes: kfs,
-    fps: 24
-  }, `Applied "${preset.name}"${kfs.length ? ` + ${kfs.length} BezierSpline KFs` : ''} at playhead`);
+  state.activePreset = preset;
+  state.presetPicked = true;
+  state.hitFlashBurst = 0.85;
+  revealKeyframeEditor();
+  const pill = document.getElementById('activeFxPill');
+  if (pill) pill.textContent = `Previewing: ${preset.name}`;
+  renderVfxGrid();
+  syncKeyframeInspector();
+  renderStackChips();
 }
+
+// A single look is just a stack of one, so there is no second code path: the
+// stack send below is what talks to Resolve, whether it holds one look or eight.
 
 function drawCardShaderPreview(canvas, effectType, accent, timeSec) {
   const ctx = canvas.getContext('2d');
@@ -3082,6 +3093,57 @@ function findLayer(id) {
   return ensureLayers().find((l) => l.id === id) || null;
 }
 
+// Position of a look in the stack (-1 when it is not stacked). The card badge
+// uses this, and so does the slider wiring: a stacked look edits its layer.
+function stackIndexOf(presetId) {
+  return ensureLayers().findIndex((l) => l.presetId === presetId);
+}
+
+function stackLayersFor(presetId) {
+  return ensureLayers().filter((l) => l.presetId === presetId);
+}
+
+// The one-line summary above the rack: "3 looks · bloom -> grain -> halation".
+function renderStackChips() {
+  const chips = document.getElementById('stackChips');
+  const summary = document.getElementById('stackSummary');
+  const panel = document.getElementById('stackPanel');
+  const layers = ensureLayers();
+  if (summary) {
+    summary.textContent = layers.length
+      ? `${layers.length} ${layers.length === 1 ? 'look' : 'looks'}`
+      : 'Nothing stacked yet';
+  }
+  if (panel) panel.classList.toggle('has-layers', layers.length > 0);
+  if (!chips) return;
+  chips.innerHTML = layers.map((layer, i) => `
+    <button class="stack-chip ${layer.enabled ? '' : 'muted'}" data-chip="${layer.id}"
+      title="${layer.name} — click to preview, or remove it with the ×">
+      <b>${i + 1}</b><span>${layer.name}</span>
+    </button>`).join('<span class="stack-arrow">›</span>');
+  chips.querySelectorAll('[data-chip]').forEach((chip) => {
+    chip.addEventListener('click', (e) => {
+      const layer = findLayer(chip.getAttribute('data-chip'));
+      if (!layer) return;
+      const preset = VFX_PRESETS.find((x) => x.id === layer.presetId);
+      if (preset) selectPreset(preset);
+    });
+  });
+}
+
+// Collapsed by default so the browser stays the first thing you see; it opens
+// itself the moment something is stacked.
+function setStackOpen(open) {
+  const panel = document.getElementById('stackPanel');
+  const btn = document.getElementById('stackToggleBtn');
+  if (!panel) return;
+  panel.classList.toggle('open', !!open);
+  if (btn) {
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.textContent = open ? 'Hide details' : 'Details';
+  }
+}
+
 function addEffectLayer(preset) {
   const p = preset || state.activePreset;
   if (!p) return null;
@@ -3105,7 +3167,15 @@ function addEffectLayer(preset) {
   };
   layers.push(layer);
   renderLayerRack();
-  showToast(`"${p.name}" added as layer ${layers.length}`, 'ok');
+  renderVfxGrid();
+  setStackOpen(true);
+  const chain = layers.map((l) => l.name).join(' → ');
+  showToast(
+    layers.length === 1
+      ? `Stack started: ${p.name}. Add more looks, then Send stack to Resolve.`
+      : `${layers.length} looks stacked: ${chain}`,
+    'ok'
+  );
   return layer;
 }
 
@@ -3115,7 +3185,8 @@ function removeEffectLayer(id) {
   if (idx < 0) return;
   const [gone] = layers.splice(idx, 1);
   renderLayerRack();
-  showToast(`${gone.name} removed from the stack`);
+  renderVfxGrid();
+  showToast(`${gone.name} removed — ${layers.length} look${layers.length === 1 ? '' : 's'} left in the stack`);
 }
 
 function moveEffectLayer(id, dir) {
@@ -3126,6 +3197,7 @@ function moveEffectLayer(id, dir) {
   const [moved] = layers.splice(idx, 1);
   layers.splice(to, 0, moved);
   renderLayerRack();
+  renderVfxGrid();
 }
 
 function toggleEffectLayer(id) {
@@ -3133,6 +3205,7 @@ function toggleEffectLayer(id) {
   if (!layer) return;
   layer.enabled = !layer.enabled;
   renderLayerRack();
+  renderVfxGrid();
 }
 
 function setLayerField(id, field, value) {
@@ -3157,9 +3230,15 @@ function layerKeyframe(id) {
 }
 
 function clearEffectLayers() {
+  if (!ensureLayers().length) {
+    showToast('The stack is already empty');
+    return;
+  }
   state.layers = [];
   renderLayerRack();
-  showToast('Layer stack cleared');
+  renderVfxGrid();
+  setStackOpen(false);
+  showToast('Stack cleared — your timeline and Resolve project were not touched');
 }
 
 // Evaluated intensity for a layer at the playhead (keyframes win when present)
@@ -3206,7 +3285,10 @@ function renderEffectLayers(ctx, w, h, t, onBeatPulse, grainAmount) {
     lctx.globalCompositeOperation = 'source-over';
     lctx.clearRect(0, 0, w, h);
     try {
-      drawCinematicPlate(lctx, w, h, t, onBeatPulse);
+      // Stack = a chain, not a pile. Each layer starts from the frames the
+      // layers below it already produced, so "bloom then grain" grains the
+      // bloom -- the same order the Fusion graph is built in.
+      lctx.drawImage(ctx.canvas, 0, 0, w, h);
       state.activePreset = {
         accent: layer.accent,
         isTransition: basePreset && basePreset.isTransition,
@@ -3253,12 +3335,28 @@ function layerPayload(layer) {
 function applyLayerStack() {
   const layers = ensureLayers().filter((l) => l.enabled);
   if (!layers.length) {
-    showToast('Add at least one effect layer first (＋ Add Current Effect)', 'warn');
+    const any = ensureLayers().length;
+    showToast(any
+      ? 'Every look in the stack is muted — unmute one first'
+      : 'Press + Stack on a look first (stack two or more and they compound)', 'warn');
     return null;
   }
-  const payload = { layers: layers.map(layerPayload), fps: 24 };
+  const payload = { layers: layers.map(layerPayload), fps: 24, replace: true };
   const names = layers.map((l) => l.name).join(' + ');
-  return dispatchToResolve('layers_apply', payload, `Layer stack sent: ${names}`);
+
+  // One clip chip on the timeline strip, however many looks are inside it --
+  // and only ever one, so pressing send twice does not litter the strip.
+  const playheadPct = Math.min(84, Math.max(0, Math.round((state.playheadSec / state.totalDurSec) * 100)));
+  state.timelineTracks.v3 = state.timelineTracks.v3.filter((c) => c.presetId !== '__stack__');
+  state.timelineTracks.v3.push({
+    left: playheadPct,
+    width: Math.min(46, 15 + layers.length * 7),
+    label: `STACK · ${layers.length}`,
+    presetId: '__stack__'
+  });
+  renderTimelineTracks();
+
+  return dispatchToResolve('layers_apply', payload, `Stack sent: ${names}`);
 }
 
 function renderLayerRack() {
@@ -3270,10 +3368,19 @@ function renderLayerRack() {
     badge.classList.toggle('hidden', layers.length === 0);
   }
   if (!rack) return;
+  renderStackChips();
+  const sendBtn = document.getElementById('applyLayersBtn');
+  if (sendBtn) {
+    const live = layers.filter((l) => l.enabled).length;
+    sendBtn.textContent = live ? `Send stack to Resolve (${live})` : 'Send stack to Resolve';
+    sendBtn.disabled = live === 0;
+  }
+  const countBadge = document.getElementById('layerCountBadge');
+  if (countBadge) countBadge.classList.toggle('hidden', layers.length === 0);
   if (!layers.length) {
     rack.innerHTML = `<div class="layer-empty">
-      <strong>No layers yet.</strong>
-      <span>Pick any effect in the browser, then press <b>＋ Add Current Effect</b>. Stack them, blend them, and send the whole rack to Resolve as one graph.</span>
+      <strong>Nothing stacked yet.</strong>
+      <span>Press <b>+ Stack</b> on any look above. Every look you add runs after the one before it, so <b>bloom → grain → halation</b> is three passes on one clip, in that order. Then press <b>Send stack to Resolve</b> and the whole rack becomes one Fusion graph.</span>
     </div>`;
     return;
   }
@@ -3283,9 +3390,9 @@ function renderLayerRack() {
       <span class="layer-dot" style="background:${layer.accent || '#e11d48'}"></span>
       <div class="layer-main">
         <div class="layer-name" title="${layer.category || ''}">${layer.name}</div>
-        <div class="layer-sub">${layer.category || ''}${layer.keys && layer.keys.length ? ` · ◆ ${layer.keys.length} keys` : ''}</div>
+        <div class="layer-sub">${i === 0 ? 'first pass · runs on the clip' : `pass ${i + 1} · runs on pass ${i}`}${layer.keys && layer.keys.length ? ` · ◆ ${layer.keys.length} keys` : ''}</div>
       </div>
-      <select class="layer-blend" data-layer-field="blend" title="How this layer blends onto the ones below">
+      <select class="layer-blend" data-layer-field="blend" title="How this pass composites over the passes below it">
         ${LAYER_BLEND_MODES.map((b) => `<option value="${b.id}" ${layer.blend === b.id ? 'selected' : ''}>${b.label}</option>`).join('')}
       </select>
       <label class="layer-slide" title="Effect intensity (keyframable)">
@@ -3332,6 +3439,14 @@ function renderLayerRack() {
 function initLayers() {
   ensureLayers();
   renderLayerRack();
+  setStackOpen(false);
+  const toggle = document.getElementById('stackToggleBtn');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const panel = document.getElementById('stackPanel');
+      setStackOpen(!(panel && panel.classList.contains('open')));
+    });
+  }
   const add = document.getElementById('addLayerBtn');
   if (add) add.addEventListener('click', () => addEffectLayer(state.activePreset));
   const clear = document.getElementById('clearLayersBtn');
@@ -4031,7 +4146,7 @@ const DEPTH_LIVE_INTERVAL_MS = 160;
 function defaultDepthState() {
   return {
     source: 'estimate',      // estimate | mask | upload
-    engine: state.depthEnginePref || 'ai',   // ai | ai-hq (2x resolution) | fast (heuristic)
+    engine: state.depthEnginePref || 'ai',   // ai (Depth Anything V2) | fast (heuristic)
     aiStatus: '',            // human-readable state of the model
     aiBusy: false,
     aiProgress: -1,          // 0..1 while downloading, -1 when unknown
@@ -4089,10 +4204,10 @@ function depthRescan(opts) {
   // AI engine: hand the frame to Depth Anything V2 and let it answer. The
   // heuristic below stays as the instant preview and the fallback.
   //
-  // The model is a one-time 49 MB download, so it only runs when it is actually
+  // The model is a one-time 40 MB download, so it only runs when it is actually
   // wanted: the depth tab is open, a depth effect is switched on, or the user
-  // just picked the AI engine. Loading a photo must not silently pull 49 MB.
-  if (d.engine !== 'fast' && d.source === 'estimate' && !o.forceFast && !o.silent) {
+  // just picked the AI engine. Loading a photo must not silently pull 40 MB.
+  if (d.engine === 'ai' && d.source === 'estimate' && !o.forceFast && !o.silent) {
     const wanted = state.activeTab === 'depth' || depthEffectsOn().count > 0;
     if (wanted || o.ai) {
       d.status = 'AI depth: running Depth Anything V2 on this frame…';
@@ -4301,14 +4416,10 @@ function depthLiveTick(nowMs) {
   if (!state.motion || !state.isPlaying || document.hidden) return;
   if (!depthLiveWanted()) return;
   const dd = ensureDepthState();
-  if (dd.engine !== 'fast') {
+  if (dd.engine === 'ai') {
     // a full model pass takes seconds, not milliseconds: refresh only when the
     // worker is free and the last one is old enough to be worth replacing
     if (dd.aiBusy) return;
-    // The 2x pass costs several seconds per frame, so it is a deliberate
-    // still-frame tool: no auto-refresh while playing, or the tab would sit
-    // permanently busy and never catch up with the picture.
-    if (dd.engine === 'ai-hq') return;
     if (nowMs - depthAiLastRun < DEPTH_AI_MIN_INTERVAL_MS) return;
     depthAiLastRun = nowMs;
     depthAiRun();
@@ -4365,10 +4476,10 @@ function depthLiveUiTick(nowMs) {
 }
 
 // ---------------------------------------------------------------------------
-// AI depth: Depth Anything V2 Small, fp16 ONNX, executed in a module worker
+// AI depth: Depth Anything V2 Small, int8 ONNX, executed in a module worker
 // against the vendored ONNX Runtime in vendor/depth/. This is a real monocular
 // depth model — the same family Instant Depth Map uses — not a brightness
-// heuristic. It is opt-in because the model is a 49 MB one-time download.
+// heuristic. It is opt-in because the model is a 40 MB one-time download.
 // ---------------------------------------------------------------------------
 let depthAiWorker = null;
 let depthAiJobId = 0;
@@ -4461,7 +4572,7 @@ function depthAiOnMessage(msg) {
       d.mapW = msg.width;
       d.mapH = msg.height;
       d.dirty = false;
-      d.status = `AI depth from Depth Anything V2${msg.quality === 'high' ? ' at 2× resolution' : ''} (${((msg.ms || 0) / 1000).toFixed(1)}s). Every effect below is now driven by real geometry.`;
+      d.status = `AI depth from Depth Anything V2 (${((msg.ms || 0) / 1000).toFixed(1)}s). Every effect below is now driven by real geometry.`;
     }
     depthAiSetStatus('AI depth ready.', false);
     depthSyncUI();
@@ -4495,12 +4606,7 @@ function depthAiRun(label) {
   d.aiBusy = true;
   d.aiProgress = d.aiReady ? -1 : d.aiProgress;
   depthAiJobId += 1;
-  depthAiSetStatus(
-    d.aiReady
-      ? (d.engine === 'ai-hq' ? 'Running Depth Anything V2 at 2× resolution — this takes several seconds…' : 'Running the depth model…')
-      : 'Loading Depth Anything V2 — one-time 49 MB download…',
-    true
-  );
+  depthAiSetStatus(d.aiReady ? 'Running the depth model…' : 'Loading Depth Anything V2 — one-time 40 MB download…', true);
   try {
     const copy = new Uint8ClampedArray(frame.data);
     worker.postMessage({
@@ -4510,8 +4616,7 @@ function depthAiRun(label) {
       width: frame.width,
       height: frame.height,
       mapW: DEPTH_W,
-      mapH: DEPTH_H,
-      quality: d.engine === 'ai-hq' ? 'high' : 'standard'
+      mapH: DEPTH_H
     }, [copy.buffer]);
   } catch (_e) {
     depthAiFail('Could not hand the frame to the model.');
@@ -4522,9 +4627,9 @@ function depthRenderAiStamp() {
   const el = document.getElementById('depthAiStamp');
   if (!el) return;
   const d = state.depth;
-  const on = d && d.engine !== 'fast' && d.map && !d.dirty;
+  const on = d && d.engine === 'ai' && d.map && !d.dirty;
   el.classList.toggle('hidden', !on);
-  if (on) el.textContent = `AI · Depth Anything V2${d.engine === 'ai-hq' ? ' 2×' : ''} · ${d.mapW}×${d.mapH}`;
+  if (on) el.textContent = `AI · Depth Anything V2 · ${d.mapW}×${d.mapH}`;
 }
 
 function depthRescanAi() {
@@ -4566,11 +4671,7 @@ function depthSyncUI() {
   setText('depthFocusVal', d.focus + '%');
   setText('depthApertureVal', d.aperture + '%');
   setText('depthSourceLabel', d.source === 'mask' ? 'Magic Mask' : d.source === 'upload' ? 'Loaded map' : 'Plate');
-  setText('depthEngineLabel', d.source !== 'estimate'
-    ? '—'
-    : d.engine === 'ai' ? 'Depth Anything V2'
-      : d.engine === 'ai-hq' ? 'Depth Anything V2 · 2×'
-        : 'Fast estimate');
+  setText('depthEngineLabel', d.source !== 'estimate' ? '—' : d.engine === 'ai' ? 'Depth Anything V2' : 'Fast estimate');
   setText('depthActiveCount', String(depthEffectsOn().count));
   setText('depthKeyCount', String(depthTotalKeys()));
   const st = document.getElementById('depthStatus');
@@ -4927,21 +5028,15 @@ function depthRenderEngineButtons() {
     btn.classList.toggle('active', btn.getAttribute('data-depth-engine') === d.engine);
     btn.setAttribute('aria-pressed', btn.getAttribute('data-depth-engine') === d.engine ? 'true' : 'false');
   });
-  ['ai', 'ai-hq'].forEach((mode) => {
-    const btn = document.querySelector(`#depthEngineGroup [data-depth-engine="${mode}"]`);
-    if (!btn) return;
-    const sub = btn.querySelector('.depth-engine-sub');
-    if (!sub) return;
-    if (d.aiFailed) sub.textContent = 'unavailable here';
-    else if (d.aiReady) sub.textContent = mode === 'ai-hq' ? '2× · ready' : 'ready · on-device';
-    else sub.textContent = mode === 'ai-hq' ? '2× resolution · slower' : 'Depth Anything V2';
-  });
+  const aiBtn = document.querySelector('#depthEngineGroup [data-depth-engine="ai"]');
+  if (aiBtn) {
+    const sub = aiBtn.querySelector('.depth-engine-sub');
+    if (sub) sub.textContent = d.aiFailed ? 'unavailable here' : d.aiReady ? 'ready · on-device' : 'Depth Anything V2';
+  }
   if (!d.aiStatus) {
-    d.aiStatus = d.engine === 'fast'
-      ? 'Fast estimate — instant, no download.'
-      : d.engine === 'ai-hq'
-        ? 'AI high detail — 2× resolution for stills. It does not auto-refresh while playing; press ↻ Re-scan for each frame.'
-        : 'AI depth selected — press ↻ Re-scan or play to generate.';
+    d.aiStatus = d.engine === 'ai'
+      ? 'AI depth selected — press ↻ Re-scan or play to generate.'
+      : 'Fast estimate — instant, no download.';
   }
   const el = document.getElementById('depthEngineStatus');
   if (el) el.textContent = d.aiStatus;
@@ -4959,7 +5054,7 @@ function depthSetEngine(mode) {
   } else {
     depthAiSetStatus(d.aiReady
       ? 'AI depth ready.'
-      : 'Loading Depth Anything V2 — one-time 49 MB download, then cached…', !d.aiReady);
+      : 'Loading Depth Anything V2 — one-time 40 MB download, then cached…', !d.aiReady);
     depthAiRun();
   }
   depthRenderAiStamp();
@@ -5097,10 +5192,10 @@ function initDepthTab() {
   // model download at page load — that happens when the tab is opened or a
   // depth effect is switched on.
   depthRescan({ forceFast: true });
-  if (d.engine !== 'fast') {
+  if (d.engine === 'ai') {
     depthAiSetStatus(d.aiReady
       ? 'AI depth ready.'
-      : 'AI depth is selected — open this tab or switch on an effect to run Depth Anything V2 (one-time 49 MB download).', false);
+      : 'AI depth is selected — open this tab or switch on an effect to run Depth Anything V2 (one-time 40 MB download).', false);
   }
 }
 

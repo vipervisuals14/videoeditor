@@ -3732,3 +3732,211 @@ input[type="range"] { accent-color: var(--paper); }
 }
 .install-steps.hidden { display: none; }
 .install-steps b { color: var(--paper); }
+
+/* ============================================================================
+   STACK — the effect stack is a numbered chain, not a drawer
+   ----------------------------------------------------------------------------
+   Collapsed it is one hairline row: STACK · 3 looks · chips · send. Opened it
+   is the rack: pass 1, pass 2, pass 3, each with its own intensity, opacity,
+   blend and keyframes. Nothing here is rounded or glowing; the only colour is
+   the accent dot of the look itself.
+   ==========================================================================*/
+.stack-panel {
+  border: 1px solid var(--line);
+  background: var(--ink-raised);
+  margin: 0 0 14px;
+}
+.stack-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 42px;
+  padding: 0 12px;
+  flex-wrap: wrap;
+}
+.stack-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.stack-kicker {
+  font: 700 9px/1 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.stack-headline strong {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+.stack-panel.has-layers .stack-headline strong { color: var(--paper); }
+.stack-panel.has-layers { border-color: var(--line-strong); }
+
+.stack-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.stack-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 210px;
+  padding: 5px 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--paper);
+  font: 600 10.5px/1 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.stack-chip b {
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--paper);
+  padding: 2px 5px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+.stack-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stack-chip:hover { border-color: var(--paper); }
+.stack-chip.muted { opacity: 0.4; }
+.stack-arrow {
+  font-size: 10px;
+  color: var(--dim);
+  padding: 0 1px;
+}
+
+.stack-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.stack-actions .btn-primary[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.stack-body {
+  border-top: 1px solid var(--line);
+  display: none;
+}
+.stack-panel.open .stack-body { display: block; }
+.stack-panel.open .stack-body:empty { display: none; }
+
+/* the rack keeps its existing row markup, restated here as numbered passes */
+.stack-panel .layer-rack { padding: 0; }
+.stack-panel .layer-empty {
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 0;
+}
+.stack-panel .layer-empty strong {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--paper);
+}
+.stack-panel .layer-empty span {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 78ch;
+}
+.stack-panel .layer-row {
+  display: grid;
+  grid-template-columns: 26px 8px minmax(120px, 1.4fr) 104px minmax(110px, 1fr) minmax(110px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--line);
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.stack-panel .layer-row:first-child { border-top: 0; }
+.stack-panel .layer-row:hover { background: var(--panel); }
+.stack-panel .layer-row.muted { opacity: 0.45; }
+.stack-panel .layer-index {
+  font: 700 10px/1 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  color: var(--dim);
+  text-align: center;
+}
+.stack-panel .layer-name {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--paper);
+}
+.stack-panel .layer-sub {
+  font: 500 9px/1.4 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-top: 3px;
+}
+.stack-panel .layer-blend,
+.stack-panel .layer-row select {
+  border-radius: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font: 600 10px/1 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  padding: 6px 6px;
+  text-transform: uppercase;
+}
+.stack-panel .layer-slide span {
+  font: 700 8.5px/1 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.16em;
+  color: var(--dim);
+}
+.stack-panel .layer-slide b {
+  font: 700 9.5px/1 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.06em;
+  color: var(--paper);
+  min-width: 34px;
+  text-align: right;
+}
+.stack-panel .layer-actions { display: flex; gap: 3px; }
+
+/* card badge: which pass this look is */
+.vfx-stack-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 700 10px/1 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.04em;
+  box-shadow: 0 0 0 1px var(--ink);
+}
+.vfx-card.stacked { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.vfx-apply-btn.in-stack {
+  background: var(--paper);
+  color: var(--ink);
+  border-color: var(--paper);
+}

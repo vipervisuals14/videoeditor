@@ -113,6 +113,13 @@
       + '        local src = comp:FindTool("MediaIn1")\n'
       + '        local dst = comp:FindTool("MediaOut1")\n'
       + '        local img = src\n'
+      + '        -- continue the stack instead of replacing it: start from the tool\n'
+      + '        -- already feeding MediaOut1, if there is one.\n'
+      + '        pcall(function()\n'
+      + '            local link = dst and dst:GetInput("Input")\n'
+      + '            local t = link and link.GetTool and link:GetTool()\n'
+      + '            if t and t ~= src then img = t end\n'
+      + '        end)\n'
       + lines.join('\n') + '\n'
       + keyBlock + '\n'
       + '        if dst and img and img ~= src then pcall(function() dst.Input = img.Output end) end\n'
@@ -144,13 +151,15 @@
       var lines = [];
       lines.push('        -- layer ' + (li + 1) + ': ' + (layer.name || layer.presetId || 'effect')
         + ' (' + (layer.blend || 'normal') + ' @ ' + Math.round(Number(layer.opacity) || 100) + '%)');
-      lines.push('        local ' + v + 'Img = src');
+      lines.push('        local ' + v + 'Img = prev');
       chain.forEach(function (step, si) {
         var tv = v + '_n' + (si + 1);
         var tool = typeof step === 'string' ? step : step.tool;
         toolNames.push(tool);
         lines.push('        local ' + tv + ' = comp:AddTool(' + luaQuote(tool) + ', -32768, -32768)');
         lines.push('        if ' + tv + ' then');
+        lines.push('            pcall(function() ' + tv + ':SetAttrs({ TOOLS_Name = '
+          + luaQuote('PulseVFX_' + (li + 1) + '_' + String(tool).replace(/[^A-Za-z0-9]+/g, '_')) + ' }) end)');
         if (step && step.set && typeof step.set === 'object') {
           Object.keys(step.set).forEach(function (k) {
             var val = step.set[k];
@@ -179,6 +188,8 @@
       // merge this layer over everything below it
       lines.push('        local ' + v + 'Merge = comp:AddTool("Merge", -32768, -32768)');
       lines.push('        if ' + v + 'Merge then');
+      lines.push('            pcall(function() ' + v + 'Merge:SetAttrs({ TOOLS_Name = '
+        + luaQuote('PulseVFX_' + (li + 1) + '_Merge') + ' }) end)');
       lines.push('            pcall(function() ' + v + 'Merge.Background = prev.Output end)');
       lines.push('            pcall(function() ' + v + 'Merge.Foreground = ' + v + 'Img.Output end)');
       lines.push('            pcall(function() ' + v + 'Merge.Blend = ' + ((Number(layer.opacity) || 100) / 100).toFixed(3) + ' end)');
@@ -220,7 +231,22 @@
       + '        comp:Lock()\n'
       + '        local src = comp:FindTool("MediaIn1")\n'
       + '        local dst = comp:FindTool("MediaOut1")\n'
+      + '        -- The rack in the panel is the source of truth: drop the nodes this\n'
+      + '        -- snippet created last time so the stack rebuilds cleanly instead of\n'
+      + '        -- stacking a second copy of itself. Hand-built nodes are left alone.\n'
+      + '        pcall(function()\n'
+      + '            for _, t in ipairs(comp:GetToolList(false) or {}) do\n'
+      + '                local nm = ""\n'
+      + '                pcall(function() nm = tostring(t:GetAttrs().TOOLS_Name or "") end)\n'
+      + '                if nm:sub(1, 9) == "PulseVFX_" then pcall(function() t:Delete() end) end\n'
+      + '            end\n'
+      + '        end)\n'
       + '        local prev = src\n'
+      + '        pcall(function()\n'
+      + '            local link = dst and dst:GetInput("Input")\n'
+      + '            local t = link and link.GetTool and link:GetTool()\n'
+      + '            if t and t ~= src then prev = t end\n'
+      + '        end)\n'
       + blocks.join('\n') + '\n'
       + '        if dst and prev then pcall(function() dst.Input = prev.Output end) end\n'
       + '        comp:Unlock()\n'

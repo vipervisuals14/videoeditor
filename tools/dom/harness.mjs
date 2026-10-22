@@ -1,0 +1,136 @@
+/* ============================================================================
+ * DOM harness — boots the real index.html + app.js in jsdom
+ * ----------------------------------------------------------------------------
+ * No browser, no network: fetch is recorded instead of sent, canvas is a no-op
+ * 2D context, and requestAnimationFrame runs once so init code completes. Every
+ * suite in tools/dom/ uses this, so what it tests is the shipped page, not a
+ * reimplementation of it.
+ * ==========================================================================*/
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { JSDOM, VirtualConsole } from 'jsdom';
+
+export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+export const PUB = path.join(ROOT, 'public');
+
+export function boot({ html = path.join(PUB, 'index.html') } = {}) {
+  const calls = [];
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', () => {});
+  virtualConsole.on('error', () => {});
+
+  const dom = new JSDOM(fs.readFileSync(html, 'utf8'), {
+    runScripts: 'outside-only',
+    pretendToBeVisual: true,
+    url: 'http://localhost/',
+    virtualConsole
+  });
+  const { window } = dom;
+
+  // ---- canvas: a context that accepts every call and returns nothing useful
+  const ctxStub = () => new Proxy({
+    canvas: null,
+    measureText: () => ({ width: 10 }),
+    createLinearGradient: () => ({ addColorStop() {} }),
+    createRadialGradient: () => ({ addColorStop() {} }),
+    createPattern: () => null,
+    getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(Math.max(1, w * h * 4)) }),
+    putImageData() {},
+    createImageData: (w, h) => ({ data: new Uint8ClampedArray(Math.max(1, w * h * 4)) }),
+    getContextAttributes: () => ({ alpha: true })
+  }, {
+    get(target, key) {
+      if (key in target) return target[key];
+      return () => undefined;
+    },
+    set(target, key, value) { target[key] = value; return true; }
+  });
+  window.HTMLCanvasElement.prototype.getContext = function () {
+    const ctx = ctxStub();
+    ctx.canvas = this;
+    return ctx;
+  };
+  window.HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,';
+  window.HTMLCanvasElement.prototype.captureStream = () => null;
+
+  // ---- fetch: recorded, never sent
+  window.fetch = (url, opts = {}) => {
+    let body = null;
+    try { body = opts.body ? JSON.parse(opts.body) : null; } catch { body = opts.body; }
+    calls.push({ url: String(url), method: opts.method || 'GET', body });
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ liveBridgeConnected: false, bridgeResponse: null }),
+      text: () => Promise.resolve('')
+    });
+  };
+  window.navigator.clipboard = { writeText: () => Promise.resolve() };
+
+  // ---- media: jsdom has no codecs or WebAudio
+  window.HTMLMediaElement.prototype.play = () => Promise.resolve();
+  window.HTMLMediaElement.prototype.pause = () => {};
+  window.HTMLMediaElement.prototype.load = () => {};
+  Object.defineProperty(window.HTMLMediaElement.prototype, 'readyState', { get: () => 0, configurable: true });
+  window.AudioContext = function () {
+    return {
+      createAnalyser: () => ({ connect() {}, disconnect() {}, getByteFrequencyData() {}, fftSize: 2048, frequencyBinCount: 1024 }),
+      createMediaElementSource: () => ({ connect() {}, disconnect() {} }),
+      createGain: () => ({ connect() {}, disconnect() {}, gain: { value: 1 } }),
+      destination: {}, close: () => Promise.resolve(), state: 'running', resume: () => Promise.resolve()
+    };
+  };
+  window.structuredClone = window.structuredClone || ((v) => JSON.parse(JSON.stringify(v)));
+  window.matchMedia = window.matchMedia || (() => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+  window.HTMLCanvasElement.prototype.transferControlToOffscreen = undefined;
+  window.OffscreenCanvas = window.OffscreenCanvas || function () { return window.document.createElement('canvas'); };
+  window.URL.createObjectURL = window.URL.createObjectURL || (() => 'blob:stub');
+  window.URL.revokeObjectURL = window.URL.revokeObjectURL || (() => {});
+
+  // ---- load the page's scripts in order, like the HTML does
+  const scripts = [...window.document.querySelectorAll('script[src]')]
+    .map((s) => s.getAttribute('src'))
+    .filter((src) => src && !/^https?:/.test(src));
+  for (const src of scripts) {
+    const file = path.join(PUB, src.replace(/^\.?\//, ''));
+    if (!fs.existsSync(file)) continue;
+    try {
+      window.eval(fs.readFileSync(file, 'utf8'));
+    } catch (err) {
+      throw new Error(`failed to load ${src}: ${err && err.message}`);
+    }
+  }
+
+  return { dom, window, document: window.document, calls };
+}
+
+export function makeCheck() {
+  const results = [];
+  const check = (label, fn, why) => {
+    let ok = false;
+    let detail = '';
+    try {
+      const out = typeof fn === 'function' ? fn() : fn;
+      if (Array.isArray(out)) { ok = !!out[0]; detail = out[1] || ''; }
+      else ok = !!out;
+    } catch (err) {
+      ok = false;
+      detail = (err && err.message) || String(err);
+    }
+    results.push({ label, ok, detail: detail || why || '' });
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${!ok && detail ? `\n        - ${detail}` : ''}`);
+    return ok;
+  };
+  check.summary = (name) => {
+    const failed = results.filter((r) => !r.ok);
+    console.log('');
+    if (failed.length) {
+      console.log(`${failed.length}/${results.length} ${name} checks FAILED`);
+      process.exitCode = 1;
+    } else {
+      console.log(`all ${results.length} ${name} checks passed`);
+    }
+  };
+  return check;
+}
