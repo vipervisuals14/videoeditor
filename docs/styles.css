@@ -5223,3 +5223,113 @@ body:has(.workspace.compact-dock) { grid-template-columns: 460px minmax(0, 1fr);
   border-radius: 4px;
   text-align: center;
 }
+
+/* ==========================================================================
+   EFFECT PARAMETER RACK
+   One slider per real parameter of the selected look, plus the three controls
+   every look shares. Two columns so six controls fit without scrolling, and
+   nothing truncates: names wrap, values never do.
+   ========================================================================== */
+.fx-param-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.fx-param-heading {
+  font: 700 8px/1.2 var(--font-mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #6f797d;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fx-param-reset {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: #8f9a9f;
+  font: 700 7.5px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.fx-param-reset:hover {
+  border-color: var(--blue);
+  color: #cfe7f7;
+  background: rgba(76, 159, 216, 0.12);
+}
+.fx-param-rack {
+  display: grid;
+  /* auto-fit, not a fixed count: the rack packs as many columns as the card
+     has room for, so seven controls sit in three short rows instead of a
+     column the user has to scroll. */
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 5px 12px;
+  align-items: start;
+}
+.fx-param {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.fx-param-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+.fx-param-name {
+  font: 700 7.5px/1.25 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6f797d;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fx-param-val {
+  flex: 0 0 auto;
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.02em;
+  color: var(--blue);
+  white-space: nowrap;
+}
+.fx-param-divider {
+  grid-column: 1 / -1;
+  font: 700 7.5px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #4e585c;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
+}
+.fx-param-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  font: 400 9px/1.5 var(--font-mono);
+  color: #6b7579;
+}
+.fx-param input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--blue);
+  height: 12px;
+  margin: 0;
+}
+.fx-param-name { line-height: 1.15; }
+@media (max-width: 620px) {
+  .fx-param-rack { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+}
+
+.fx-param-note {
+  margin: 0;
+  font: 500 8px/1.4 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: #566065;
+}

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine</title>
-  <link rel="stylesheet" href="styles.css?v=mvj7f1sa" />
+  <link rel="stylesheet" href="styles.css?v=mvj7y7ty" />
 </head>
 <body>
  <div class="app-window">
@@ -165,20 +165,14 @@
                 <button class="kf-env-pill" data-env="decay">Impact Decay (130→0%)</button>
                 <button class="kf-env-pill" data-env="lfo">CHOP Sine LFO</button>
               </div>
-              <div class="tweaker-mini-row">
-                <div class="slider-group">
-                  <div class="slider-head"><span>CHOP Frequency / BPM</span><strong id="shakeSpeedVal">142 BPM</strong></div>
-                  <input type="range" id="shakeSpeedSlider" min="80" max="190" value="142" />
-                </div>
-                <div class="slider-group">
-                  <div class="slider-head"><span>UV Scale / Optics</span><strong id="mixShakesVal">70%</strong></div>
-                  <input type="range" id="mixShakesSlider" min="0" max="100" value="70" />
-                </div>
-                <div class="slider-group">
-                  <div class="slider-head"><span>Noise / Grain Seed</span><strong id="mixStylizedVal">45%</strong></div>
-                  <input type="range" id="mixStylizedSlider" min="0" max="100" value="45" />
-                </div>
+              <div class="fx-param-head-row">
+                <span class="fx-param-heading" id="fxParamTitle">Effect Controls</span>
+                <button class="fx-param-reset" id="fxParamResetBtn" title="Put every control back to its default">Reset</button>
               </div>
+              <!-- Generated per effect: one slider per real parameter, not one
+                   strength bar. Dials the whole look back towards the plate. -->
+              <div class="fx-param-rack" id="fxParamRack"></div>
+              <p class="fx-param-note" id="fxParamNote">These dials drive the live preview and the 4K export. Intensity stays keyframable on the curve.</p>
             </div>
 
             <!-- Right: Interactive Bezier Keyframe Spline Canvas -->
@@ -1116,10 +1110,10 @@
 
  </div>
 
-  <script src="lua-export.js?v=mvj7f1sa"></script>
-  <script src="touchdesigner.js?v=mvj7f1sa"></script>
-  <script src="depth.js?v=mvj7f1sa"></script>
-  <script src="render.js?v=mvj7f1sa"></script>
-  <script src="app.js?v=mvj7f1sa"></script>
+  <script src="lua-export.js?v=mvj7y7ty"></script>
+  <script src="touchdesigner.js?v=mvj7y7ty"></script>
+  <script src="depth.js?v=mvj7y7ty"></script>
+  <script src="render.js?v=mvj7y7ty"></script>
+  <script src="app.js?v=mvj7y7ty"></script>
 </body>
 </html>

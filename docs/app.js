@@ -373,6 +373,130 @@ const VFX_PRESETS = [
     desc: 'Pairs performance A-cam and B-roll side-by-side inside a clean editorial split composition.',
     effectType: 'opt_diopter',
     accent: '#06b6d4'
+  },
+
+  // ------------------------------------------------------------------
+  // SECOND SET — twelve more looks, each with a full rack of controls.
+  // ------------------------------------------------------------------
+  {
+    id: 'opt_ana_streak',
+    name: 'Anamorphic Flare Streak',
+    category: 'Optical & Glass',
+    spec: '2x Oval Aperture',
+    node: 'StreakFilter + HighlightThreshold',
+    desc: 'A 2x oval aperture squeezes a highlight into one horizontal blue line — the honest anamorphic signature, not a lens-flare sticker.',
+    effectType: 'opt_anamorphic_streak',
+    accent: '#38bdf8'
+  },
+  {
+    id: 'opt_dirty_glass',
+    name: 'Dirty Front Element',
+    category: 'Optical & Glass',
+    spec: 'Seeded Smudges',
+    node: 'LensDirt + DustPass',
+    desc: 'Smudges and dust on the front element, lit by whatever is behind them. Fixed positions, so the dirt never crawls between frames.',
+    effectType: 'opt_lens_dirt',
+    accent: '#f2b880'
+  },
+  {
+    id: 'lab_cross_process',
+    name: 'Cross-Process E6',
+    category: 'Film Lab & Grade',
+    spec: 'E6 in C41',
+    node: 'ColorCurves + HueShift',
+    desc: 'Slide film developed in the wrong chemistry: cool lifted shadows, sulphur-yellow highlights, colours that go strange instead of pretty.',
+    effectType: 'lab_xprocess',
+    accent: '#22d3ee'
+  },
+  {
+    id: 'lab_duotone_print',
+    name: 'Two-Ink Duotone',
+    category: 'Film Lab & Grade',
+    spec: 'Pantone 2-Ink',
+    node: 'LUT + GradientMap',
+    desc: 'Two printing inks and no greys: the shadow ink holds the darks, the highlight ink the lights, with a real print contrast curve.',
+    effectType: 'lab_duotone',
+    accent: '#c084fc'
+  },
+  {
+    id: 'time_echo_delay',
+    name: 'Delayed Echo',
+    category: 'Shutter & Time',
+    spec: '8 Frame Delay',
+    node: 'TimeOffset + Merge',
+    desc: 'A copy of an earlier frame, offset and scaled like a shutter that never quite closed. Delay, opacity and offset are all yours.',
+    effectType: 'time_echo',
+    accent: '#a3e635'
+  },
+  {
+    id: 'time_gate_stutter',
+    name: 'Gate Stutter',
+    category: 'Shutter & Time',
+    spec: '6 Hz Gate',
+    node: 'TimeStretcher + Scanline',
+    desc: 'A film gate that does not hold steady: dark chops at the stutter rate, torn scanlines and a dropout smear.',
+    effectType: 'time_gate_stutter',
+    accent: '#fb7185'
+  },
+  {
+    id: 'cam_handheld_doc',
+    name: 'Handheld Documentary',
+    category: 'Camera Weight',
+    spec: '3-Frequency Sway',
+    node: 'Transform + NoiseCHOP',
+    desc: 'A long slow sway, a short micro jitter and a breath — three separate frequencies, which is what makes it read as a person holding the camera.',
+    effectType: 'cam_handheld',
+    accent: '#7dd3fc'
+  },
+  {
+    id: 'cam_dolly_punch',
+    name: 'Dolly Punch',
+    category: 'Camera Weight',
+    spec: 'Beat Locked',
+    node: 'Transform + EaseCurve',
+    desc: 'A real dolly move into the subject on the beat, then an eased settle. Punch depth, ease-back and drift are separate controls.',
+    effectType: 'cam_dolly_punch',
+    accent: '#f59e0b'
+  },
+  {
+    id: 'depth_atmos_haze',
+    name: 'Atmospheric Haze',
+    category: 'Depth & Subject',
+    spec: 'Distance Wash',
+    node: 'DepthMap + Fog + Merge',
+    desc: 'Air between the lens and the subject: the further back a thing sits, the more the frame washes out towards the haze colour.',
+    effectType: 'depth_haze',
+    accent: '#93c5fd'
+  },
+  {
+    id: 'depth_rim_separation',
+    name: 'Depth Rim Light',
+    category: 'Depth & Subject',
+    spec: 'Edge Sep',
+    node: 'DepthMap + EdgeDetect + Glow',
+    desc: 'A light edge behind the subject — the oldest trick there is for pulling a person off the wall behind them.',
+    effectType: 'depth_rim',
+    accent: '#fda4af'
+  },
+  {
+    id: 'ed_letterbox_239',
+    name: '2.39 Scope Frame',
+    category: 'Editorial Polish',
+    spec: '2.39:1',
+    node: 'Crop + Fade + Matte',
+    desc: 'A true 2.39:1 frame cut into the picture, feathered at the edge, with the shot nudged up or down inside it.',
+    effectType: 'ed_letterbox',
+    accent: '#e5e7eb'
+  },
+  {
+    id: 'ed_focus_rack',
+    name: 'Focus Rack',
+    category: 'Editorial Polish',
+    spec: 'Rack Cycle',
+    node: 'Blur + EaseCurve',
+    desc: 'The lens racks between soft and sharp on a cycle you set: how deep the defocus goes, how often it racks, how long it holds sharp.',
+    effectType: 'ed_focus_pull',
+    accent: '#cbd5e1'
   }
 ];
 
@@ -848,6 +972,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Start honest: empty stage, paused transport, lyrics off, blank timeline.
   // Nothing is fabricating footage or edits before the user loads anything.
   if (state.scene === 'empty') clearStage();
+  renderFxParamRack();
   applyLyricsState(false);
   renderTimelineTracks();
   initBackend().then(() => startBridgeStatusPoll());
@@ -1884,19 +2009,119 @@ function initVfxTab() {
     runAiVfxAssistant(prompt);
   });
 
-  document.getElementById('shakeSpeedSlider').addEventListener('input', (e) => {
-    state.bpm = Number(e.target.value);
-    document.getElementById('shakeSpeedVal').textContent = `${state.bpm} BPM`;
-  });
+  const fxReset = document.getElementById('fxParamResetBtn');
+  if (fxReset) {
+    fxReset.addEventListener('click', () => {
+      const p = state.activePreset;
+      if (!p) return;
+      fxResetParams(p);
+      renderFxParamRack();
+    });
+  }
 
-  document.getElementById('mixShakesSlider').addEventListener('input', (e) => {
-    state.mixShakes = Number(e.target.value);
-    document.getElementById('mixShakesVal').textContent = `${state.mixShakes}%`;
-  });
+  const rack = document.getElementById('fxParamRack');
+  if (rack) {
+    // One delegated listener: the rack is rebuilt every time the effect
+    // changes, so binding per-slider would leak and go stale.
+    const onRackInput = (e) => {
+      const input = e.target;
+      if (!input || !input.dataset || !input.dataset.fxparam) return;
+      const p = state.activePreset;
+      if (!p) return;
+      const key = input.dataset.fxparam;
+      setFxParam(p, key, Number(input.value));
+      const readout = input.parentElement && input.parentElement.querySelector('.fx-param-val');
+      if (readout) readout.textContent = fxParamText(p, key, Number(input.value));
+    };
+    rack.addEventListener('input', onRackInput);
+    rack.addEventListener('change', onRackInput);
+    rack.addEventListener('dblclick', (e) => {
+      const input = e.target;
+      if (!input || !input.dataset || !input.dataset.fxparam) return;
+      const p = state.activePreset;
+      if (!p) return;
+      const defs = fxParamDefs(p.effectType);
+      const def = defs.find((d) => d.k === input.dataset.fxparam);
+      if (!def) return;
+      setFxParam(p, def.k, def.def);
+      renderFxParamRack();
+    });
+  }
+}
 
-  document.getElementById('mixStylizedSlider').addEventListener('input', (e) => {
-    state.mixStylized = Number(e.target.value);
-    document.getElementById('mixStylizedVal').textContent = `${state.mixStylized}%`;
+// Value as the user reads it: "180 px", "78%", "-12 K".
+function fxParamText(preset, key, value) {
+  const defs = fxParamDefs(preset && preset.effectType);
+  const def = defs.find((d) => d.k === key);
+  const v = Math.round(Number(value));
+  if (!def) return String(v);
+  if (!def.unit) return String(v);
+  if (def.unit === '%') return `${v}%`;
+  return `${v} ${def.unit}`;
+}
+
+// The rack: every parameter this effect actually reads, with its live value.
+// Rebuilt (never re-bound) whenever the effect changes.
+function renderFxParamRack() {
+  const rack = document.getElementById('fxParamRack');
+  if (!rack) return;
+  const titleEl = document.getElementById('fxParamTitle');
+  const resetBtn = document.getElementById('fxParamResetBtn');
+  const preset = state.activePreset;
+
+  rack.textContent = '';
+  if (!preset) {
+    if (titleEl) titleEl.textContent = 'Effect Controls';
+    if (resetBtn) resetBtn.hidden = true;
+    const empty = document.createElement('p');
+    empty.className = 'fx-param-empty';
+    empty.textContent = 'Pick an effect from FX styles to unlock its controls.';
+    rack.appendChild(empty);
+    return;
+  }
+
+  const defs = fxParamDefs(preset.effectType);
+  const ownCount = defs.length - FX_FINISH_PARAMS.length;
+  // Say plainly how much depth this look has: its own dials, plus the three
+  // every look shares. No mystery meat, no single bar.
+  if (titleEl) titleEl.textContent = `${ownCount} effect controls + 3 shared`;
+  if (resetBtn) resetBtn.hidden = false;
+
+  defs.forEach((def, i) => {
+    if (i === defs.length - FX_FINISH_PARAMS.length) {
+      const div = document.createElement('div');
+      div.className = 'fx-param-divider';
+      div.textContent = 'Look finish';
+      rack.appendChild(div);
+    }
+    const row = document.createElement('div');
+    row.className = 'fx-param';
+    row.dataset.key = def.k;
+
+    const head = document.createElement('div');
+    head.className = 'fx-param-head';
+    const name = document.createElement('span');
+    name.className = 'fx-param-name';
+    name.textContent = def.label;
+    const val = document.createElement('strong');
+    val.className = 'fx-param-val';
+    const current = fxParam(preset, def.k);
+    val.textContent = fxParamText(preset, def.k, current);
+    head.appendChild(name);
+    head.appendChild(val);
+
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = String(def.min);
+    input.max = String(def.max);
+    input.step = def.max - def.min > 40 ? '1' : '0.5';
+    input.value = String(current);
+    input.dataset.fxparam = def.k;
+    input.title = `${def.label}: drag, double-click to reset`;
+
+    row.appendChild(head);
+    row.appendChild(input);
+    rack.appendChild(row);
   });
 }
 
@@ -2325,6 +2550,9 @@ function refreshKeyframeUI() {
   updateCardKfBadges();
 }
 
+let rackEffectType = null;
+let rackPresetId = null;
+
 function syncKeyframeInspector() {
   const p = state.activePreset;
   if (!p) return;
@@ -2341,9 +2569,18 @@ function syncKeyframeInspector() {
   if (slider) slider.value = Math.round(baseIntensity(p.id));
   if (valEl) valEl.textContent = `${Math.round(baseIntensity(p.id))}%`;
   document.querySelectorAll('.kf-env-pill').forEach((b) => b.classList.remove('active'));
+  // The rack follows the selected effect: its sliders belong to the look, not
+  // to the app, so switching styles swaps the whole control set.
+  if (rackEffectType !== p.effectType || rackPresetId !== p.id) {
+    rackEffectType = p.effectType;
+    rackPresetId = p.id;
+    renderFxParamRack();
+  }
   drawKeyframeCurve();
   updateKeyframeReadouts();
 }
+
+
 
 function updateKeyframeReadouts() {
   const p = state.activePreset;
@@ -3379,7 +3616,12 @@ function renderEffectLayers(ctx, w, h, t, onBeatPulse, grainAmount) {
         isTransition: basePreset && basePreset.isTransition,
         effectType: layer.effectType
       };
-      drawCinemaOpticalShader(lctx, w, h, t, layer.effectType, intensity, onBeatPulse, grainAmount);
+      const layerParams = fxParamsOf({
+        id: layer.id || layer.presetId || layer.effectType,
+        effectType: layer.effectType,
+        params: layer.params
+      });
+      drawCinemaOpticalShader(lctx, w, h, t, layer.effectType, intensity, onBeatPulse, grainAmount, layerParams);
     } catch (_e) {
       state.activePreset = basePreset;
       return;
@@ -3640,7 +3882,10 @@ function composeExportFrame(ctx, w, h, t) {
   const grainAmount = state.mixStylized / 100;
   const beatPhase = (t * (state.bpm / 60)) % 1;
   const onBeatPulse = Math.pow(Math.max(0, 1 - beatPhase * 3.5), 2.2);
-  const renderTime = effectType === 'time_smear' ? Math.floor(t * 9) / 9 : t;
+  const fxP = preset ? fxParamsOf(preset) : {};
+  const fxv = (key, fallback) => (fxP[key] === undefined ? fallback : fxP[key]);
+  const smearFps = Math.max(1, fxv('quantise', 9));
+  const renderTime = effectType === 'time_smear' ? Math.floor(t * smearFps) / smearFps : t;
 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -3655,17 +3900,48 @@ function composeExportFrame(ctx, w, h, t) {
   let scale = 1;
   let rot = 0;
   if (effectType === 'cam_float') {
-    dx = Math.sin(t * 1.7) * 5.5 * intensity * scaleFactor;
-    dy = Math.cos(t * 1.3) * 4.2 * intensity * scaleFactor;
-    rot = Math.sin(t * 0.9) * 0.006 * intensity;
+    const drift = fxv('drift', 55) / 100;
+    const rate = Math.max(0.1, fxv('rate', 17) / 10);
+    const roll = fxv('roll', 40) / 100;
+    dx = Math.sin(t * rate) * 9 * drift * intensity * scaleFactor;
+    dy = Math.cos(t * rate * 0.76) * 7 * drift * intensity * scaleFactor;
+    rot = Math.sin(t * rate * 0.53) * 0.012 * roll * intensity;
     scale = 1.02;
   } else if (effectType === 'opt_gateweave') {
-    dx = (Math.sin(t * 19) * 1.4 + Math.cos(t * 31) * 0.9) * intensity * scaleFactor;
-    dy = Math.cos(t * 23) * 1.2 * intensity * scaleFactor;
-    scale = 1.01;
+    const amp = fxv('amplitude', 40) / 100;
+    const speed = Math.max(1, fxv('speed', 19));
+    const breath = fxv('breath', 30) / 100;
+    dx = (Math.sin(t * speed) * 1.4 + Math.cos(t * speed * 1.6) * 0.9) * amp * intensity * scaleFactor;
+    dy = Math.cos(t * speed * 1.2) * 1.2 * amp * intensity * scaleFactor;
+    scale = 1 + breath * 0.03 * intensity;
   } else if (effectType === 'cam_thump' || state.hitFlashBurst > 0.05) {
-    const thump = (0.075 * intensity * onBeatPulse) + (state.hitFlashBurst * 0.09);
+    const impact = fxv('impact', 100) / 100;
+    const shakeP = fxv('shake', 35) / 100;
+    const thump = (0.075 * intensity * onBeatPulse * impact) + (state.hitFlashBurst * 0.09);
     scale = 1.0 + thump;
+    dx = Math.cos(beatPhase * Math.PI * 2) * 2.2 * thump * 10 * shakeP * scaleFactor;
+  } else if (effectType === 'time_velocity') {
+    scale = 1.0 + 0.16 * intensity * Math.pow(onBeatPulse, 1.5) * (0.4 + fxv('exposure', 60) / 100);
+  } else if (effectType === 'cam_whip') {
+    const dist = fxv('distance', 60) / 100;
+    const settle = fxv('settle', 40) / 100;
+    dx = Math.pow(onBeatPulse, 2 + settle) * 58 * intensity * (Math.floor(t) % 2 === 0 ? 1 : -1) * (0.4 + dist) * scaleFactor;
+    scale = 1 + 0.06 * (0.5 + dist);
+  } else if (effectType === 'cam_handheld') {
+    const sway = fxv('sway', 50) / 100;
+    const speed = Math.max(0.2, fxv('speed', 12) / 10);
+    const jitter = fxv('jitter', 30) / 100;
+    const breathe = fxv('breathe', 25) / 100;
+    dx = (Math.sin(t * speed) * 8 * sway + Math.sin(t * speed * 7.3) * 1.6 * jitter) * intensity * scaleFactor;
+    dy = (Math.cos(t * speed * 0.81) * 6 * sway + Math.cos(t * speed * 9.1) * 1.4 * jitter) * intensity * scaleFactor;
+    rot = Math.sin(t * speed * 0.6) * 0.008 * sway * intensity;
+    scale = 1.03 + Math.sin(t * speed * 0.45) * 0.004 * breathe;
+  } else if (effectType === 'cam_dolly_punch') {
+    const punch = fxv('punch', 100) / 100;
+    const ease = fxv('ease', 50) / 100;
+    const settleDrift = fxv('settle', 40) / 100;
+    scale = 1.01 + Math.pow(onBeatPulse, 1 + (1 - ease) * 3) * 0.18 * punch * intensity;
+    dy = Math.sin(t * 0.35) * 2.5 * settleDrift * intensity * scaleFactor;
   }
 
   ctx.save();
@@ -3679,7 +3955,7 @@ function composeExportFrame(ctx, w, h, t) {
   // than passing an unknown type) matters — the shader's finishing pass would
   // otherwise overwrite the frame with black.
   if (state.presetPicked && effectType) {
-    drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
+    drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount, fxP);
   }
   applyDepthStackTiled(ctx, w, h, t, preset);
   renderEffectLayers(ctx, w, h, renderTime, onBeatPulse, grainAmount);
@@ -8038,17 +8314,24 @@ function drawMonitorFrame(t) {
   const grainAmount = (state.mixStylized / 100);
   const beatPhase = (t * (state.bpm / 60)) % 1;
   const onBeatPulse = Math.pow(Math.max(0, 1 - beatPhase * 3.5), 2.2);
+  const fxP = preset ? fxParamsOf(preset) : {};
+  const fxv = (key, fallback) => (fxP[key] === undefined ? fallback : fxP[key]);
 
   // Step-print / 8fps quantize time when time_smear is active
-  const renderTime = effectType === 'time_smear' ? Math.floor(t * 9) / 9 : t;
+  const smearFps = Math.max(1, fxv('quantise', 9));
+  const renderTime = effectType === 'time_smear' ? Math.floor(t * smearFps) / smearFps : t;
 
   ctx.save();
 
   // If 360° Shutter Smear is active, blend previous frame buffer instead of hard clearing
   if (effectType === 'time_smear' && !state.splitCompare) {
-    ctx.globalAlpha = 0.34;
-    ctx.drawImage(offscreenBuffer, 0, 0);
-    ctx.globalAlpha = 0.66;
+    // Decay is how much of the previous frame survives; Trails repeats the
+    // echo so long shutters stack instead of ghosting once.
+    const decay = fxv('decay', 55) / 100;
+    const trails = Math.max(1, Math.round(fxv('trails', 8) / 2));
+    ctx.globalAlpha = 0.2 + decay * 0.5;
+    for (let i = 0; i < trails; i++) ctx.drawImage(offscreenBuffer, 0, 0);
+    ctx.globalAlpha = 1 - decay * 0.6;
   } else {
     ctx.clearRect(0, 0, w, h);
   }
@@ -8060,23 +8343,57 @@ function drawMonitorFrame(t) {
   let rot = 0;
 
   if (effectType === 'cam_float') {
-    dx = Math.sin(t * 1.7) * 5.5 * intensity;
-    dy = Math.cos(t * 1.3) * 4.2 * intensity;
-    rot = Math.sin(t * 0.9) * 0.006 * intensity;
+    // Drift is the amplitude of the handheld float, Rate its frequency and Roll
+    // how much the horizon breathes — a tripod does none of these.
+    const drift = fxv('drift', 55) / 100;
+    const rate = Math.max(0.1, fxv('rate', 17) / 10);
+    const roll = fxv('roll', 40) / 100;
+    dx = Math.sin(t * rate) * 9 * drift * intensity;
+    dy = Math.cos(t * rate * 0.76) * 7 * drift * intensity;
+    rot = Math.sin(t * rate * 0.53) * 0.012 * roll * intensity;
     scale = 1.02;
   } else if (effectType === 'opt_gateweave') {
-    dx = (Math.sin(t * 19) * 1.4 + Math.cos(t * 31) * 0.9) * intensity;
-    dy = (Math.cos(t * 23) * 1.2) * intensity;
-    scale = 1.01;
+    const amp = fxv('amplitude', 40) / 100;
+    const speed = Math.max(1, fxv('speed', 19));
+    const breath = fxv('breath', 30) / 100;
+    dx = (Math.sin(t * speed) * 1.4 + Math.cos(t * speed * 1.6) * 0.9) * amp * intensity;
+    dy = (Math.cos(t * speed * 1.2) * 1.2) * amp * intensity;
+    scale = 1 + breath * 0.03 * intensity;
   } else if (effectType === 'cam_thump' || state.hitFlashBurst > 0.05) {
-    const thump = (0.075 * intensity * onBeatPulse) + (state.hitFlashBurst * 0.09);
+    const impact = fxv('impact', 100) / 100;
+    const recover = fxv('recover', 50) / 100;
+    const shakeP = fxv('shake', 35) / 100;
+    const thump = (0.075 * intensity * onBeatPulse * impact) + (state.hitFlashBurst * 0.09);
     scale = 1.0 + thump;
-    dy = Math.sin(beatPhase * Math.PI * 2) * 3.5 * thump * 10;
+    dy = Math.sin(beatPhase * Math.PI * 2) * 3.5 * thump * 10 * shakeP;
+    dx = Math.cos(beatPhase * Math.PI * 2) * 2.2 * thump * 10 * shakeP * (1 + recover);
   } else if (effectType === 'time_velocity') {
-    scale = 1.0 + 0.16 * intensity * Math.pow(onBeatPulse, 1.5);
+    const exposure = fxv('exposure', 60) / 100;
+    scale = 1.0 + 0.16 * intensity * Math.pow(onBeatPulse, 1.5) * (0.4 + exposure);
   } else if (effectType === 'cam_whip') {
-    dx = Math.pow(onBeatPulse, 2) * 58 * intensity * (Math.floor(t) % 2 === 0 ? 1 : -1);
-    scale = 1.06;
+    const dist = fxv('distance', 60) / 100;
+    const settle = fxv('settle', 40) / 100;
+    const swing = Math.pow(onBeatPulse, 2 + settle) * 58 * intensity * (Math.floor(t) % 2 === 0 ? 1 : -1);
+    dx = swing * (0.4 + dist);
+    scale = 1 + 0.06 * (0.5 + dist);
+  } else if (effectType === 'cam_handheld') {
+    // Handheld: a long slow sway, a short micro jitter and a breath. Three
+    // different frequencies, which is what makes it read as a person.
+    const sway = fxv('sway', 50) / 100;
+    const speed = Math.max(0.2, fxv('speed', 12) / 10);
+    const jitter = fxv('jitter', 30) / 100;
+    const breathe = fxv('breathe', 25) / 100;
+    dx = (Math.sin(t * speed) * 8 * sway + Math.sin(t * speed * 7.3) * 1.6 * jitter) * intensity;
+    dy = (Math.cos(t * speed * 0.81) * 6 * sway + Math.cos(t * speed * 9.1) * 1.4 * jitter) * intensity;
+    rot = Math.sin(t * speed * 0.6) * 0.008 * sway * intensity;
+    scale = 1.03 + Math.sin(t * speed * 0.45) * 0.004 * breathe;
+  } else if (effectType === 'cam_dolly_punch') {
+    const punch = fxv('punch', 100) / 100;
+    const ease = fxv('ease', 50) / 100;
+    const settleDrift = fxv('settle', 40) / 100;
+    const hit = Math.pow(onBeatPulse, 1 + (1 - ease) * 3) * 0.18 * punch * intensity;
+    scale = 1.01 + hit;
+    dy = Math.sin(t * 0.35) * 2.5 * settleDrift * intensity;
   }
 
   ctx.save();
@@ -8094,7 +8411,7 @@ function drawMonitorFrame(t) {
     ctx.beginPath();
     ctx.rect(w / 2, 0, w / 2, h);
     ctx.clip();
-    drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
+    drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount, fxP);
     ctx.restore();
 
     ctx.strokeStyle = 'rgba(225, 29, 72, 0.9)';
@@ -8113,7 +8430,7 @@ function drawMonitorFrame(t) {
     ctx.fillStyle = '#fecdd3';
     ctx.fillText('GRADED FX', w - 84, 25);
   } else if (state.presetPicked && effectType) {
-    drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
+    drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount, fxP);
   }
 
   // Depth-driven effect stack: on the picture only, so lyrics stay crisp
@@ -8339,15 +8656,297 @@ function drawCinematicPlate(ctx, w, h, t, onBeatPulse) {
   }
 }
 
-function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPulse, grainAmount) {
+// ============================================================================
+// LOOK PARAMETERS — every look is more than one number
+// ----------------------------------------------------------------------------
+// An intensity slider asks "how much?". These ask "how does it look?: how wide
+// the halation is, how high the highlight threshold sits, how warm the bleed is,
+// how strong the grain is. Each effect declares its own controls, a preset can
+// ship its own starting values, and the panel renders the rack for whatever look
+// is selected. The last three are universal: every effect in the list gets them.
+// ============================================================================
+const FX_FINISH_PARAMS = [
+  { k: 'mix', label: 'Mix with original', min: 0, max: 100, def: 100, unit: '%' },
+  { k: 'finishGrain', label: 'Grain', min: 0, max: 100, def: 0, unit: '' },
+  { k: 'finishTemp', label: 'Temperature', min: -100, max: 100, def: 0, unit: 'K' }
+];
+
+const FX_PARAM_DEFS = {
+  // ---- optical
+  opt_halation: [
+    { k: 'radius', label: 'Scatter radius', min: 20, max: 360, def: 180, unit: 'px' },
+    { k: 'threshold', label: 'Highlight threshold', min: 40, max: 100, def: 78, unit: '%' },
+    { k: 'warmth', label: 'Bleed colour', min: 0, max: 100, def: 62, unit: '' },
+    { k: 'bloom', label: 'Bloom strength', min: 0, max: 180, def: 100, unit: '%' }
+  ],
+  opt_fringe: [
+    { k: 'offset', label: 'Fringe spread', min: 2, max: 60, def: 14, unit: 'px' },
+    { k: 'ghost', label: 'Ghost opacity', min: 0, max: 100, def: 34, unit: '%' },
+    { k: 'tint', label: 'R/C balance', min: -100, max: 100, def: 0, unit: '' }
+  ],
+  opt_prism: [
+    { k: 'offset', label: 'Refraction shift', min: 2, max: 70, def: 22, unit: 'px' },
+    { k: 'ghost', label: 'Ghost opacity', min: 0, max: 100, def: 40, unit: '%' },
+    { k: 'corner', label: 'Corner reach', min: 10, max: 100, def: 62, unit: '%' }
+  ],
+  opt_diopter: [
+    { k: 'split', label: 'Split position', min: 25, max: 75, def: 42, unit: '%' },
+    { k: 'zoom', label: 'Near-plane zoom', min: 100, max: 145, def: 116, unit: '%' },
+    { k: 'seam', label: 'Seam glow', min: 0, max: 100, def: 32, unit: '%' }
+  ],
+  opt_gateweave: [
+    { k: 'amplitude', label: 'Weave amplitude', min: 0, max: 100, def: 40, unit: '%' },
+    { k: 'speed', label: 'Weave rate', min: 4, max: 60, def: 19, unit: 'Hz' },
+    { k: 'breath', label: 'Gate breathing', min: 0, max: 100, def: 30, unit: '%' }
+  ],
+  opt_tilt: [
+    { k: 'band', label: 'Focus band width', min: 5, max: 60, def: 22, unit: '%' },
+    { k: 'defocus', label: 'Defocus amount', min: 0, max: 100, def: 60, unit: '%' },
+    { k: 'angle', label: 'Plane angle', min: -80, max: 80, def: 45, unit: '°' }
+  ],
+  // ---- lab
+  lab_bleach: [
+    { k: 'desat', label: 'Silver retention', min: 0, max: 100, def: 68, unit: '%' },
+    { k: 'contrast', label: 'Contrast lift', min: 0, max: 100, def: 32, unit: '%' },
+    { k: 'push', label: 'Shadow density', min: 0, max: 100, def: 26, unit: '%' }
+  ],
+  lab_2383: [
+    { k: 'warm', label: 'Highlight warmth', min: 0, max: 100, def: 20, unit: '%' },
+    { k: 'cyan', label: 'Cyan shadow lift', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'toe', label: 'Toe contrast', min: 0, max: 100, def: 30, unit: '%' }
+  ],
+  lab_flir: [
+    { k: 'invert', label: 'Thermal inversion', min: 0, max: 100, def: 78, unit: '%' },
+    { k: 'detail', label: 'Edge detail', min: 0, max: 100, def: 40, unit: '%' },
+    { k: 'palette', label: 'Palette heat', min: 0, max: 100, def: 50, unit: '%' }
+  ],
+  lab_litho: [
+    { k: 'threshold', label: 'Tone threshold', min: 0, max: 100, def: 50, unit: '%' },
+    { k: 'tone', label: 'Print tone', min: 0, max: 100, def: 30, unit: '%' },
+    { k: 'softness', label: 'Edge softness', min: 0, max: 100, def: 35, unit: '%' }
+  ],
+  lab_leak: [
+    { k: 'speed', label: 'Leak travel', min: 20, max: 420, def: 220, unit: 'px/s' },
+    { k: 'width', label: 'Leak width', min: 20, max: 260, def: 90, unit: 'px' },
+    { k: 'warmth', label: 'Leak colour', min: 0, max: 100, def: 70, unit: '' }
+  ],
+  // ---- time / shutter
+  time_smear: [
+    { k: 'trails', label: 'Trail samples', min: 2, max: 24, def: 8, unit: '' },
+    { k: 'decay', label: 'Trail decay', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'quantise', label: 'Step print', min: 1, max: 24, def: 9, unit: 'fps' }
+  ],
+  time_velocity: [
+    { k: 'exposure', label: 'Shutter exposure', min: 0, max: 100, def: 60, unit: '%' },
+    { k: 'streak', label: 'Streak length', min: 0, max: 100, def: 45, unit: '%' },
+    { k: 'samples', label: 'Sub-frame samples', min: 2, max: 16, def: 6, unit: '' }
+  ],
+  time_snip: [
+    { k: 'slice', label: 'Slice height', min: 2, max: 60, def: 14, unit: 'px' },
+    { k: 'jitter', label: 'Frame jitter', min: 0, max: 100, def: 50, unit: '%' },
+    { k: 'flash', label: 'Splice flash', min: 0, max: 100, def: 38, unit: '%' }
+  ],
+  // ---- camera
+  cam_float: [
+    { k: 'drift', label: 'Drift amount', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'rate', label: 'Drift rate', min: 0.2, max: 4, def: 1.7, unit: 'Hz' },
+    { k: 'roll', label: 'Roll', min: 0, max: 100, def: 40, unit: '%' }
+  ],
+  cam_thump: [
+    { k: 'impact', label: 'Impact scale', min: 0, max: 200, def: 100, unit: '%' },
+    { k: 'recover', label: 'Recovery', min: 0, max: 100, def: 50, unit: '%' },
+    { k: 'shake', label: 'Shake tail', min: 0, max: 100, def: 35, unit: '%' }
+  ],
+  cam_whip: [
+    { k: 'distance', label: 'Whip distance', min: 0, max: 100, def: 60, unit: '%' },
+    { k: 'blur', label: 'Directional blur', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'settle', label: 'Settle time', min: 0, max: 100, def: 40, unit: '%' }
+  ],
+  // ---- editorial / depth
+  depth_sep: [
+    { k: 'subject', label: 'Subject size', min: 8, max: 45, def: 16, unit: '%' },
+    { k: 'falloff', label: 'Depth falloff', min: 20, max: 95, def: 62, unit: '%' },
+    { k: 'desat', label: 'Background desat', min: 0, max: 100, def: 95, unit: '%' }
+  ],
+  depth_streak: [
+    { k: 'reach', label: 'Streak reach', min: 10, max: 100, def: 55, unit: '%' },
+    { k: 'thickness', label: 'Streak thickness', min: 1, max: 24, def: 8, unit: 'px' },
+    { k: 'tint', label: 'Streak colour', min: 0, max: 100, def: 55, unit: '' }
+  ],
+  ed_pip: [
+    { k: 'size', label: 'Frame inset', min: 4, max: 40, def: 12, unit: '%' },
+    { k: 'border', label: 'Border weight', min: 0, max: 100, def: 45, unit: '%' },
+    { k: 'outside', label: 'Outside darkness', min: 0, max: 100, def: 0, unit: '%' }
+  ],
+  ed_scope: [
+    { k: 'bars', label: 'Scope bars', min: 4, max: 26, def: 13, unit: '%' },
+    { k: 'edge', label: 'Bar feather', min: 0, max: 100, def: 0, unit: '%' },
+    { k: 'guides', label: 'Centre guides', min: 0, max: 100, def: 0, unit: '%' }
+  ],
+
+  // ---- optical, second set
+  opt_anamorphic_streak: [
+    { k: 'length', label: 'Streak length', min: 0, max: 100, def: 60, unit: '%' },
+    { k: 'thickness', label: 'Streak thickness', min: 1, max: 14, def: 3, unit: 'px' },
+    { k: 'threshold', label: 'Source brightness', min: 30, max: 100, def: 70, unit: '%' },
+    { k: 'tint', label: 'Streak colour', min: 0, max: 100, def: 40, unit: '' }
+  ],
+  opt_lens_dirt: [
+    { k: 'amount', label: 'Dirt amount', min: 0, max: 100, def: 40, unit: '%' },
+    { k: 'size', label: 'Smudge size', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'warmth', label: 'Smudge colour', min: 0, max: 100, def: 40, unit: '' },
+    { k: 'specks', label: 'Dust specks', min: 0, max: 100, def: 35, unit: '%' }
+  ],
+
+  // ---- film lab, second set
+  lab_xprocess: [
+    { k: 'shadows', label: 'Shadow shift', min: -100, max: 100, def: -30, unit: '' },
+    { k: 'highlights', label: 'Highlight shift', min: -100, max: 100, def: 55, unit: '' },
+    { k: 'saturation', label: 'Saturation', min: 0, max: 100, def: 70, unit: '%' },
+    { k: 'contrast', label: 'Contrast', min: 0, max: 100, def: 35, unit: '%' }
+  ],
+  lab_duotone: [
+    { k: 'shadowHue', label: 'Shadow ink', min: 0, max: 360, def: 40, unit: '°' },
+    { k: 'highlightHue', label: 'Highlight ink', min: 0, max: 360, def: 190, unit: '°' },
+    { k: 'blend', label: 'Ink mixture', min: 0, max: 100, def: 60, unit: '%' },
+    { k: 'contrast', label: 'Print contrast', min: 0, max: 100, def: 35, unit: '%' }
+  ],
+
+  // ---- shutter / time, second set
+  time_echo: [
+    { k: 'delay', label: 'Echo delay', min: 1, max: 24, def: 8, unit: 'fr' },
+    { k: 'ghost', label: 'Echo opacity', min: 0, max: 100, def: 45, unit: '%' },
+    { k: 'offset', label: 'Echo offset', min: -60, max: 60, def: 0, unit: 'px' },
+    { k: 'spread', label: 'Echo scale', min: 90, max: 115, def: 100, unit: '%' }
+  ],
+  time_gate_stutter: [
+    { k: 'rate', label: 'Stutter rate', min: 1, max: 24, def: 6, unit: 'Hz' },
+    { k: 'duty', label: 'Gate closed', min: 5, max: 70, def: 32, unit: '%' },
+    { k: 'jitter', label: 'Line jitter', min: 0, max: 100, def: 40, unit: '%' },
+    { k: 'dropout', label: 'Dropout smear', min: 0, max: 100, def: 25, unit: '%' }
+  ],
+
+  // ---- camera, second set
+  cam_handheld: [
+    { k: 'sway', label: 'Sway amount', min: 0, max: 100, def: 50, unit: '%' },
+    { k: 'speed', label: 'Sway speed', min: 1, max: 40, def: 12, unit: '' },
+    { k: 'jitter', label: 'Micro jitter', min: 0, max: 100, def: 30, unit: '%' },
+    { k: 'breathe', label: 'Breathing', min: 0, max: 100, def: 25, unit: '%' }
+  ],
+  cam_dolly_punch: [
+    { k: 'punch', label: 'Punch depth', min: 0, max: 200, def: 100, unit: '%' },
+    { k: 'ease', label: 'Ease back', min: 0, max: 100, def: 50, unit: '%' },
+    { k: 'settle', label: 'Settle drift', min: 0, max: 100, def: 40, unit: '%' }
+  ],
+
+  // ---- editorial, second set
+  ed_letterbox: [
+    { k: 'ratio', label: 'Frame ratio', min: 200, max: 260, def: 239, unit: 'x100' },
+    { k: 'feather', label: 'Bar feather', min: 0, max: 100, def: 15, unit: '%' },
+    { k: 'shift', label: 'Vertical shift', min: -30, max: 30, def: 0, unit: '%' },
+    { k: 'shade', label: 'Bar density', min: 0, max: 100, def: 100, unit: '%' }
+  ],
+  ed_focus_pull: [
+    { k: 'blur', label: 'Defocus depth', min: 0, max: 16, def: 6, unit: 'px' },
+    { k: 'rate', label: 'Pull rate', min: 1, max: 20, def: 5, unit: '' },
+    { k: 'hold', label: 'Sharp hold', min: 0, max: 90, def: 45, unit: '%' }
+  ],
+
+  // ---- depth, second set
+  depth_haze: [
+    { k: 'near', label: 'Clear zone', min: 0, max: 70, def: 30, unit: '%' },
+    { k: 'haze', label: 'Haze density', min: 0, max: 100, def: 40, unit: '%' },
+    { k: 'falloff', label: 'Distance falloff', min: 20, max: 95, def: 70, unit: '%' },
+    { k: 'warmth', label: 'Haze colour', min: 0, max: 100, def: 50, unit: '' }
+  ],
+  depth_rim: [
+    { k: 'width', label: 'Rim width', min: 1, max: 24, def: 6, unit: 'px' },
+    { k: 'glow', label: 'Rim glow', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'tint', label: 'Rim colour', min: 0, max: 100, def: 45, unit: '' }
+  ]
+};
+
+function fxParamDefs(effectType) {
+  const own = FX_PARAM_DEFS[effectType] || [];
+  return own.concat(FX_FINISH_PARAMS);
+}
+
+function ensureFxParams() {
+  if (!state.fxParams) state.fxParams = {};
+  return state.fxParams;
+}
+
+// A preset can ship its own starting values; anything it does not set falls back
+// to the effect's default, so old presets keep their old look.
+function fxParam(preset, key) {
+  const defs = fxParamDefs(preset && preset.effectType);
+  const def = defs.find((d) => d.k === key);
+  if (!def) return 0;
+  const store = ensureFxParams()[preset.id];
+  if (store && store[key] !== undefined) return store[key];
+  const shipped = preset.params && preset.params[key];
+  return shipped === undefined ? def.def : shipped;
+}
+
+function setFxParam(preset, key, value) {
+  if (!preset) return;
+  const defs = fxParamDefs(preset.effectType);
+  const def = defs.find((d) => d.k === key);
+  if (!def) return;
+  const store = ensureFxParams();
+  if (!store[preset.id]) store[preset.id] = {};
+  store[preset.id][key] = Math.max(def.min, Math.min(def.max, Number(value)));
+}
+
+// Everything the shader needs, resolved once per frame.
+function fxParamsOf(preset) {
+  const out = {};
+  if (!preset) return out;
+  fxParamDefs(preset.effectType).forEach((d) => {
+    out[d.k] = fxParam(preset, d.k);
+  });
+  return out;
+}
+
+function fxResetParams(preset) {
+  if (!preset) return;
+  const store = ensureFxParams();
+  delete store[preset.id];
+}
+
+function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPulse, grainAmount, paramsIn) {
+  const P = paramsIn || fxParamsOf(state.activePreset);
+  const pick = (key, fallback) => (P[key] === undefined ? fallback : P[key]);
+
+  // Keep a copy of the frame as it arrived, so "Mix with original" can dial the
+  // whole look back towards the untouched plate — the same control every
+  // Resolve effect has, and the one that makes an effect usable at low strength.
+  const mixPct = pick('mix', 100);
+  let before = null;
+  if (mixPct < 99.5) {
+    if (!fxScratch) fxScratch = document.createElement('canvas');
+    if (fxScratch.width !== ctx.canvas.width || fxScratch.height !== ctx.canvas.height) {
+      fxScratch.width = ctx.canvas.width;
+      fxScratch.height = ctx.canvas.height;
+    }
+    const sctx = fxScratch.getContext('2d');
+    if (sctx) {
+      sctx.setTransform(1, 0, 0, 1, 0, 0);
+      sctx.clearRect(0, 0, fxScratch.width, fxScratch.height);
+      sctx.drawImage(ctx.canvas, 0, 0);
+      before = fxScratch;
+    }
+  }
+
   // ---------------------------------------------------------------------
   // TOUCHDESIGNER TOPs + TRANSITIONS & MORPHS → real generative shader pass
   // ---------------------------------------------------------------------
   if (window.TD_ENGINE && TD_ENGINE.hasShader(effectType)) {
-    const preset = state.activePreset || { accent: '#e11d48' };
+    const preset = Object.assign({}, state.activePreset || { accent: '#e11d48' }, { params: P });
     // transitions scrub with the playhead so keyframed intensity reads correctly
     const shaderTime = preset.isTransition ? state.playheadSec : t;
     TD_ENGINE.render(ctx, w, h, shaderTime, effectType, intensity, onBeatPulse, preset);
+    fxFinishPass(ctx, w, h, effectType, P, before, grainAmount);
     return;
   }
 
@@ -8355,18 +8954,27 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
   if (effectType === 'opt_halation' || effectType === 'lab_leak') {
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
-    const halGrad = ctx.createRadialGradient(w * 0.5, h * 0.48, 10, w * 0.5, h * 0.48, w * 0.48);
-    halGrad.addColorStop(0, `rgba(255, 115, 29, ${0.38 * intensity + onBeatPulse * 0.15})`);
-    halGrad.addColorStop(0.5, `rgba(225, 29, 72, ${0.22 * intensity})`);
+    const warm = pick('warmth', 62) / 100;
+    const bloom = pick('bloom', 100) / 100;
+    const radiusPx = Math.max(20, pick('radius', 180)) * (w / 640);
+    // threshold: only the bright part of the frame should glow, so the falloff
+    // starts further out the higher the threshold sits
+    const threshold = pick('threshold', 78) / 100;
+    const halGrad = ctx.createRadialGradient(w * 0.5, h * 0.48, radiusPx * 0.05, w * 0.5, h * 0.48, radiusPx);
+    halGrad.addColorStop(0, `rgba(255, ${Math.round(115 + warm * 60)}, ${Math.round(29 + warm * 20)}, ${(0.38 * intensity + onBeatPulse * 0.15) * bloom})`);
+    halGrad.addColorStop(0.35 + threshold * 0.25, `rgba(225, 29, 72, ${0.22 * intensity * bloom})`);
     halGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = halGrad;
     ctx.fillRect(0, 0, w, h);
 
     if (effectType === 'lab_leak') {
-      const leakX = ((t * 220) % (w * 1.4)) - w * 0.2;
-      const burn = ctx.createLinearGradient(leakX - 90, 0, leakX + 90, 0);
+      const speed = pick('speed', 220);
+      const width = pick('width', 90) * (w / 640);
+      const leakWarm = pick('warmth', 70) / 100;
+      const leakX = ((t * speed) % (w * 1.4)) - w * 0.2;
+      const burn = ctx.createLinearGradient(leakX - width, 0, leakX + width, 0);
       burn.addColorStop(0, 'rgba(0,0,0,0)');
-      burn.addColorStop(0.5, `rgba(249, 115, 22, ${0.62 * intensity})`);
+      burn.addColorStop(0.5, `rgba(${Math.round(249)}, ${Math.round(80 + leakWarm * 70)}, ${Math.round(22 + leakWarm * 40)}, ${0.62 * intensity})`);
       burn.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = burn;
       ctx.fillRect(0, 0, w, h);
@@ -8376,14 +8984,16 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
 
   // 2. SPLIT-DIOPTER DUAL FOCUS REFRACTION
   if (effectType === 'opt_diopter') {
-    const splitX = Math.round(w * 0.42);
+    const splitX = Math.round(w * (pick('split', 42) / 100));
+    const zoomP = pick('zoom', 116) / 100;
+    const seamP = pick('seam', 32) / 100;
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, splitX, h);
     ctx.clip();
     // Draw magnified, slightly shifted left optical plane
     ctx.translate(splitX / 2, h / 2);
-    ctx.scale(1.16, 1.16);
+    ctx.scale(zoomP, zoomP);
     ctx.translate(-splitX / 2 + 14 * intensity, -h / 2);
     ctx.drawImage(ctx.canvas, 0, 0);
     ctx.restore();
@@ -8391,29 +9001,82 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
     // Soft optical glass refraction seam
     const seam = ctx.createLinearGradient(splitX - 14, 0, splitX + 14, 0);
     seam.addColorStop(0, 'rgba(255,255,255,0)');
-    seam.addColorStop(0.5, `rgba(186, 230, 253, ${0.32 * intensity})`);
+    seam.addColorStop(0.5, `rgba(186, 230, 253, ${seamP * intensity})`);
     seam.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = seam;
     ctx.fillRect(splitX - 14, 0, 28, h);
+  }
+
+  // 2b. 180° SHUTTER STREAK — stacked exposures along the motion axis.
+  // Samples is the shutter count, Exposure how bright each one lands.
+  if (effectType === 'time_velocity') {
+    const samples = Math.max(1, Math.round(pick('samples', 6)));
+    const exposure = pick('exposure', 60) / 100;
+    const streakLen = pick('streak', 45) / 100;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 1; i <= samples; i++) {
+      const f = i / samples;
+      ctx.globalAlpha = (0.5 / samples) * exposure * intensity;
+      const ox = -streakLen * 28 * (w / 640) * f * intensity;
+      ctx.drawImage(ctx.canvas, ox, 0, w, h);
+    }
+    ctx.restore();
   }
 
   // 3. PRISM CORNER REFRACTION / ANAMORPHIC FRINGE
   if (effectType === 'opt_prism' || effectType === 'opt_fringe' || effectType === 'depth_streak') {
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.34 * intensity;
-    ctx.drawImage(ctx.canvas, -10 * intensity, 0, w + 20 * intensity, h);
+    const spread = Math.max(2, pick('offset', 14)) * (w / 640);
+    ctx.globalAlpha = (pick('ghost', 34) / 100) * intensity * 1.0;
+    ctx.drawImage(ctx.canvas, -spread * intensity, 0, w + spread * 2 * intensity, h);
+    // red/cyan balance: a lens does not fringe symmetrically
+    const tint = pick('tint', 0) / 100;
+    if (Math.abs(tint) > 0.02) {
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = Math.abs(tint) * 0.25 * intensity;
+      ctx.fillStyle = tint > 0 ? 'rgba(255, 60, 40, 1)' : 'rgba(40, 190, 255, 1)';
+      ctx.fillRect(0, 0, w, h);
+    }
     ctx.restore();
+
+    if (effectType === 'opt_prism') {
+      // Corner: how much of the prism's edge tints the frame corners. A real
+      // prism catches light at its bevels, never across the middle.
+      const corner = pick('corner', 62) / 100;
+      if (corner > 0.02) {
+        const cw = w * 0.42;
+        const chh = h * 0.42;
+        const corners = [[0, 0, 1, 1], [w, 0, -1, 1], [0, h, 1, -1], [w, h, -1, -1]];
+        corners.forEach(([cx, cy, sx, sy]) => {
+          const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(cw, chh));
+          g.addColorStop(0, `rgba(255, 168, 120, ${0.22 * corner * intensity})`);
+          g.addColorStop(0.55, `rgba(120, 190, 255, ${0.10 * corner * intensity})`);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.save();
+          ctx.globalCompositeOperation = 'screen';
+          ctx.translate(cx, cy);
+          ctx.scale(sx, sy);
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, cw * sx, chh * sy);
+          ctx.restore();
+        });
+      }
+    }
 
     if (effectType === 'depth_streak') {
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
+      const reach = pick('reach', 55) / 100;
+      const thick = Math.max(1, pick('thickness', 8)) * (w / 640);
+      const tintP = pick('tint', 55) / 100;
       const streak = ctx.createLinearGradient(0, h * 0.48, w, h * 0.48);
       streak.addColorStop(0, 'rgba(6, 182, 212, 0)');
-      streak.addColorStop(0.5, `rgba(56, 189, 248, ${0.55 * intensity})`);
+      streak.addColorStop(0.5, `rgba(${Math.round(56 + tintP * 90)}, 189, ${Math.round(248 - tintP * 80)}, ${0.55 * intensity * (0.35 + reach)})`);
       streak.addColorStop(1, 'rgba(6, 182, 212, 0)');
       ctx.fillStyle = streak;
-      ctx.fillRect(0, h * 0.46, w, 8);
+      ctx.fillRect(0, h * 0.5 - thick / 2, w, thick);
       ctx.restore();
     }
   }
@@ -8421,23 +9084,48 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
   // 4. BLEACH BYPASS SILVER RETENTION / KODAK 2383 / FLIR / LITHO
   if (effectType === 'lab_bleach') {
     ctx.save();
+    const desat = pick('desat', 68) / 100;
+    const contrast = pick('contrast', 32) / 100;
+    const density = pick('push', 26) / 100;
     ctx.globalCompositeOperation = 'saturation';
-    ctx.fillStyle = `hsl(0, ${Math.round((1 - 0.68 * intensity) * 100)}%, 50%)`;
+    ctx.fillStyle = `hsl(0, ${Math.round((1 - desat * intensity) * 100)}%, 50%)`;
     ctx.fillRect(0, 0, w, h);
     ctx.globalCompositeOperation = 'contrast';
-    ctx.fillStyle = `rgba(10, 14, 22, ${0.32 * intensity})`;
+    ctx.fillStyle = `rgba(10, 14, 22, ${contrast * intensity})`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = `rgba(180, 188, 196, ${density * intensity * 0.5})`;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
   } else if (effectType === 'lab_flir') {
     ctx.save();
+    const inv = pick('invert', 78) / 100;
+    const heat = pick('palette', 50) / 100;
     ctx.globalCompositeOperation = 'difference';
-    ctx.fillStyle = `rgba(220, 235, 255, ${0.78 * intensity})`;
+    ctx.fillStyle = `rgba(220, 235, 255, ${inv * intensity})`;
+    ctx.fillRect(0, 0, w, h);
+    // thermal palettes are not neutral: heat runs blue-black-white or amber
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = heat * 0.35 * intensity;
+    ctx.fillStyle = heat > 0.5 ? '#ffb347' : '#2e6cff';
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
   } else if (effectType === 'lab_litho') {
     ctx.save();
+    const thr = pick('threshold', 50) / 100;
+    const tone = pick('tone', 30) / 100;
+    const soft = pick('softness', 35) / 100;
     ctx.globalCompositeOperation = 'saturation';
     ctx.fillStyle = 'hsl(0, 0%, 50%)';
+    ctx.fillRect(0, 0, w, h);
+    // litho is a two-ink print: crush the midtones towards the threshold
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = (0.35 + thr * 0.45) * intensity;
+    ctx.fillStyle = tone > 0.5 ? '#f4ecdc' : '#0d0f12';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.globalAlpha = soft * 0.5;
+    ctx.fillStyle = '#8b8f96';
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
   }
@@ -8445,8 +9133,19 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
   // 5. 2-FRAME FILM SNIP / TRANSIENT SPLICE FLASH
   if ((effectType === 'time_snip' && onBeatPulse > 0.68) || state.hitFlashBurst > 0.35) {
     ctx.save();
+    const slicePx = Math.max(2, pick('slice', 14)) * (w / 640);
+    const jitterP = pick('jitter', 50) / 100;
+    const flashP = pick('flash', 38) / 100;
+    // A splice is a torn strip, not a full-frame flash: slice the frame and
+    // throw the pieces sideways by up to "Jitter".
+    const strips = Math.max(1, Math.round(h / Math.max(8, slicePx * 4)));
+    const stripH = h / strips;
+    for (let i = 0; i < strips; i++) {
+      const shift = (Math.random() - 0.5) * slicePx * 2 * jitterP * intensity;
+      ctx.drawImage(ctx.canvas, 0, i * stripH, w, stripH, shift, i * stripH, w, stripH);
+    }
     ctx.globalCompositeOperation = 'screen';
-    const snipAlpha = Math.min(0.65, state.hitFlashBurst * 0.55 + onBeatPulse * 0.38 * intensity);
+    const snipAlpha = Math.min(0.65, state.hitFlashBurst * 0.55 + onBeatPulse * 0.38 * intensity * flashP * 2);
     ctx.fillStyle = `rgba(255, 237, 213, ${snipAlpha})`;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
@@ -8455,12 +9154,22 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
   // 6. EDITORIAL PIP / 2.39:1 SCOPE MATTE
   if (effectType === 'ed_pip') {
     ctx.save();
+    const inset = pick('size', 12) / 100;
+    const weight = 0.5 + (pick('border', 45) / 100) * 3;
+    const outside = pick('outside', 0) / 100;
+    if (outside > 0.02) {
+      ctx.fillStyle = `rgba(0,0,0,${outside})`;
+      ctx.fillRect(0, 0, w, h * inset);
+      ctx.fillRect(0, h - h * inset, w, h * inset);
+      ctx.fillRect(0, 0, w * inset, h);
+      ctx.fillRect(w - w * inset, 0, w * inset, h);
+    }
     ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(w * 0.12, h * 0.12, w * 0.76, h * 0.76);
+    ctx.lineWidth = weight;
+    ctx.strokeRect(w * inset, h * inset, w * (1 - inset * 2), h * (1 - inset * 2));
     ctx.restore();
   } else if (effectType === 'ed_scope') {
-    const barH = Math.round(h * 0.13);
+    const barH = Math.round(h * (pick('bars', 13) / 100));
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, w, barH);
     ctx.fillRect(0, h - barH, w, barH);
@@ -8468,7 +9177,9 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
 
   // 6b. TILT-SHIFT OBLIQUE PLANE (diagonal focus band + creamy defocus)
   if (effectType === 'opt_tilt') {
-    const amt = Math.min(1, intensity);
+    const amt = Math.min(1, intensity) * (pick('defocus', 60) / 60);
+    const bandPct = pick('band', 22) / 100;
+    const angleDeg = pick('angle', 45);
     if (amt > 0.01) {
       ctx.save();
       // out-of-focus wedges (top-left & bottom-right of the diagonal)
@@ -8492,10 +9203,14 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
       drawGhost(-2.2 * amt);
       ctx.restore();
 
-      // focus falloff along the diagonal
-      const band = ctx.createLinearGradient(0, 0, w, h);
+      // focus falloff along the chosen plane angle; the band is the sharp strip
+      const rad = (angleDeg * Math.PI) / 180;
+      const gx = Math.cos(rad) * w;
+      const gy = Math.sin(rad) * h;
+      const band = ctx.createLinearGradient(w / 2 - gx / 2, h / 2 - gy / 2, w / 2 + gx / 2, h / 2 + gy / 2);
       band.addColorStop(0, `rgba(2,4,8,${0.20 * amt})`);
-      band.addColorStop(0.5, 'rgba(0,0,0,0)');
+      band.addColorStop(Math.max(0.05, 0.5 - bandPct / 2), 'rgba(0,0,0,0)');
+      band.addColorStop(Math.min(0.95, 0.5 + bandPct / 2), 'rgba(0,0,0,0)');
       band.addColorStop(1, `rgba(2,4,8,${0.20 * amt})`);
       ctx.globalCompositeOperation = 'multiply';
       ctx.fillStyle = band;
@@ -8507,14 +9222,17 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
   // 6c. KODAK 2383 PRINT EMULATION (warm highlights / cyan-lifted shadows)
   if (effectType === 'lab_2383') {
     ctx.save();
+    const warmP = pick('warm', 20) / 100;
+    const cyanP = pick('cyan', 55) / 100;
+    const toeP = pick('toe', 30) / 100;
     ctx.globalCompositeOperation = 'overlay';
-    ctx.globalAlpha = 0.20 * Math.min(1, intensity);
+    ctx.globalAlpha = warmP * Math.min(1, intensity);
     ctx.fillStyle = '#ffe3bd';
     ctx.fillRect(0, 0, w, h);
 
     ctx.globalCompositeOperation = 'screen';
     const hi = ctx.createLinearGradient(0, 0, 0, h);
-    hi.addColorStop(0, `rgba(255,214,160,${0.16 * intensity})`);
+    hi.addColorStop(0, `rgba(255,214,160,${0.16 * intensity * (0.5 + warmP)})`);
     hi.addColorStop(0.45, 'rgba(255,236,214,0)');
     ctx.fillStyle = hi;
     ctx.fillRect(0, 0, w, h);
@@ -8522,7 +9240,7 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
     ctx.globalCompositeOperation = 'multiply';
     const lo = ctx.createLinearGradient(0, h * 0.45, 0, h);
     lo.addColorStop(0, 'rgba(255,255,255,0)');
-    lo.addColorStop(1, `rgba(150,205,225,${0.55 * Math.min(1, intensity)})`);
+    lo.addColorStop(1, `rgba(150,205,225,${0.55 * Math.min(1, intensity) * cyanP})`);
     ctx.fillStyle = lo;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
@@ -8533,11 +9251,12 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
     const amt = Math.min(1, intensity);
     if (amt > 0.01) {
       ctx.save();
-      const r0 = Math.min(w, h) * 0.16;
-      const r1 = Math.min(w, h) * 0.62;
+      const r0 = Math.min(w, h) * (pick('subject', 16) / 100);
+      const r1 = Math.min(w, h) * (pick('falloff', 62) / 100);
+      const desatAmt = pick('desat', 95) / 100;
       const mask = ctx.createRadialGradient(w * 0.5, h * 0.48, r0, w * 0.5, h * 0.48, r1);
       mask.addColorStop(0, 'rgba(128,128,128,0)');
-      mask.addColorStop(1, `rgba(128,128,128,${0.95 * amt})`);
+      mask.addColorStop(1, `rgba(128,128,128,${desatAmt * amt})`);
 
       ctx.globalCompositeOperation = 'saturation';
       ctx.fillStyle = mask;
@@ -8576,6 +9295,380 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
       const gy = ((i * 53 + Math.floor(t * 777)) % h);
       ctx.fillRect(gx, gy, 1.5, 1.5);
     }
+    ctx.restore();
+  }
+
+  // =====================================================================
+  // SECOND SET — ten more looks, each driven by its own rack of controls.
+  // =====================================================================
+
+  // ANAMORPHIC FLARE STREAK — a 2x oval aperture squeezes light into one
+  // horizontal line. Length sets the reach, Source brightness picks which
+  // highlights qualify, Thickness the core.
+  if (effectType === 'opt_anamorphic_streak') {
+    const len = pick('length', 60) / 100;
+    const thick = Math.max(1, pick('thickness', 3)) * (h / 360);
+    const thr = pick('threshold', 70) / 100;
+    const tintP = pick('tint', 40) / 100;
+    const lineY = h * (0.34 + (1 - thr) * 0.16);
+    const sliceH = Math.max(2, Math.round(h * 0.025));
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // the frame's own bright strip, stretched sideways into a flare
+    ctx.globalAlpha = 0.30 * intensity;
+    ctx.drawImage(ctx.canvas, 0, Math.max(0, lineY - sliceH), w, sliceH,
+      -w * 0.2 * len, lineY - thick * 7, w * (1 + 0.4 * len), thick * 14);
+    const core = ctx.createLinearGradient(0, 0, w, 0);
+    core.addColorStop(0, 'rgba(0,0,0,0)');
+    core.addColorStop(0.5, `rgba(${Math.round(90 + 160 * tintP)}, ${Math.round(175 + 50 * tintP)}, ${Math.round(255 - 60 * tintP)}, ${0.45 * intensity})`);
+    core.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = core;
+    ctx.fillRect(0, lineY - thick / 2, w, thick);
+    ctx.restore();
+  }
+
+  // LENS DIRT — smudges and dust sitting on the front element, lit by the
+  // frame behind them. Positions are seeded, so the dirt does not crawl.
+  if (effectType === 'opt_lens_dirt') {
+    const amount = pick('amount', 40) / 100;
+    const size = pick('size', 55) / 100;
+    const warm = pick('warmth', 40) / 100;
+    const specks = pick('specks', 35) / 100;
+    let seed = 20240517;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    for (let i = 0; i < 7; i++) {
+      const cx = rnd() * w;
+      const cy = rnd() * h;
+      const rad = (0.05 + rnd() * 0.09) * Math.min(w, h) * (0.5 + size);
+      const g = ctx.createRadialGradient(cx, cy, rad * 0.15, cx, cy, rad);
+      g.addColorStop(0, `rgba(255, ${Math.round(190 + warm * 40)}, ${Math.round(150 + warm * 70)}, ${0.13 * amount * intensity})`);
+      g.addColorStop(0.6, `rgba(255, 210, 170, ${0.05 * amount * intensity})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+    }
+    if (specks > 0.02) {
+      ctx.fillStyle = `rgba(255, 245, 230, ${0.5 * specks * intensity})`;
+      for (let i = 0; i < 26; i++) {
+        const px = rnd() * w;
+        const py = rnd() * h;
+        const pr = 0.6 + rnd() * 1.8;
+        ctx.beginPath();
+        ctx.arc(px, py, pr * (w / 640), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // CROSS-PROCESS — E6 chemistry in C41 soup: cool lifted shadows, hot
+  // highlights, saturation that goes strange rather than pretty.
+  if (effectType === 'lab_xprocess') {
+    const shadows = pick('shadows', -30) / 100;
+    const highlights = pick('highlights', 55) / 100;
+    const sat = pick('saturation', 70) / 100;
+    const contrast = pick('contrast', 35) / 100;
+    ctx.save();
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.globalAlpha = Math.min(1, 0.4 + sat * 0.8) * intensity;
+    ctx.fillStyle = 'hsl(0, 100%, 50%)';
+    ctx.fillRect(0, 0, w, h);
+    const g = ctx.createLinearGradient(0, h, 0, 0);
+    g.addColorStop(0, shadows < 0
+      ? `rgba(70, 200, 235, ${Math.abs(shadows) * 0.55 * intensity})`
+      : `rgba(255, 120, 60, ${shadows * 0.55 * intensity})`);
+    g.addColorStop(1, highlights > 0
+      ? `rgba(255, 190, 60, ${highlights * 0.5 * intensity})`
+      : `rgba(70, 120, 255, ${-highlights * 0.5 * intensity})`);
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = contrast * 0.4 * intensity;
+    ctx.fillStyle = '#101418';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // DUOTONE — two printing inks, no greys: the shadow ink holds the darks,
+  // the highlight ink the lights, Ink mixture how far the split goes.
+  if (effectType === 'lab_duotone') {
+    const shadowHue = pick('shadowHue', 40);
+    const highlightHue = pick('highlightHue', 190);
+    const blendP = pick('blend', 60) / 100;
+    const contrast = pick('contrast', 35) / 100;
+    ctx.save();
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.fillStyle = 'hsl(0, 0%, 50%)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = Math.min(1, blendP * 1.2) * intensity;
+    ctx.fillStyle = `hsl(${shadowHue}, 65%, 58%)`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = Math.min(1, blendP * 1.2) * intensity;
+    ctx.fillStyle = `hsl(${highlightHue}, 55%, 32%)`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = contrast * 0.5 * intensity;
+    ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // ECHO — a delayed copy of an earlier frame, offset and scaled like a
+  // shutter that never quite closed. Stored small: echoes are soft anyway.
+  if (effectType === 'time_echo') {
+    const delay = Math.max(1, Math.round(pick('delay', 8)));
+    const ghost = pick('ghost', 45) / 100;
+    const offsetPx = pick('offset', 0) * (w / 640);
+    const spread = pick('spread', 100) / 100;
+    if (fxEchoFrames.length > delay) {
+      const past = fxEchoFrames[fxEchoFrames.length - 1 - delay];
+      ctx.save();
+      ctx.globalAlpha = ghost * intensity * 0.85;
+      const dw = w * spread;
+      const dh = h * spread;
+      ctx.drawImage(past, (w - dw) / 2 + offsetPx * intensity, (h - dh) / 2, dw, dh);
+      ctx.restore();
+    }
+    fxEchoFrames.push(fxEchoSnapshot(ctx, w, h));
+    while (fxEchoFrames.length > 32) fxEchoFrames.shift();
+  }
+
+  // GATE STUTTER — a film gate that does not hold steady: dark chops at the
+  // stutter rate, plus torn scanlines and a dropout smear.
+  if (effectType === 'time_gate_stutter') {
+    const rate = Math.max(0.2, pick('rate', 6));
+    const duty = pick('duty', 32) / 100;
+    const jitterP = pick('jitter', 40) / 100;
+    const dropout = pick('dropout', 25) / 100;
+    const phase = (t * rate) % 1;
+    ctx.save();
+    if (phase < duty) {
+      // gate closed: the frame goes down, never fully black
+      const closeAmt = (1 - phase / Math.max(0.001, duty)) * 0.55;
+      ctx.fillStyle = `rgba(0, 0, 0, ${closeAmt * intensity})`;
+      ctx.fillRect(0, 0, w, h);
+    }
+    if (jitterP > 0.02) {
+      const bands = 5;
+      const bh = h / bands;
+      for (let i = 0; i < bands; i++) {
+        if (Math.random() > jitterP * 0.8) continue;
+        const shift = (Math.random() - 0.5) * 12 * (w / 640) * jitterP * intensity;
+        ctx.drawImage(ctx.canvas, 0, i * bh, w, bh, shift, i * bh, w, bh);
+      }
+    }
+    if (dropout > 0.02) {
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = dropout * 0.5 * intensity * (0.4 + Math.random() * 0.6);
+      ctx.drawImage(ctx.canvas, -6 * (w / 640), 0, w, h);
+    }
+    ctx.restore();
+  }
+
+  // ATMOSPHERIC HAZE — air between lens and subject: the further back, the
+  // more the frame washes out towards the haze colour.
+  if (effectType === 'depth_haze') {
+    const near = pick('near', 30) / 100;
+    const haze = pick('haze', 40) / 100;
+    const falloff = pick('falloff', 70) / 100;
+    const warm = pick('warmth', 50) / 100;
+    ctx.save();
+    const g = ctx.createRadialGradient(w * 0.5, h * 0.46, Math.min(w, h) * near, w * 0.5, h * 0.46, Math.min(w, h) * (0.35 + falloff));
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `rgba(${Math.round(190 + warm * 60)}, ${Math.round(205 + warm * 30)}, ${Math.round(225 - warm * 70)}, ${haze * 0.7 * intensity})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // DEPTH RIM — a light edge behind the subject, the oldest trick for
+  // separating a person from the wall behind them.
+  if (effectType === 'depth_rim') {
+    const width = Math.max(1, pick('width', 6)) * (w / 640);
+    const glow = pick('glow', 55) / 100;
+    const tintP = pick('tint', 45) / 100;
+    const ring = ctx.createRadialGradient(w * 0.5, h * 0.52, Math.min(w, h) * 0.16, w * 0.5, h * 0.52, Math.min(w, h) * 0.42);
+    ring.addColorStop(0, 'rgba(0,0,0,0)');
+    ring.addColorStop(0.72, `rgba(${Math.round(150 + tintP * 100)}, ${Math.round(200 + tintP * 40)}, ${Math.round(255 - tintP * 110)}, ${0.28 * glow * intensity})`);
+    ring.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = ring;
+    ctx.fillRect(0, 0, w, h);
+    ctx.lineWidth = width;
+    ctx.strokeStyle = `rgba(255, 240, 220, ${0.10 * glow * intensity})`;
+    ctx.beginPath();
+    ctx.arc(w * 0.5, h * 0.52, Math.min(w, h) * 0.33, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // LETTERBOX — a real frame ratio cut into the picture, with a feathered
+  // edge and the picture nudged up or down inside it.
+  if (effectType === 'ed_letterbox') {
+    const ratio = Math.max(1.2, pick('ratio', 239) / 100);
+    const feather = pick('feather', 15) / 100;
+    const shiftPct = pick('shift', 0) / 100;
+    const shade = pick('shade', 100) / 100;
+    const targetH = Math.min(h, w / ratio);
+    const offset = h * shiftPct * 0.5;
+    const topH = Math.max(0, Math.min(h, (h - targetH) / 2 + offset));
+    const botH = Math.max(0, Math.min(h, (h - targetH) / 2 - offset));
+    ctx.save();
+    ctx.globalAlpha = shade * Math.min(1, intensity);
+    ctx.fillStyle = '#000';
+    if (topH > 0.5) {
+      const fade = Math.max(1, topH * feather);
+      const solid = Math.max(0, topH - fade);
+      ctx.fillRect(0, 0, w, solid);
+      if (fade > 1) {
+        const g = ctx.createLinearGradient(0, solid, 0, solid + fade);
+        g.addColorStop(0, 'rgba(0,0,0,1)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, solid, w, fade);
+      }
+    }
+    if (botH > 0.5) {
+      ctx.fillStyle = '#000';
+      const fade = Math.max(1, botH * feather);
+      const solid = Math.max(0, botH - fade);
+      ctx.fillRect(0, h - solid, w, solid);
+      if (fade > 1) {
+        const g = ctx.createLinearGradient(0, h - solid - fade, 0, h - solid);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(1, 'rgba(0,0,0,1)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, h - solid - fade, w, fade);
+      }
+    }
+    ctx.restore();
+  }
+
+  // FOCUS PULL — the lens racks between soft and sharp on a cycle. Rate is
+  // how often it racks, Sharp hold how long it stays locked.
+  if (effectType === 'ed_focus_pull') {
+    const maxBlur = pick('blur', 6);
+    const rate = Math.max(0.1, pick('rate', 5)) / 10;
+    const hold = pick('hold', 45) / 100;
+    const phase = (t * rate) % 1;
+    let defocus = 0;
+    if (phase < hold) defocus = 0;
+    else {
+      const p = (phase - hold) / Math.max(0.001, 1 - hold);
+      defocus = Math.sin(p * Math.PI);
+    }
+    const px = defocus * maxBlur * (w / 640) * intensity;
+    if (px > 0.15) {
+      const snap = fxCopyFrame(ctx, w, h);
+      if (snap) {
+        ctx.save();
+        ctx.filter = `blur(${px.toFixed(2)}px)`;
+        ctx.drawImage(snap, 0, 0, w, h);
+        ctx.filter = 'none';
+        ctx.restore();
+      }
+    }
+  }
+
+  fxFinishPass(ctx, w, h, effectType, P, before, grainAmount);
+}
+
+let fxScratch = null;
+let fxEchoFrames = [];
+
+// A small, cheap copy for delayed frames: an echo never needs full resolution.
+function fxEchoSnapshot(ctx, w, h) {
+  const target = 720;
+  const scale = Math.min(1, target / Math.max(1, Math.max(w, h)));
+  const ew = Math.max(2, Math.round(w * scale));
+  const eh = Math.max(2, Math.round(h * scale));
+  const snap = document.createElement('canvas');
+  snap.width = ew;
+  snap.height = eh;
+  const sctx = snap.getContext('2d');
+  if (sctx) sctx.drawImage(ctx.canvas, 0, 0, ew, eh);
+  return snap;
+}
+
+// Full-resolution copy of the frame, for effects that read the whole picture
+// before drawing over it. Its own buffer: the mix buffer must stay untouched.
+let fxCopyCanvas = null;
+function fxCopyFrame(ctx, w, h) {
+  if (!fxCopyCanvas) fxCopyCanvas = document.createElement('canvas');
+  if (fxCopyCanvas.width !== w || fxCopyCanvas.height !== h) {
+    fxCopyCanvas.width = w;
+    fxCopyCanvas.height = h;
+  }
+  const sc = fxCopyCanvas.getContext('2d');
+  if (!sc) return null;
+  sc.setTransform(1, 0, 0, 1, 0, 0);
+  sc.clearRect(0, 0, w, h);
+  sc.drawImage(ctx.canvas, 0, 0);
+  return fxCopyCanvas;
+}
+let fxNoiseCanvas = null;
+
+// The three controls every look shares, applied identically whatever the effect
+// is: how much of the look survives, how warm the whole frame sits, how much
+// grain sits on top.
+function fxFinishPass(ctx, w, h, effectType, P, before, grainAmount) {
+  const pick = (key, fallback) => (P && P[key] !== undefined ? P[key] : fallback);
+
+  const temp = pick('finishTemp', 0);
+  if (Math.abs(temp) > 1) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay';
+    const warm = temp > 0;
+    const a = Math.min(0.3, Math.abs(temp) / 100 * 0.3);
+    ctx.fillStyle = warm ? `rgba(255, 176, 96, ${a})` : `rgba(110, 190, 255, ${a})`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  const grain = pick('finishGrain', 0);
+  if (grain > 1) {
+    // one small noise tile, tiled across the frame: real texture, cheap
+    if (!fxNoiseCanvas) {
+      fxNoiseCanvas = document.createElement('canvas');
+      fxNoiseCanvas.width = 96;
+      fxNoiseCanvas.height = 96;
+      const nctx = fxNoiseCanvas.getContext('2d');
+      if (nctx) {
+        const img = nctx.createImageData(96, 96);
+        for (let i = 0; i < 96 * 96; i++) {
+          const v = 96 + Math.random() * 64;
+          img.data[i * 4] = v;
+          img.data[i * 4 + 1] = v;
+          img.data[i * 4 + 2] = v;
+          img.data[i * 4 + 3] = 255;
+        }
+        nctx.putImageData(img, 0, 0);
+      }
+    }
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = Math.min(0.5, (grain / 100) * 0.5);
+    const pat = ctx.createPattern(fxNoiseCanvas, 'repeat');
+    if (pat) {
+      ctx.fillStyle = pat;
+      ctx.fillRect(0, 0, w, h);
+    }
+    ctx.restore();
+  }
+
+  const mix = pick('mix', 100);
+  if (before && mix < 99.5) {
+    ctx.save();
+    ctx.globalAlpha = 1 - mix / 100;
+    ctx.drawImage(before, 0, 0, w, h, 0, 0, w, h);
     ctx.restore();
   }
 }
@@ -9129,7 +10222,16 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     maskHasMatte,
     maskAddSeed,
     maskPointFromEvent,
-    ensureMaskState
+    ensureMaskState,
+    // effect parameter rack (no single-slider looks)
+    fxParamDefs,
+    fxParam,
+    setFxParam,
+    fxParamsOf,
+    fxResetParams,
+    renderFxParamRack,
+    drawCinemaOpticalShader,
+    effectTypes: () => Array.from(new Set(VFX_PRESETS.map((p) => p.effectType))).sort()
   };
 }
 
