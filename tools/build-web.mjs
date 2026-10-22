@@ -18,13 +18,13 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'dist-web');
 
-const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'lua-export.js'];
+const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'depth.js', 'lua-export.js'];
 
 // index.html is shared with the local server build (absolute /paths). The web
 // build only rewrites those, so both variants stay in sync from one source.
 function rewriteHtml(html) {
   return html
-    .replace(/(href|src)="\/(styles\.css|app\.js|touchdesigner\.js|lua-export\.js)"/g, '$1="$2"')
+    .replace(/(href|src)="\/(styles\.css|app\.js|touchdesigner\.js|depth\.js|lua-export\.js)"/g, '$1="$2"')
     .replace(/\/download\/bridge\.lua/g, 'VFXKit_ResolveFree_Bridge.lua')
     .replace(
       '<script src="touchdesigner.js"></script>',

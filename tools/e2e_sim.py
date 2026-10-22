@@ -260,6 +260,79 @@ def main():
                 ('AddTool("Paint"', 'AddTool("Polygon"', 'AddTool("MatteControl"', "BezierSpline")),
             "snippet missing mask nodes"))
 
+        # ---- depth map stack: panel-built depth becomes native Fusion nodes
+        res = post("/api/dispatch", {
+            "action": "depth_apply",
+            "payload": {
+                "focus": 45, "invert": False, "fps": 24,
+                "effects": [
+                    {"id": "dof", "label": "Depth of Field", "intensity": 72,
+                     "tools": ["Defocus", "Blur"], "param": "BlurSize", "value": 8.64,
+                     "keyframes": [{"timeSec": 0, "value": 20}, {"timeSec": 0.4, "value": 90}]},
+                    {"id": "haze", "label": "Depth Atmosphere", "intensity": 55,
+                     "tools": ["Fog", "BrightnessContrast"], "param": "Gain", "value": 0.275,
+                     "keyframes": [{"timeSec": 0.0, "value": 55}]},
+                ],
+            },
+        })
+        depth_result = (res.get("bridgeResponse") or {}).get("result") or {}
+        depth_node = str(depth_result.get("fusionNode", ""))
+        check("depth stack answered live in Resolve", lambda: (
+            res.get("liveBridgeConnected") is True, f"res={str(res)[:200]}"))
+        check("depth built DepthMap -> effects -> Merge", lambda: (
+            all(tool in depth_node for tool in ("DepthMap", "Defocus", "Fog", "Merge")),
+            f"fusionNode={depth_node!r}"))
+        check("depth graph spliced into MediaOut1", lambda: (
+            depth_result.get("applied") is True and "MediaOut1" in depth_node,
+            f"result={depth_result}"))
+        check("console snippet for depth runs in Resolve Lua",
+              lambda: run_console_snippet(res.get("luaSnippet", "")))
+        check("depth lua snippet builds the depth nodes", lambda: (
+            all(t in res.get("luaSnippet", "") for t in
+                ('AddTool("DepthMap"', 'AddTool("Defocus"', 'AddTool("Fog"', "BezierSpline")),
+            "snippet missing depth nodes"))
+
+        # ---- effect layers: an ordered stack becomes one ordered graph
+        halation = {"chain": [
+            {"tool": "SoftGlow", "set": {"Threshold": 0.6}, "optional": True},
+            {"tool": "Blur", "bg": True, "key": True, "input": "BlurSize", "scale": 4},
+        ]}
+        print_recipe = {"chain": [
+            {"tool": "BrightnessContrast", "bg": True, "key": True, "input": "Contrast", "scale": 0.9},
+            {"tool": "Bitmap", "set": {"Level": 0.5}, "optional": True},
+        ]}
+        res = post("/api/dispatch", {
+            "action": "layers_apply",
+            "payload": {
+                "fps": 24,
+                "layers": [
+                    {"id": "L1", "presetId": "opt_halation", "name": "500T Halation Bloom",
+                     "blend": "normal", "opacity": 100, "recipe": halation,
+                     "keyframes": [{"timeSec": 0, "value": 20}, {"timeSec": 0.6, "value": 100}]},
+                    {"id": "L2", "presetId": "td_newsprint", "name": "Newsprint Ripple Halftone",
+                     "blend": "multiply", "opacity": 55, "recipe": print_recipe,
+                     "keyframes": [{"timeSec": 0, "value": 70}]},
+                ],
+            },
+        })
+        layer_result = (res.get("bridgeResponse") or {}).get("result") or {}
+        layer_node = str(layer_result.get("fusionNode", ""))
+        check("layer stack answered live in Resolve", lambda: (
+            res.get("liveBridgeConnected") is True, f"res={str(res)[:200]}"))
+        check("layer stack keeps its order", lambda: (
+            layer_node.find("Halation") < layer_node.find("Newsprint")
+            if "Halation" in layer_node and "Newsprint" in layer_node else False,
+            f"fusionNode={layer_node!r}"))
+        check("layer stack merges every layer", lambda: (
+            layer_result.get("layers") == 2 and layer_node.count("Merge") >= 2,
+            f"result={layer_result}"))
+        check("console snippet for layers runs in Resolve Lua",
+              lambda: run_console_snippet(res.get("luaSnippet", "")))
+        check("layer snippet builds both layers", lambda: (
+            "SoftGlow" in res.get("luaSnippet", "") and "Bitmap" in res.get("luaSnippet", "")
+            and "Multiply" in res.get("luaSnippet", ""),
+            "snippet missing layer nodes"))
+
         # ---- media pool + auto edit
         res = post("/api/dispatch", {"action": "get_media_pool", "payload": {}})
         clips = ((res.get("bridgeResponse") or {}).get("result") or {}).get("clips") or []

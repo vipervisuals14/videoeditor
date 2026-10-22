@@ -774,6 +774,13 @@ const state = {
   // Magic Mask / AI matte state (built lazily by ensureMaskState)
   mask: null,
 
+  // Depth map / depth effects state (built lazily by ensureDepthState)
+  depth: null,
+
+  // Effect layer stack: ordered looks stacked on top of the active preset
+  layers: [],
+  layerSeq: 0,
+
   // Silence Cutter state
   silenceThresholdDb: -32,
   silenceMinMs: 300,
@@ -844,6 +851,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initCaptionsTab();
   initMediaPoolTab();
   initMaskTab();
+  initDepthTab();
+  initLayers();
   initMonitorAndTimeline();
   initModules();
   initBridgeModal();
@@ -1020,6 +1029,19 @@ function staticDispatch(action, payload, toastMsg) {
   }
   if (action === 'mask_apply') {
     p.chainLabel = 'Paint → Polygon → Blur → MatteControl → Merge';
+  }
+  if (action === 'layers_apply') {
+    const rows = (p.layers || []).map((l) => {
+      const tools = l.recipe && Array.isArray(l.recipe.chain)
+        ? l.recipe.chain.map((st) => (typeof st === 'string' ? st : st.tool)).join(' → ')
+        : 'BrightnessContrast';
+      return `${l.name} (${tools})`;
+    });
+    p.chainLabel = ['MediaIn'].concat(rows).concat(['Merge → MediaOut']).join(' → ');
+  }
+  if (action === 'depth_apply') {
+    const names = (p.effects || []).map((e) => (e.tools && e.tools[0]) || 'BrightnessContrast');
+    p.chainLabel = ['DepthMap'].concat(names).concat(['Merge']).join(' → ');
   }
   const snippet = (window.LUA_EXPORT && LUA_EXPORT.generate)
     ? LUA_EXPORT.generate(action, p)
@@ -1335,6 +1357,7 @@ function initTabs() {
       document.getElementById(`tab-${tab}`).classList.add('active');
       if (tab === 'silences') drawSilenceWaveform();
       if (tab === 'mask') maskSyncUI();
+      if (tab === 'depth') depthSyncUI();
     });
   });
 
@@ -2615,6 +2638,921 @@ function runMediaPoolAutoAssembler() {
 }
 
 // ============================================================================
+// EFFECT LAYERS — stack any number of effects, in order, with opacity + blend
+// ----------------------------------------------------------------------------
+// The Effect Browser picks the base look; this rack stacks more looks on top of
+// it. Each layer keeps its own intensity (keyframable), opacity, blend mode and
+// order, so you can build e.g.  halation (screen 40%) + print halftone
+// (multiply 55%) + depth grade (normal 70%) and see it live before it goes to
+// Resolve as one ordered node graph.
+// ============================================================================
+const LAYER_BLEND_MODES = [
+  { id: 'normal', label: 'Normal', canvas: 'source-over' },
+  { id: 'screen', label: 'Screen', canvas: 'screen' },
+  { id: 'multiply', label: 'Multiply', canvas: 'multiply' },
+  { id: 'overlay', label: 'Overlay', canvas: 'overlay' },
+  { id: 'lighten', label: 'Lighten', canvas: 'lighten' },
+  { id: 'difference', label: 'Difference', canvas: 'difference' },
+  { id: 'softlight', label: 'Soft light', canvas: 'soft-light' }
+];
+
+const MAX_LIVE_LAYERS = 4;   // preview budget; all layers still export
+
+function blendToComposite(blend) {
+  const hit = LAYER_BLEND_MODES.find((b) => b.id === blend);
+  return hit ? hit.canvas : 'source-over';
+}
+
+function ensureLayers() {
+  if (!Array.isArray(state.layers)) state.layers = [];
+  return state.layers;
+}
+
+function layerSeq() {
+  state.layerSeq = (state.layerSeq || 0) + 1;
+  return 'L' + state.layerSeq;
+}
+
+function activeLayers() {
+  return ensureLayers();
+}
+
+function findLayer(id) {
+  return ensureLayers().find((l) => l.id === id) || null;
+}
+
+function addEffectLayer(preset) {
+  const p = preset || state.activePreset;
+  if (!p) return null;
+  const layers = ensureLayers();
+  if (layers.length >= 8) {
+    showToast('Eight layers is the limit — remove one first', 'warn');
+    return null;
+  }
+  const layer = {
+    id: layerSeq(),
+    presetId: p.id,
+    name: p.name,
+    category: p.category,
+    effectType: p.effectType || p.id,
+    accent: p.accent || '#e11d48',
+    intensity: 100,
+    opacity: 100,
+    blend: 'normal',
+    enabled: true,
+    keys: []
+  };
+  layers.push(layer);
+  renderLayerRack();
+  showToast(`"${p.name}" added as layer ${layers.length}`, 'ok');
+  return layer;
+}
+
+function removeEffectLayer(id) {
+  const layers = ensureLayers();
+  const idx = layers.findIndex((l) => l.id === id);
+  if (idx < 0) return;
+  const [gone] = layers.splice(idx, 1);
+  renderLayerRack();
+  showToast(`${gone.name} removed from the stack`);
+}
+
+function moveEffectLayer(id, dir) {
+  const layers = ensureLayers();
+  const idx = layers.findIndex((l) => l.id === id);
+  const to = idx + dir;
+  if (idx < 0 || to < 0 || to >= layers.length) return;
+  const [moved] = layers.splice(idx, 1);
+  layers.splice(to, 0, moved);
+  renderLayerRack();
+}
+
+function toggleEffectLayer(id) {
+  const layer = findLayer(id);
+  if (!layer) return;
+  layer.enabled = !layer.enabled;
+  renderLayerRack();
+}
+
+function setLayerField(id, field, value) {
+  const layer = findLayer(id);
+  if (!layer) return;
+  layer[field] = value;
+  renderLayerRack();
+}
+
+function layerKeyframe(id) {
+  const layer = findLayer(id);
+  if (!layer) return;
+  const sec = +state.playheadSec.toFixed(3);
+  const value = Math.round(layer.intensity);
+  const existing = layer.keys.findIndex((k) => Math.abs(k.sec - sec) < 0.001);
+  if (existing >= 0) layer.keys[existing].value = value;
+  else layer.keys.push({ sec, value });
+  layer.keys.sort((a, b) => a.sec - b.sec);
+  if (layer.keys.length > 32) layer.keys = layer.keys.slice(-32);
+  renderLayerRack();
+  showToast(`${layer.name} keyframed at ${sec.toFixed(2)}s (${layer.keys.length} keys)`, 'ok');
+}
+
+function clearEffectLayers() {
+  state.layers = [];
+  renderLayerRack();
+  showToast('Layer stack cleared');
+}
+
+// Evaluated intensity for a layer at the playhead (keyframes win when present)
+function layerIntensityAt(layer, timeSec) {
+  if (!layer.keys || !layer.keys.length) return layer.intensity;
+  return evalKeyframes(
+    layer.keys.map((k) => ({ t: k.sec, v: k.value, ease: 'smooth' })),
+    timeSec
+  );
+}
+
+// ------------------------------------------------------------- preview render
+
+const layerCanvases = new Map();
+
+function layerCanvasFor(id, w, h) {
+  let c = layerCanvases.get(id);
+  if (!c) {
+    c = document.createElement('canvas');
+    layerCanvases.set(id, c);
+  }
+  if (c.width !== w || c.height !== h) {
+    c.width = w;
+    c.height = h;
+  }
+  return c;
+}
+
+// Draws every enabled layer over the finished plate, in stack order.
+// Called inside the camera transform so layers move with the picture.
+function renderEffectLayers(ctx, w, h, t, onBeatPulse, grainAmount) {
+  const layers = ensureLayers().filter((l) => l.enabled);
+  if (!layers.length) return 0;
+  const basePreset = state.activePreset;
+  let drawn = 0;
+  layers.slice(0, MAX_LIVE_LAYERS).forEach((layer) => {
+    const intensity = Math.max(0, Math.min(200, layerIntensityAt(layer, state.playheadSec))) / 100;
+    if (intensity <= 0.001) return;
+    const canvas = layerCanvasFor(layer.id, w, h);
+    const lctx = canvas.getContext('2d');
+    if (!lctx) return;
+    lctx.setTransform(1, 0, 0, 1, 0, 0);
+    lctx.globalAlpha = 1;
+    lctx.globalCompositeOperation = 'source-over';
+    lctx.clearRect(0, 0, w, h);
+    try {
+      drawCinematicPlate(lctx, w, h, t, onBeatPulse);
+      state.activePreset = {
+        accent: layer.accent,
+        isTransition: basePreset && basePreset.isTransition,
+        effectType: layer.effectType
+      };
+      drawCinemaOpticalShader(lctx, w, h, t, layer.effectType, intensity, onBeatPulse, grainAmount);
+    } catch (_e) {
+      state.activePreset = basePreset;
+      return;
+    }
+    state.activePreset = basePreset;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, (layer.opacity || 100) / 100));
+    ctx.globalCompositeOperation = blendToComposite(layer.blend);
+    ctx.drawImage(canvas, 0, 0, w, h);
+    ctx.restore();
+    drawn++;
+  });
+  return drawn;
+}
+
+// ---------------------------------------------------------------------- rack
+
+function layerPayload(layer) {
+  const recipe = recipeForLocal(layer.presetId, layer.category);
+  const keys = (layer.keys || []).slice().sort((a, b) => a.sec - b.sec);
+  return {
+    id: layer.id,
+    presetId: layer.presetId,
+    name: layer.name,
+    category: layer.category,
+    effectType: layer.effectType,
+    intensity: Math.round(layerIntensityAt(layer, state.playheadSec)),
+    opacity: Math.round(layer.opacity === undefined ? 100 : layer.opacity),
+    blend: layer.blend || 'normal',
+    enabled: layer.enabled !== false,
+    keyframes: (keys.length ? keys : [{ sec: state.playheadSec, value: Math.round(layer.intensity) }])
+      .map((k) => ({ timeSec: +Number(k.sec).toFixed(3), value: Math.round(Number(k.value) || 0) })),
+    recipe: recipe,
+    fps: 24
+  };
+}
+
+function applyLayerStack() {
+  const layers = ensureLayers().filter((l) => l.enabled);
+  if (!layers.length) {
+    showToast('Add at least one effect layer first (＋ Add Current Effect)', 'warn');
+    return null;
+  }
+  const payload = { layers: layers.map(layerPayload), fps: 24 };
+  const names = layers.map((l) => l.name).join(' + ');
+  return dispatchToResolve('layers_apply', payload, `Layer stack sent: ${names}`);
+}
+
+function renderLayerRack() {
+  const rack = document.getElementById('layerRack');
+  const badge = document.getElementById('layerCountBadge');
+  const layers = ensureLayers();
+  if (badge) {
+    badge.textContent = layers.length ? `${layers.length}` : '0';
+    badge.classList.toggle('hidden', layers.length === 0);
+  }
+  if (!rack) return;
+  if (!layers.length) {
+    rack.innerHTML = `<div class="layer-empty">
+      <strong>No layers yet.</strong>
+      <span>Pick any effect in the browser, then press <b>＋ Add Current Effect</b>. Stack them, blend them, and send the whole rack to Resolve as one graph.</span>
+    </div>`;
+    return;
+  }
+  rack.innerHTML = layers.map((layer, i) => `
+    <div class="layer-row ${layer.enabled ? '' : 'muted'}" data-layer="${layer.id}">
+      <span class="layer-index">${i + 1}</span>
+      <span class="layer-dot" style="background:${layer.accent || '#e11d48'}"></span>
+      <div class="layer-main">
+        <div class="layer-name" title="${layer.category || ''}">${layer.name}</div>
+        <div class="layer-sub">${layer.category || ''}${layer.keys && layer.keys.length ? ` · ◆ ${layer.keys.length} keys` : ''}</div>
+      </div>
+      <select class="layer-blend" data-layer-field="blend" title="How this layer blends onto the ones below">
+        ${LAYER_BLEND_MODES.map((b) => `<option value="${b.id}" ${layer.blend === b.id ? 'selected' : ''}>${b.label}</option>`).join('')}
+      </select>
+      <label class="layer-slide" title="Effect intensity (keyframable)">
+        <span>FX</span>
+        <input type="range" min="0" max="200" value="${Math.round(layerIntensityAt(layer, state.playheadSec))}" data-layer-field="intensity" />
+        <b>${Math.round(layerIntensityAt(layer, state.playheadSec))}%</b>
+      </label>
+      <label class="layer-slide" title="How much of this layer is visible">
+        <span>OP</span>
+        <input type="range" min="0" max="100" value="${Math.round(layer.opacity)}" data-layer-field="opacity" />
+        <b>${Math.round(layer.opacity)}%</b>
+      </label>
+      <div class="layer-actions">
+        <button class="btn-mini" data-layer-kf title="Keyframe this layer's intensity at the playhead">◆</button>
+        <button class="btn-mini" data-layer-mute title="Mute / unmute this layer">${layer.enabled ? '◐' : '◯'}</button>
+        <button class="btn-mini" data-layer-up title="Move up (applies later)">↑</button>
+        <button class="btn-mini" data-layer-down title="Move down (applies earlier)">↓</button>
+        <button class="btn-mini" data-layer-del title="Remove this layer">✕</button>
+      </div>
+    </div>`).join('');
+
+  rack.querySelectorAll('[data-layer]').forEach((row) => {
+    const id = row.getAttribute('data-layer');
+    row.querySelectorAll('[data-layer-field]').forEach((input) => {
+      input.addEventListener('input', () => {
+        const field = input.getAttribute('data-layer-field');
+        if (field === 'blend') setLayerField(id, 'blend', input.value);
+        else setLayerField(id, field, Number(input.value));
+      });
+    });
+    const kf = row.querySelector('[data-layer-kf]');
+    if (kf) kf.addEventListener('click', () => layerKeyframe(id));
+    const mute = row.querySelector('[data-layer-mute]');
+    if (mute) mute.addEventListener('click', () => toggleEffectLayer(id));
+    const up = row.querySelector('[data-layer-up]');
+    if (up) up.addEventListener('click', () => moveEffectLayer(id, -1));
+    const down = row.querySelector('[data-layer-down]');
+    if (down) down.addEventListener('click', () => moveEffectLayer(id, 1));
+    const del = row.querySelector('[data-layer-del]');
+    if (del) del.addEventListener('click', () => removeEffectLayer(id));
+  });
+}
+
+function initLayers() {
+  ensureLayers();
+  renderLayerRack();
+  const add = document.getElementById('addLayerBtn');
+  if (add) add.addEventListener('click', () => addEffectLayer(state.activePreset));
+  const clear = document.getElementById('clearLayersBtn');
+  if (clear) clear.addEventListener('click', clearEffectLayers);
+  const send = document.getElementById('applyLayersBtn');
+  if (send) send.addEventListener('click', applyLayerStack);
+  // keep the layer readouts honest as the playhead moves
+  setInterval(() => {
+    if (!ensureLayers().length || document.hidden) return;
+    const rack = document.getElementById('layerRack');
+    if (!rack) return;
+    ensureLayers().forEach((layer) => {
+      if (!layer.keys || !layer.keys.length) return;
+      const row = rack.querySelector(`[data-layer="${layer.id}"]`);
+      if (!row) return;
+      const v = Math.round(layerIntensityAt(layer, state.playheadSec));
+      const slider = row.querySelector('[data-layer-field="intensity"]');
+      const out = row.querySelector('.layer-slide b');
+      if (slider && Number(slider.value) !== v) slider.value = String(v);
+      if (out) out.textContent = v + '%';
+    });
+  }, 220);
+}
+// ============================================================================
+// DEPTH MAP & DEPTH EFFECTS
+// ----------------------------------------------------------------------------
+// The depth engine (public/depth.js) estimates a depth map from the plate or
+// uses a real one you load, and runs the effect stack on the pixels. This part
+// is the panel: source switching, the effect rack, the monitor preview and the
+// native Fusion graph that goes to Resolve.
+//
+// Depth convention everywhere: 0 = near, 1 = far.
+// ============================================================================
+const DEPTH_BASE_W = 480;   // effect pass resolution, scaled up to the monitor
+const DEPTH_BASE_H = 270;
+
+function defaultDepthState() {
+  return {
+    source: 'estimate',      // estimate | mask | upload
+    view: 'overlay',         // off | overlay | map | split
+    invert: false,
+    smooth: 2,
+    contrast: 55,
+    nearBias: 50,
+    focus: 45,
+    aperture: 100,
+    map: null,               // Float32Array at DEPTH_W x DEPTH_H
+    mapW: 0,
+    mapH: 0,
+    loadedMap: null,         // Float32Array from an uploaded image
+    effects: {},             // id -> 0..100
+    keys: {},                // id -> [{sec, value}]
+    status: 'Press ↻ Re-scan plate to build the depth map.',
+    dirty: true
+  };
+}
+
+function ensureDepthState() {
+  if (!state.depth) state.depth = defaultDepthState();
+  return state.depth;
+}
+
+// The same procedural plate the monitor draws, at depth resolution.
+let depthSampleCanvas = null;
+function depthSamplePlate(timeSec) {
+  if (!depthSampleCanvas) {
+    depthSampleCanvas = document.createElement('canvas');
+    depthSampleCanvas.width = MASK_W;
+    depthSampleCanvas.height = MASK_H;
+  }
+  const sctx = depthSampleCanvas.getContext('2d');
+  if (!sctx) return null;
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.clearRect(0, 0, MASK_W, MASK_H);
+  try {
+    drawCinematicPlate(sctx, MASK_W, MASK_H, timeSec, 0);
+    return sctx.getImageData(0, 0, MASK_W, MASK_H);
+  } catch (_e) {
+    return null;
+  }
+}
+
+function depthRescan(opts) {
+  const d = ensureDepthState();
+  const o = opts || {};
+  if (!window.DEPTH_ENGINE) {
+    d.status = 'Depth engine did not load — check that depth.js is present.';
+    depthSyncUI();
+    return;
+  }
+  const m = state.mask;
+  if (d.source === 'upload') {
+    if (!d.loadedMap) {
+      d.status = 'Load a depth map image first (⬆ or the "Load depth map" button).';
+      depthSyncUI();
+      return;
+    }
+    d.map = d.loadedMap.slice();
+    d.mapW = d.mapW || MASK_W;
+    d.mapH = d.mapH || MASK_H;
+    d.dirty = false;
+    d.status = 'Using the loaded depth map. Every effect below is now accurate to that map.';
+    depthSyncUI();
+    return;
+  }
+  if (d.source === 'mask') {
+    if (!m || !m.soft) {
+      d.status = 'No Magic Mask yet — open 05 • Magic Mask, click your subject, then come back.';
+      depthSyncUI();
+      return;
+    }
+    d.map = DEPTH_ENGINE.fromMask(m.soft, MASK_W, MASK_H, 0.35);
+    d.mapW = MASK_W;
+    d.mapH = MASK_H;
+    d.dirty = false;
+    d.status = 'Depth from the Magic Mask: subject near, everything else far.';
+    depthSyncUI();
+    return;
+  }
+  const img = depthSamplePlate(o.timeSec === undefined ? state.playheadSec : o.timeSec);
+  if (!img) {
+    d.status = 'Preview not ready — press Play once, then re-scan.';
+    depthSyncUI();
+    return;
+  }
+  d.map = DEPTH_ENGINE.estimate(
+    { data: img.data, width: MASK_W, height: MASK_H },
+    {
+      smooth: d.smooth,
+      contrast: d.contrast,
+      nearBias: d.nearBias,
+      invert: d.invert,
+      mask: m && m.soft ? m.soft : null,
+      maskW: MASK_W,
+      maskH: MASK_H
+    }
+  );
+  d.mapW = MASK_W;
+  d.mapH = MASK_H;
+  d.dirty = false;
+  d.status = m && m.soft
+    ? 'Depth estimated from the plate, with your Magic Mask pinning the subject to the front.'
+    : 'Depth estimated from the plate (haze, height, detail, saturation).';
+  depthSyncUI();
+}
+
+function depthEffectsOn() {
+  const d = ensureDepthState();
+  const out = {};
+  let count = 0;
+  Object.keys(d.effects || {}).forEach((id) => {
+    const v = Number(d.effects[id]) || 0;
+    if (v > 0.5) {
+      out[id] = v / 100;
+      count++;
+    }
+  });
+  return { effects: out, count };
+}
+
+function depthTotalKeys() {
+  const d = ensureDepthState();
+  return Object.keys(d.keys || {}).reduce((sum, id) => sum + (d.keys[id] || []).length, 0);
+}
+
+function depthSyncUI() {
+  const d = ensureDepthState();
+  const setText = (id, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  };
+  setText('depthSmoothVal', String(d.smooth));
+  setText('depthContrastVal', String(d.contrast));
+  setText('depthNearVal', String(d.nearBias));
+  setText('depthFocusVal', d.focus + '%');
+  setText('depthApertureVal', d.aperture + '%');
+  setText('depthSourceLabel', d.source === 'mask' ? 'Magic Mask' : d.source === 'upload' ? 'Loaded map' : 'Plate');
+  setText('depthActiveCount', String(depthEffectsOn().count));
+  setText('depthKeyCount', String(depthTotalKeys()));
+  const st = document.getElementById('depthStatus');
+  if (st) st.textContent = d.status;
+
+  const inv = document.getElementById('depthInvertBtn');
+  if (inv) {
+    inv.textContent = 'Invert: ' + (d.invert ? 'ON' : 'OFF');
+    inv.classList.toggle('is-off', !d.invert);
+  }
+  const viewSel = document.getElementById('depthViewSelect');
+  if (viewSel && viewSel.value !== d.view) viewSel.value = d.view;
+
+  document.querySelectorAll('#depthSourceGroup .depth-source').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-depth-source') === d.source);
+  });
+
+  // rack rows
+  document.querySelectorAll('.depth-fx').forEach((row) => {
+    const id = row.getAttribute('data-depth-effect');
+    const v = Math.round(Number(d.effects[id]) || 0);
+    row.classList.toggle('on', v > 0);
+    const slider = row.querySelector('input[type="range"]');
+    if (slider && Number(slider.value) !== v) slider.value = String(v);
+    const val = row.querySelector('.depth-fx-value');
+    if (val) val.textContent = v + '%';
+    const kfBtn = row.querySelector('[data-depth-kf]');
+    if (kfBtn) {
+      const keys = (d.keys[id] || []).length;
+      kfBtn.classList.toggle('kf-on', keys > 0);
+      kfBtn.textContent = keys ? `◆ ${keys}` : '＋ Key';
+    }
+  });
+
+  // thumbnail
+  const thumb = document.getElementById('depthThumbCanvas');
+  if (thumb && window.DEPTH_ENGINE) {
+    const tctx = thumb.getContext('2d');
+    if (tctx) {
+      tctx.setTransform(1, 0, 0, 1, 0, 0);
+      tctx.fillStyle = '#05070d';
+      tctx.fillRect(0, 0, thumb.width, thumb.height);
+      if (d.map) {
+        const gray = DEPTH_ENGINE.toGray(d.map, d.mapW || MASK_W, d.mapH || MASK_H, false);
+        let canvas = depthThumbCache;
+        if (!canvas) {
+          canvas = document.createElement('canvas');
+          depthThumbCache = canvas;
+        }
+        canvas.width = d.mapW || MASK_W;
+        canvas.height = d.mapH || MASK_H;
+        const cctx = canvas.getContext('2d');
+        if (cctx) {
+          const idata = cctx.createImageData(canvas.width, canvas.height);
+          idata.data.set(gray);
+          cctx.putImageData(idata, 0, 0);
+          tctx.drawImage(canvas, 0, 0, thumb.width, thumb.height);
+        }
+      } else {
+        tctx.fillStyle = '#334155';
+        tctx.font = '600 13px system-ui, sans-serif';
+        tctx.fillText('No depth map yet — press Re-scan', 16, thumb.height / 2 + 5);
+      }
+    }
+  }
+}
+
+let depthThumbCache = null;
+let depthWorkCanvas = null;
+let depthGrayCanvas = null;
+
+// The effect pass: copy the current plate pixels, run the stack, draw the
+// result back. Only runs when at least one effect is on, so the monitor costs
+// nothing until you switch depth work on.
+function applyDepthStack(ctx, w, h, t) {
+  const d = state.depth;
+  if (!d || !d.map || !window.DEPTH_ENGINE) return;
+  const { effects, count } = depthEffectsOn();
+  if (!count) return;
+
+  // fewer pixels when the stack is heavy: 3+ effects drops one step, 5+ two
+  const scale = count >= 5 ? 0.72 : count >= 3 ? 0.83 : 1;
+  const ww = Math.max(160, Math.round(DEPTH_BASE_W * scale));
+  const wh = Math.max(90, Math.round((DEPTH_BASE_H * scale * (h / w)) || 270));
+
+  if (!depthWorkCanvas) depthWorkCanvas = document.createElement('canvas');
+  depthWorkCanvas.width = ww;
+  depthWorkCanvas.height = wh;
+  const wctx = depthWorkCanvas.getContext('2d');
+  if (!wctx) return;
+  wctx.setTransform(1, 0, 0, 1, 0, 0);
+  wctx.clearRect(0, 0, ww, wh);
+  try {
+    wctx.drawImage(ctx.canvas, 0, 0, w, h, 0, 0, ww, wh);
+  } catch (_e) {
+    return;
+  }
+  let src;
+  try {
+    src = wctx.getImageData(0, 0, ww, wh);
+  } catch (_e) {
+    return;
+  }
+  const depthAt = DEPTH_ENGINE.resizeDepth(d.map, d.mapW || MASK_W, d.mapH || MASK_H, ww, wh);
+  let out;
+  try {
+    out = DEPTH_ENGINE.apply(src, depthAt, effects, {
+      focus: d.focus / 100,
+      aperture: d.aperture,
+      time: t
+    });
+  } catch (_e) {
+    return;
+  }
+  const idata = wctx.createImageData(ww, wh);
+  idata.data.set(out.data);
+  wctx.putImageData(idata, 0, 0);
+  // the pass works on whole-canvas pixels, so write it back in device space
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(depthWorkCanvas, 0, 0, ww, wh, 0, 0, w, h);
+  ctx.restore();
+}
+
+// Depth map / overlay / split preview on the monitor.
+function drawDepthOverlay(ctx, w, h) {
+  const d = state.depth;
+  if (!d || !d.map || d.view === 'off' || !window.DEPTH_ENGINE) return;
+  if (!depthGrayCanvas) depthGrayCanvas = document.createElement('canvas');
+  const mw = d.mapW || MASK_W;
+  const mh = d.mapH || MASK_H;
+  depthGrayCanvas.width = mw;
+  depthGrayCanvas.height = mh;
+  const gctx = depthGrayCanvas.getContext('2d');
+  if (!gctx) return;
+  const idata = gctx.createImageData(mw, mh);
+  idata.data.set(DEPTH_ENGINE.toGray(d.map, mw, mh, false));
+  gctx.putImageData(idata, 0, 0);
+
+  ctx.save();
+  if (d.view === 'map') {
+    ctx.globalAlpha = 1;
+    ctx.drawImage(depthGrayCanvas, 0, 0, w, h);
+  } else if (d.view === 'split') {
+    ctx.drawImage(depthGrayCanvas, 0, 0, mw / 2, mh, 0, 0, w / 2, h);
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w / 2, 0);
+    ctx.lineTo(w / 2, h);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(9, 10, 15, 0.8)';
+    ctx.fillRect(12, 12, 74, 20);
+    ctx.fillRect(w - 96, 12, 84, 20);
+    ctx.fillStyle = '#7dd3fc';
+    ctx.font = '700 10px monospace';
+    ctx.fillText('PICTURE', 20, 25);
+    ctx.fillText('DEPTH MAP', w - 88, 25);
+  } else {
+    ctx.globalAlpha = 0.55;
+    ctx.drawImage(depthGrayCanvas, 0, 0, w, h);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(9, 10, 15, 0.78)';
+    ctx.fillRect(10, h - 26, 128, 18);
+    ctx.fillStyle = '#7dd3fc';
+    ctx.font = '700 10px monospace';
+    ctx.fillText('DEPTH ' + (d.source === 'upload' ? 'LOADED' : d.source === 'mask' ? 'MASK' : 'PLATE'), 16, h - 13);
+  }
+  ctx.restore();
+}
+
+// ------------------------------------------------------------------- rack UI
+
+// Which native Fusion tools each effect reaches for (first one that exists in
+// the host wins) plus the parameter the intensity lands on.
+const DEPTH_TOOL_MAP = {
+  dof: { tools: ['Defocus', 'Blur'], param: 'BlurSize', scale: 12 },
+  tilt: { tools: ['Defocus', 'Blur'], param: 'BlurSize', scale: 9 },
+  haze: { tools: ['Fog', 'BrightnessContrast'], param: 'Gain', scale: 0.5 },
+  grade: { tools: ['ColorCorrector'], param: 'Saturation', scale: 1.4 },
+  parallax: { tools: ['Displace', 'Transform'], param: 'Size', scale: 1.06 },
+  relight: { tools: ['SoftGlow'], param: 'GlowSize', scale: 2.2 },
+  slices: { tools: ['Displace', 'Transform'], param: 'Size', scale: 1.03 },
+  contours: { tools: ['Bitmap', 'BrightnessContrast'], param: 'Level', scale: 0.8 },
+  pointcloud: { tools: ['Bitmap', 'BrightnessContrast'], param: 'Level', scale: 0.7 },
+  anaglyph: { tools: ['Anaglyph', 'Merge'], param: 'Blend', scale: 1 },
+  echo: { tools: ['Trails', 'Merge'], param: 'TrailLength', scale: 0.4 }
+};
+
+function depthEffectPayload(id, extra) {
+  const d = ensureDepthState();
+  const meta = DEPTH_TOOL_MAP[id] || { tools: ['BrightnessContrast'], param: 'Gain', scale: 1 };
+  const value = Math.round(Number((extra && extra.intensity) !== undefined ? extra.intensity : (d.effects[id] || 0)));
+  const keys = (d.keys[id] || []).slice().sort((a, b) => a.sec - b.sec);
+  const keyframes = (keys.length ? keys : [{ sec: state.playheadSec, value }])
+    .map((k) => ({ timeSec: +Number(k.sec).toFixed(3), value: Math.round(Number(k.value) || 0) }));
+  return {
+    id,
+    label: ((DEPTH_ENGINE.EFFECTS || []).find((e) => e.id === id) || {}).label || id,
+    intensity: value,
+    tools: meta.tools,
+    param: meta.param,
+    value: +(value / 100 * (meta.scale || 1)).toFixed(4),
+    keyParam: 'Blend',
+    keyframes,
+    focus: d.focus,
+    aperture: d.aperture,
+    invert: !!d.invert,
+    source: d.source,
+    fps: 24
+  };
+}
+
+function depthApplyEffect(id) {
+  const d = ensureDepthState();
+  if (!d.map) {
+    showToast('Build the depth map first (↻ Re-scan plate)', 'warn');
+    return null;
+  }
+  if (!(Number(d.effects[id]) > 0)) {
+    showToast('Raise that effect’s slider above 0 first', 'warn');
+    return null;
+  }
+  const one = depthEffectPayload(id);
+  return dispatchToResolve('depth_apply', { effects: [one] }, `Depth effect "${one.label}" sent (${one.intensity}%)`);
+}
+
+function depthApplyAll() {
+  const d = ensureDepthState();
+  const { effects, count } = depthEffectsOn();
+  if (!d.map) {
+    showToast('Build the depth map first (↻ Re-scan plate)', 'warn');
+    return null;
+  }
+  if (!count) {
+    showToast('Turn at least one depth effect on first', 'warn');
+    return null;
+  }
+  const list = Object.keys(effects).map((id) => depthEffectPayload(id));
+  return dispatchToResolve(
+    'depth_apply',
+    { effects: list, focus: d.focus, aperture: d.aperture, invert: !!d.invert, source: d.source, fps: 24 },
+    `Depth stack sent: ${list.map((e) => e.label).join(' + ')}`
+  );
+}
+
+function depthKeyframe(id) {
+  const d = ensureDepthState();
+  const sec = +state.playheadSec.toFixed(3);
+  const v = Math.round(Number(d.effects[id]) || 0);
+  if (!d.keys[id]) d.keys[id] = [];
+  const existing = d.keys[id].findIndex((k) => Math.abs(k.sec - sec) < 0.001);
+  if (existing >= 0) d.keys[id][existing].value = v;
+  else d.keys[id].push({ sec, value: v });
+  d.keys[id].sort((a, b) => a.sec - b.sec);
+  if (d.keys[id].length > 32) d.keys[id] = d.keys[id].slice(-32);
+  depthSyncUI();
+  showToast(`${((DEPTH_ENGINE.EFFECTS || []).find((e) => e.id === id) || {}).label || id} keyframed at ${sec.toFixed(2)}s`, 'ok');
+}
+
+function depthExportPng() {
+  const d = ensureDepthState();
+  if (!d.map) {
+    showToast('Build the depth map first', 'warn');
+    return;
+  }
+  try {
+    const W = 1920;
+    const H = 1080;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const cctx = canvas.getContext('2d');
+    const mw = d.mapW || MASK_W;
+    const mh = d.mapH || MASK_H;
+    const small = document.createElement('canvas');
+    small.width = mw;
+    small.height = mh;
+    const sctx = small.getContext('2d');
+    const idata = sctx.createImageData(mw, mh);
+    idata.data.set(DEPTH_ENGINE.toGray(d.map, mw, mh, false));
+    sctx.putImageData(idata, 0, 0);
+    cctx.imageSmoothingEnabled = true;
+    cctx.drawImage(small, 0, 0, W, H);
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `PulseVFX_DepthMap_${d.source}_1920x1080.png`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 400);
+    showToast('Depth map exported (white = near)', 'ok');
+    d.status = 'Depth map exported as a 1920×1080 PNG — white is near, black is far.';
+    depthSyncUI();
+  } catch (_e) {
+    showToast('This browser blocked the PNG download', 'warn');
+  }
+}
+
+function depthLoadFile(file) {
+  const d = ensureDepthState();
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = MASK_W;
+      canvas.height = MASK_H;
+      const cctx = canvas.getContext('2d');
+      cctx.drawImage(img, 0, 0, MASK_W, MASK_H);
+      const idata = cctx.getImageData(0, 0, MASK_W, MASK_H);
+      d.loadedMap = DEPTH_ENGINE.fromGray({ data: idata.data, width: MASK_W, height: MASK_H }, d.invert);
+      d.mapW = MASK_W;
+      d.mapH = MASK_H;
+      d.source = 'upload';
+      depthRescan();
+      showToast('Depth map loaded — effects are now driven by your map', 'ok');
+    } catch (_e) {
+      showToast('Could not read that image as a depth map', 'error');
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(url);
+    showToast('Could not open that file', 'error');
+  };
+  img.src = url;
+}
+
+function depthRenderRack() {
+  const rack = document.getElementById('depthEffectRack');
+  if (!rack || !window.DEPTH_ENGINE) return;
+  const d = ensureDepthState();
+  rack.innerHTML = DEPTH_ENGINE.EFFECTS.map((e) => `
+    <div class="depth-fx" data-depth-effect="${e.id}">
+      <div class="depth-fx-main">
+        <div class="depth-fx-name"><span class="depth-fx-dot"></span>${e.label}</div>
+        <p class="depth-fx-desc">${e.desc}</p>
+      </div>
+      <div class="depth-fx-slider">
+        <input type="range" min="0" max="100" value="${Math.round(Number(d.effects[e.id]) || 0)}" data-depth-slider="${e.id}" />
+        <b class="depth-fx-value">${Math.round(Number(d.effects[e.id]) || 0)}%</b>
+      </div>
+      <div class="depth-fx-actions">
+        <button class="btn-mini" data-depth-kf="${e.id}" title="Keyframe this effect's intensity at the playhead">＋ Key</button>
+        <button class="btn-mini" data-depth-send="${e.id}" title="Send just this depth effect to Resolve">Send</button>
+      </div>
+    </div>`).join('');
+
+  rack.querySelectorAll('[data-depth-slider]').forEach((input) => {
+    input.addEventListener('input', () => {
+      const id = input.getAttribute('data-depth-slider');
+      d.effects[id] = Number(input.value);
+      depthSyncUI();
+    });
+  });
+  rack.querySelectorAll('[data-depth-kf]').forEach((btn) => {
+    btn.addEventListener('click', () => depthKeyframe(btn.getAttribute('data-depth-kf')));
+  });
+  rack.querySelectorAll('[data-depth-send]').forEach((btn) => {
+    btn.addEventListener('click', () => depthApplyEffect(btn.getAttribute('data-depth-send')));
+  });
+}
+
+function initDepthTab() {
+  const d = ensureDepthState();
+  depthRenderRack();
+
+  document.querySelectorAll('#depthSourceGroup .depth-source').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const source = btn.getAttribute('data-depth-source');
+      if (source === 'upload') {
+        const input = document.getElementById('depthUploadInput');
+        if (d.loadedMap) {
+          d.source = 'upload';
+          depthRescan();
+        } else if (input) {
+          input.click();
+        }
+        return;
+      }
+      d.source = source;
+      depthRescan();
+    });
+  });
+
+  const upload = document.getElementById('depthUploadInput');
+  if (upload) {
+    upload.addEventListener('change', () => {
+      const file = upload.files && upload.files[0];
+      depthLoadFile(file);
+    });
+  }
+
+  const viewSel = document.getElementById('depthViewSelect');
+  if (viewSel) {
+    viewSel.value = d.view;
+    viewSel.addEventListener('change', () => {
+      d.view = viewSel.value;
+      depthSyncUI();
+    });
+  }
+
+  const slider = (id, key, after) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = String(d[key]);
+    el.addEventListener('input', () => {
+      d[key] = Number(el.value);
+      depthSyncUI();
+      if (after) after();
+    });
+  };
+  slider('depthSmooth', 'smooth', () => depthRescan());
+  slider('depthContrast', 'contrast', () => depthRescan());
+  slider('depthNear', 'nearBias', () => depthRescan());
+  slider('depthFocus', 'focus');
+  slider('depthAperture', 'aperture');
+
+  const inv = document.getElementById('depthInvertBtn');
+  if (inv) {
+    inv.addEventListener('click', () => {
+      d.invert = !d.invert;
+      if (d.source === 'upload' && d.loadedMap) {
+        // flip the loaded map in place
+        for (let i = 0; i < d.loadedMap.length; i++) d.loadedMap[i] = 1 - d.loadedMap[i];
+      }
+      depthRescan();
+    });
+  }
+
+  const rescan = document.getElementById('depthRescanBtn');
+  if (rescan) rescan.addEventListener('click', () => depthRescan());
+  const exportBtn = document.getElementById('depthExportBtn');
+  if (exportBtn) exportBtn.addEventListener('click', depthExportPng);
+  const applyAll = document.getElementById('depthApplyAllBtn');
+  if (applyAll) applyAll.addEventListener('click', depthApplyAll);
+
+  depthSyncUI();
+  // build a first map right away so the tab is never empty
+  depthRescan();
+}
+
+// ============================================================================
 // MAGIC MASK & AI MATTE STUDIO
 // ----------------------------------------------------------------------------
 // Resolve Free 21.1.1 cannot run the Studio-only Magic Mask, so the matte is
@@ -3879,6 +4817,12 @@ function drawMonitorFrame(t) {
     drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
   }
 
+  // Depth-driven effect stack: on the picture only, so lyrics stay crisp
+  applyDepthStack(ctx, w, h, t);
+
+  // Stacked effect layers, in order, with their own opacity + blend mode
+  renderEffectLayers(ctx, w, h, renderTime, onBeatPulse, grainAmount);
+
   ctx.restore();
 
   // Save current frame into offscreen history buffer for 360° Shutter accumulation
@@ -3889,6 +4833,9 @@ function drawMonitorFrame(t) {
   if (state.showLyricsOverlay) {
     drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse);
   }
+
+  // Depth map preview (overlay / map / split)
+  drawDepthOverlay(ctx, w, h);
 
   // Magic Mask overlay (darken outside / B&W matte / outline)
   drawMaskOverlay(ctx, w, h, t);

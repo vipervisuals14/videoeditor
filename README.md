@@ -246,6 +246,26 @@ bridge did not answer.
 
 ---
 
+## Effect Layers — stack looks, in order
+
+Under the Effect Browser is an optional **Effect Layers** rack. Pick a card, press
+**＋ Add Current Effect**, repeat. Each layer keeps:
+
+| Control | What it does |
+|---|---|
+| `1 2 3` index | stack order — bottom layers render first (`↑` / `↓` to move) |
+| Blend | Normal, Screen, Multiply, Overlay, Lighten, Difference, Soft light |
+| `FX` 0–200 % | that layer's intensity, keyframable with `◆` |
+| `OP` 0–100 % | how much of the layer is visible |
+| `◐` | mute without losing the settings |
+| `✕` | remove |
+
+The monitor composites up to four layers live (the rest still export), and
+**Send Stack to Resolve** emits one ordered graph: `MediaIn → layer 1 → Merge →
+layer 2 → Merge → … → MediaOut`, with every layer's opacity and blend operator
+set, and a BezierSpline per animated layer. Distance/see-through rendering uses
+the browser's own compositing, so what you see is what the graph builds.
+
 ## Magic Mask (Resolve Free has no Magic Mask — so the panel builds one)
 
 `05 • Magic Mask` reproduces the Studio-only click-to-matte workflow and ships the result as

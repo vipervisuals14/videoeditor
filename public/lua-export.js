@@ -124,6 +124,217 @@
   }
 
   // ---------------------------------------------------------------------------
+  // layers_apply — an ordered effect stack. Every layer is built from its own
+  // native recipe, wired off the same MediaIn, then merged over the result of
+  // the layers below it with the layer's blend mode, opacity and BezierSpline
+  // keyframes. One clip, one comp, one graph you can still edit by hand.
+  // ---------------------------------------------------------------------------
+  function layersApply(payload) {
+    var p = payload || {};
+    var layers = Array.isArray(p.layers) ? p.layers : [];
+    if (!layers.length) return '-- layers_apply: no layers to build';
+    var fps = Number(p.fps) || 24;
+
+    var blocks = [];
+    var order = [];
+    layers.forEach(function (layer, li) {
+      var chain = (layer.recipe && Array.isArray(layer.recipe.chain)) ? layer.recipe.chain : [];
+      var v = 'lay' + (li + 1);
+      var toolNames = [];
+      var lines = [];
+      lines.push('        -- layer ' + (li + 1) + ': ' + (layer.name || layer.presetId || 'effect')
+        + ' (' + (layer.blend || 'normal') + ' @ ' + Math.round(Number(layer.opacity) || 100) + '%)');
+      lines.push('        local ' + v + 'Img = src');
+      chain.forEach(function (step, si) {
+        var tv = v + '_n' + (si + 1);
+        var tool = typeof step === 'string' ? step : step.tool;
+        toolNames.push(tool);
+        lines.push('        local ' + tv + ' = comp:AddTool(' + luaQuote(tool) + ', -32768, -32768)');
+        lines.push('        if ' + tv + ' then');
+        if (step && step.set && typeof step.set === 'object') {
+          Object.keys(step.set).forEach(function (k) {
+            var val = step.set[k];
+            var lit = typeof val === 'number' ? String(val) : luaQuote(String(val));
+            lines.push('            pcall(function() ' + tv + '.' + k + ' = ' + lit + ' end)');
+          });
+        }
+        if (step && step.key && step.input) {
+          var kfRows = (layer.keyframes && layer.keyframes.length ? layer.keyframes : [{ timeSec: 0, value: 100 }])
+            .slice(0, 32)
+            .map(function (kf) {
+              var frame = Math.round((Number(kf.timeSec) || 0) * fps);
+              var val = (Number(kf.value) || 0) / 100 * (Number(step.scale) || 1);
+              return '                [' + frame + '] = { ' + val.toFixed(4) + ' }';
+            }).join(',\n');
+          lines.push('            local spline' + tv + ' = comp:BezierSpline()');
+          lines.push('            if spline' + tv + ' then');
+          lines.push('                pcall(function() ' + tv + '.' + step.input + ' = spline' + tv + ' end)');
+          lines.push('                pcall(function() spline' + tv + ':SetKeyFrames({\n' + kfRows + '\n                }) end)');
+          lines.push('            end');
+        }
+        lines.push('            if pcall(function() ' + tv + '.Background = ' + v + 'Img.Output end) then '
+          + v + 'Img = ' + tv + ' end');
+        lines.push('        end');
+      });
+      // merge this layer over everything below it
+      lines.push('        local ' + v + 'Merge = comp:AddTool("Merge", -32768, -32768)');
+      lines.push('        if ' + v + 'Merge then');
+      lines.push('            pcall(function() ' + v + 'Merge.Background = prev.Output end)');
+      lines.push('            pcall(function() ' + v + 'Merge.Foreground = ' + v + 'Img.Output end)');
+      lines.push('            pcall(function() ' + v + 'Merge.Blend = ' + ((Number(layer.opacity) || 100) / 100).toFixed(3) + ' end)');
+      if (layer.blend && layer.blend !== 'normal') {
+        var opNames = { screen: 'Screen', multiply: 'Multiply', overlay: 'Overlay',
+          lighten: 'Lighten', difference: 'Difference', softlight: 'Soft Light' };
+        lines.push('            pcall(function() ' + v + 'Merge.Operator = '
+          + luaQuote(opNames[layer.blend] || 'Normal') + ' end)');
+      }
+      if (layer.keyframes && layer.keyframes.length) {
+        var blendRows = layer.keyframes.slice(0, 32).map(function (kf) {
+          var frame = Math.round((Number(kf.timeSec) || 0) * fps);
+          var val = Math.max(0, Math.min(1, (Number(kf.value) || 0) / 100
+            * ((Number(layer.opacity) || 100) / 100)));
+          return '                [' + frame + '] = { ' + val.toFixed(4) + ' }';
+        }).join(',\n');
+        lines.push('            local ' + v + 'Blend = comp:BezierSpline()');
+        lines.push('            if ' + v + 'Blend then');
+        lines.push('                pcall(function() ' + v + 'Merge.Blend = ' + v + 'Blend end)');
+        lines.push('                pcall(function() ' + v + 'Blend:SetKeyFrames({\n' + blendRows + '\n                }) end)');
+        lines.push('            end');
+      }
+      lines.push('            prev = ' + v + 'Merge');
+      lines.push('        end');
+      blocks.push(lines.join('\n'));
+      order.push((layer.name || layer.presetId) + ' [' + (toolNames.join(' -> ') || 'merge') + ']');
+    });
+
+    return HEADER + '\n'
+      + '-- "Layer Stack" — ' + layers.length + ' layer(s), bottom to top\n'
+      + '-- ' + order.join('\n-- ') + '\n'
+      + '-- MediaIn1 -> layer 1 -> layer 2 -> ... -> MediaOut1, each layer keyframed\n'
+      + 'local proj = resolve:GetProjectManager():GetCurrentProject()\n'
+      + 'local tl = proj and proj:GetCurrentTimeline()\n'
+      + 'local item = tl and (tl:GetCurrentVideoItem() or (tl:GetItemListInTrack("video", 1) or {})[1])\n'
+      + 'if item then\n'
+      + '    local comp = item:GetFusionCompCount() > 0 and item:GetFusionCompByIndex(1) or item:AddFusionComp()\n'
+      + '    if comp then\n'
+      + '        comp:Lock()\n'
+      + '        local src = comp:FindTool("MediaIn1")\n'
+      + '        local dst = comp:FindTool("MediaOut1")\n'
+      + '        local prev = src\n'
+      + blocks.join('\n') + '\n'
+      + '        if dst and prev then pcall(function() dst.Input = prev.Output end) end\n'
+      + '        comp:Unlock()\n'
+      + '    end\n'
+      + '    pcall(function()\n'
+      + '        item:AddMarker(' + Math.round(fps * 0.5) + ', "Fuchsia", '
+      + luaQuote('LAYERS: ' + layers.length + ' stacked') + ', '
+      + luaQuote(layers.map(function (l) { return l.name || l.presetId; }).join(' + ')) + ', 1)\n'
+      + '    end)\n'
+      + '    return item:GetName()\n'
+      + 'end\n'
+      + 'return "layers applied"\n';
+  }
+
+  // ---------------------------------------------------------------------------
+  // depth_apply — depth-driven effects built in the panel. Resolve gets a real
+  // DepthMap node plus one native tool per effect, each keyframed on Blend with
+  // a BezierSpline so the intensity animates exactly as it does in the panel.
+  //   MediaIn -> DepthMap -> <effect tools> -> Merge -> MediaOut
+  // ---------------------------------------------------------------------------
+  function depthApply(payload) {
+    var p = payload || {};
+    var list = Array.isArray(p.effects) ? p.effects : (p.effect ? [p.effect] : []);
+    if (!list.length) return '-- depth_apply: no effect selected';
+    var fps = Number(p.fps) || 24;
+    var focus = Number(p.focus == null ? 45 : p.focus) / 100;
+
+    // every tool gets one Blend spline so intensity is animatable everywhere
+    function splineBlock(varName, keys, scale) {
+      var rows = (keys && keys.length ? keys : [{ timeSec: 0, value: 100 }])
+        .slice(0, 32)
+        .map(function (kf) {
+          var frame = Math.round((Number(kf.timeSec) || 0) * fps);
+          var v = Math.max(0, Math.min(1, (Number(kf.value) || 0) / 100 * (scale || 1)));
+          return '            [' + frame + '] = { ' + v.toFixed(4) + ' }';
+        }).join(',\n');
+      return '            local ' + 'spline_' + varName + ' = comp:BezierSpline()\n'
+        + '            if spline_' + varName + ' then\n'
+        + '                pcall(function() ' + varName + '.Blend = spline_' + varName + ' end)\n'
+        + '                pcall(function() spline_' + varName + ':SetKeyFrames({\n' + rows + '\n                }) end)\n'
+        + '            end\n';
+    }
+
+    var body = [];
+    list.forEach(function (ef, idx) {
+      var tools = Array.isArray(ef.tools) && ef.tools.length ? ef.tools : ['BrightnessContrast'];
+      var v = 'fx' + (idx + 1);
+      body.push('        -- ' + (idx + 1) + ') ' + (ef.label || ef.id || 'depth effect')
+        + ' @ ' + Math.round(Number(ef.intensity) || 0) + '%');
+      body.push('        local ' + v + ' = nil');
+      tools.forEach(function (tool) {
+        body.push('        if not ' + v + ' then ' + v
+          + ' = comp:AddTool(' + luaQuote(tool) + ', -32768, -32768) end');
+      });
+      body.push('        if ' + v + ' then');
+      if (ef.param) {
+        body.push('            pcall(function() ' + v + '.' + ef.param + ' = '
+          + (Number(ef.value) || 0).toFixed(4) + ' end)');
+      }
+      if (ef.id === 'dof' || ef.id === 'tilt') {
+        // keep the lens looking like a lens: depth-aware tools get the focus plane
+        body.push('            pcall(function() ' + v + '.DepthFocus = ' + focus.toFixed(4) + ' end)');
+      }
+      body.push('            pcall(function() ' + v + '.Background = prev.Output end)');
+      body.push(splineBlock(v, ef.keyframes, 1).replace(/\n$/, ''));
+      body.push('            prev = ' + v);
+      body.push('            built[#built + 1] = ' + luaQuote(ef.label || ef.id || 'effect'));
+      body.push('        end');
+    });
+
+    return HEADER + '\n'
+      + '-- "Depth Map" stack: ' + list.map(function (e) { return e.label || e.id; }).join(' + ')
+      + ' — ' + list.length + ' effect(s), keyframed\n'
+      + '-- native graph: MediaIn1 -> DepthMap -> ' + list.map(function (e) {
+        return (e.tools && e.tools[0]) || 'BrightnessContrast';
+      }).join(' -> ') + ' -> Merge -> MediaOut1\n'
+      + '-- The depth map itself is the panel\'s; DepthMap rebuilds it natively in Resolve.\n'
+      + 'local proj = resolve:GetProjectManager():GetCurrentProject()\n'
+      + 'local tl = proj and proj:GetCurrentTimeline()\n'
+      + 'local item = tl and (tl:GetCurrentVideoItem() or (tl:GetItemListInTrack("video", 1) or {})[1])\n'
+      + 'if item then\n'
+      + '    local comp = item:GetFusionCompCount() > 0 and item:GetFusionCompByIndex(1) or item:AddFusionComp()\n'
+      + '    if comp then\n'
+      + '        comp:Lock()\n'
+      + '        local src = comp:FindTool("MediaIn1")\n'
+      + '        local dst = comp:FindTool("MediaOut1")\n'
+      + '        local depthNode = comp:AddTool("DepthMap", -32768, -32768)\n'
+      + '        local merge = comp:AddTool("Merge", -32768, -32768)\n'
+      + '        local prev = depthNode or src\n'
+      + '        local built = {}\n'
+      + '        if depthNode and src then pcall(function() depthNode.Input = src.Output end) end\n'
+      + (p.invert ? '        if depthNode then pcall(function() depthNode.Invert = true end) end\n' : '')
+      + body.join('\n') + '\n'
+      + '        if merge and prev then\n'
+      + '            pcall(function() merge.Background = src.Output end)\n'
+      + '            pcall(function() merge.Foreground = prev.Output end)\n'
+      + '            pcall(function() merge.Blend = 1 end)\n'
+      + '        end\n'
+      + '        if dst and merge then pcall(function() dst.Input = merge.Output end) end\n'
+      + '        comp:Unlock()\n'
+      + '    end\n'
+      + '    pcall(function()\n'
+      + '        item:AddMarker(' + Math.round(fps * 0.5) + ', "Cyan", "DEPTH: '
+      + (list[0].label || list[0].id || 'effect') + '", '
+      + luaQuote(list.length + ' depth effect(s) | DepthMap -> ' + list.map(function (e) {
+        return (e.tools && e.tools[0]) || 'BrightnessContrast';
+      }).join(' -> ')) + ', 1)\n'
+      + '    end)\n'
+      + '    return item:GetName()\n'
+      + 'end\n'
+      + 'return "depth applied"\n';
+  }
+
+  // ---------------------------------------------------------------------------
   // mask_apply — Magic-Mask style matte built in the panel, written to Resolve
   // as native Fusion nodes: Paint -> Polygon -> Blur -> MatteControl -> Merge.
   // Fusion's origin is bottom-left, so the panel already flipped the Y values.
@@ -371,6 +582,8 @@
     var p = payload || {};
     if (action === 'apply_vfx' || action === 'batch_ai_vfx') return applyVfx(p);
     if (action === 'mask_apply') return maskApply(p);
+    if (action === 'depth_apply') return depthApply(p);
+    if (action === 'layers_apply') return layersApply(p);
     if (action === 'cut_silences') return cutSilences(p);
     if (action === 'add_captions_lyrics') return captions(p);
     if (action === 'auto_edit_timeline') return autoEdit(p);
@@ -381,6 +594,8 @@
   var CONSOLE_ACTIONS = {
     apply_vfx: true,
     mask_apply: true,
+    depth_apply: true,
+    layers_apply: true,
     add_captions_lyrics: true,
     cut_silences: true,
     auto_edit_timeline: true,

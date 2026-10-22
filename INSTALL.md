@@ -217,7 +217,7 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 
 ---
 
-## Part 9 — The five tabs
+## Part 9 — The six tabs
 
 **`02 • LYRC Typography`** — 20 kinetic lyric styles (Bold / Layered / Minimal / Talking).
 
@@ -237,6 +237,16 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 - **`Scan Resolve Media Pool`** reads the bins and clips in your open project.
 - **`Auto-Cut Timeline Now`** assembles a new timeline: beat-synced for music videos, or a
   rough vlog cut for talking heads.
+
+**`06 • Depth Map`** — depth of field and 10 more depth-driven looks.
+
+- **`↻ Re-scan plate`** builds a depth map from the picture (haze, height, detail, saturation).
+- **`From Magic Mask`** turns a mask you drew into the depth map; **`Load depth map`** takes a real one
+  (iPhone LiDAR, Depth Anything, MiDaS, or Resolve's own Depth Map export).
+- Turn on any of the 11 effects with its slider (Depth of Field, Tilt-Shift, Atmosphere, Depth Grade,
+  Parallax, Relight, Slice Offset, Contours, Point Cloud, Anaglyph, Echo), keyframe them with **`◆`**,
+  and send one or all with **`Send Active Stack to Resolve`**.
+- **`⬇ Depth .PNG`** saves the map at 1920×1080 (white = near).
 
 **`05 • Magic Mask`** — cut a person or object out of the shot, like Resolve's Magic Mask.
 
@@ -261,6 +271,19 @@ The **`Person` / `Skin` / `Sky` / `Brightness` / `Colour`** buttons change what 
 for. **`Invert`** flips the matte (select everything *except* the subject). **`⬇ Matte as .PNG`**
 saves a 1920×1080 black-and-white matte you can drop into Fusion if you would rather paint on
 it by hand.
+
+---
+
+## Layering effects (stacking looks)
+
+1. Click any effect card in **`01 • TouchDesigner & VFX`** so it is highlighted.
+2. Scroll to **Effect Layers** under the card grid and press **`＋ Add Current Effect`**.
+3. Repeat with other cards. Each row in the rack is one layer.
+4. Use the **Blend** menu (Screen, Multiply, Overlay…) and the two sliders —
+   **FX** is how strong the layer is, **OP** is how much of it you see.
+5. **`↑` `↓`** change the order, **`◐`** mutes a layer, **`✕`** removes it.
+6. Press **`◆`** on a row to keyframe that layer's strength at the playhead.
+7. **`Send Stack to Resolve`** hands Resolve the whole stack as one ordered graph.
 
 ---
 

@@ -797,6 +797,327 @@ Handlers.mask_apply = function(res, _fus, args)
     }
 end
 
+-- ---------------------------------------------------------------------------
+-- depth_apply — depth-driven effect stack from the panel. Resolve gets a real
+-- DepthMap node plus one native tool per effect, each with a BezierSpline on
+-- Blend so intensity animates exactly like the panel preview.
+--     MediaIn -> DepthMap -> <effect tools> -> Merge -> MediaOut
+-- The tool list is chosen in the panel (tools[1] preferred, tools[2] fallback),
+-- so missing nodes in a Free install degrade instead of failing.
+-- ---------------------------------------------------------------------------
+Handlers.depth_apply = function(res, _fus, args)
+    local pm = res:GetProjectManager()
+    local proj = pm and pm:GetCurrentProject()
+    if not proj then return { applied = false, error = "No project open" } end
+    local tl = proj:GetCurrentTimeline()
+    if not tl then return { applied = false, error = "No active timeline" } end
+
+    local item = tl:GetCurrentVideoItem()
+    if not item then
+        local list = tl:GetItemListInTrack("video", 1) or {}
+        item = list[1]
+    end
+    if not item then
+        return { applied = false, error = "No video clip found on timeline" }
+    end
+
+    local a = args or {}
+    local effects = type(a.effects) == "table" and a.effects or {}
+    if #effects == 0 then
+        return { applied = false, error = "No depth effect selected" }
+    end
+    local fps = tonumber(a.fps) or 24
+    local focus = (tonumber(a.focus) or 45) / 100.0
+
+    local comp = nil
+    pcall(function()
+        if item:GetFusionCompCount() == 0 then
+            comp = item:AddFusionComp()
+        else
+            comp = item:GetFusionCompByIndex(1)
+        end
+    end)
+
+    local built = {}
+    local skipped = {}
+    local tool_names = {}
+
+    if comp then
+        pcall(function()
+            comp:Lock()
+            local src = comp:FindTool("MediaIn1")
+            local dst = comp:FindTool("MediaOut1")
+            local depthNode = comp:AddTool("DepthMap", -32768, -32768)
+            local merge = comp:AddTool("Merge", -32768, -32768)
+            local prev = depthNode or src
+
+            if depthNode then
+                built[#built + 1] = "DepthMap"
+                if src then pcall(function() depthNode.Input = src.Output end) end
+                if a.invert == true then
+                    pcall(function() depthNode.Invert = true end)
+                end
+                pcall(function() depthNode.DepthFocus = focus end)
+                pcall(function() depthNode.Blend = 1 end)
+            else
+                skipped[#skipped + 1] = "DepthMap"
+            end
+
+            for i = 1, #effects do
+                local ef = effects[i]
+                if type(ef) == "table" then
+                    local tool = nil
+                    local wanted = type(ef.tools) == "table" and ef.tools or { "BrightnessContrast" }
+                    local used_name = nil
+                    for t = 1, #wanted do
+                        local name = tostring(wanted[t])
+                        local ok_add, made = pcall(function()
+                            return comp:AddTool(name, -32768, -32768)
+                        end)
+                        if ok_add and made then
+                            tool = made
+                            used_name = name
+                            break
+                        end
+                        skipped[#skipped + 1] = name
+                    end
+
+                    if tool then
+                        local label = tostring(ef.label or used_name)
+                        local param = ef.param and tostring(ef.param) or nil
+                        local value = tonumber(ef.value)
+                        if param and value then
+                            pcall(function() tool[param] = value end)
+                        end
+                        if ef.id == "dof" or ef.id == "tilt" then
+                            pcall(function() tool.DepthFocus = focus end)
+                        end
+                        if prev then pcall(function() tool.Background = prev.Output end) end
+
+                        -- BezierSpline on Blend: intensity that actually animates
+                        local keys = type(ef.keyframes) == "table" and ef.keyframes or {}
+                        if #keys > 0 then
+                            local spline = comp:BezierSpline()
+                            if spline then
+                                local kf_table = {}
+                                for k = 1, math.min(#keys, 32) do
+                                    local kf = keys[k]
+                                    local frame_no = math.floor((tonumber(kf.timeSec) or 0) * fps)
+                                    local v = math.max(0, math.min(1, (tonumber(kf.value) or 0) / 100.0))
+                                    kf_table[frame_no] = { v }
+                                end
+                                pcall(function() tool.Blend = spline end)
+                                pcall(function() spline:SetKeyFrames(kf_table) end)
+                            end
+                        end
+
+                        prev = tool
+                        built[#built + 1] = label .. "(" .. used_name
+                            .. " " .. tostring(math.floor(tonumber(ef.intensity) or 0)) .. "%)"
+                        tool_names[#tool_names + 1] = used_name
+                    end
+                end
+            end
+
+            if merge and prev then
+                if src then pcall(function() merge.Background = src.Output end) end
+                pcall(function() merge.Foreground = prev.Output end)
+                pcall(function() merge.Blend = 1 end)
+                built[#built + 1] = "Merge"
+            end
+            if dst and merge then
+                pcall(function() dst.Input = merge.Output end)
+                built[#built + 1] = "MediaOut1"
+            end
+            comp:Unlock()
+        end)
+    end
+
+    pcall(function()
+        item:AddMarker(
+            math.floor(fps * 0.5),
+            "Cyan",
+            "DEPTH: " .. tostring((effects[1] or {}).label or "stack"),
+            tostring(#effects) .. " depth effect(s) | DepthMap -> " .. table.concat(tool_names, " -> "),
+            1
+        )
+    end)
+
+    return {
+        applied = true,
+        clipName = item:GetName(),
+        fusionNode = table.concat(built, " -> "),
+        effects = #effects,
+        skipped = table.concat(skipped, ","),
+        focus = focus
+    }
+end
+
+-- ---------------------------------------------------------------------------
+-- layers_apply — ordered effect stack. Each layer is built from its own native
+-- recipe, wired off the same MediaIn, then merged over the layers below it with
+-- that layer's blend mode, opacity and BezierSpline keyframes.
+--     MediaIn -> layer 1 -> layer 2 -> ... -> MediaOut
+-- Optional tools that a Free install lacks are skipped instead of failing.
+-- ---------------------------------------------------------------------------
+Handlers.layers_apply = function(res, _fus, args)
+    local pm = res:GetProjectManager()
+    local proj = pm and pm:GetCurrentProject()
+    if not proj then return { applied = false, error = "No project open" } end
+    local tl = proj:GetCurrentTimeline()
+    if not tl then return { applied = false, error = "No active timeline" } end
+
+    local item = tl:GetCurrentVideoItem()
+    if not item then
+        local list = tl:GetItemListInTrack("video", 1) or {}
+        item = list[1]
+    end
+    if not item then
+        return { applied = false, error = "No video clip found on timeline" }
+    end
+
+    local a = args or {}
+    local layers = type(a.layers) == "table" and a.layers or {}
+    if #layers == 0 then
+        return { applied = false, error = "No effect layers to build" }
+    end
+    local fps = tonumber(a.fps) or 24
+
+    local comp = nil
+    pcall(function()
+        if item:GetFusionCompCount() == 0 then
+            comp = item:AddFusionComp()
+        else
+            comp = item:GetFusionCompByIndex(1)
+        end
+    end)
+
+    local built = {}
+    local order = {}
+    local skipped = {}
+    local OPERATORS = {
+        screen = "Screen", multiply = "Multiply", overlay = "Overlay",
+        lighten = "Lighten", difference = "Difference", softlight = "Soft Light"
+    }
+
+    if comp then
+        pcall(function()
+            comp:Lock()
+            local src = comp:FindTool("MediaIn1")
+            local dst = comp:FindTool("MediaOut1")
+            local prev = src
+
+            for li = 1, #layers do
+                local layer = layers[li]
+                if type(layer) == "table" and layer.enabled ~= false then
+                    local label = tostring(layer.name or layer.presetId or ("layer " .. li))
+                    local img = src
+                    local names = {}
+                    local chain = (type(layer.recipe) == "table" and type(layer.recipe.chain) == "table")
+                        and layer.recipe.chain or {}
+
+                    for si = 1, #chain do
+                        local step = chain[si]
+                        local tool_name = type(step) == "table" and step.tool or step
+                        local made = nil
+                        if tool_name then
+                            local ok_add, tool = pcall(function()
+                                return comp:AddTool(tostring(tool_name), -32768, -32768)
+                            end)
+                            if ok_add and tool then made = tool else skipped[#skipped + 1] = tostring(tool_name) end
+                        end
+                        if made then
+                            names[#names + 1] = tostring(tool_name)
+                            if type(step) == "table" and type(step.set) == "table" then
+                                for k, v in pairs(step.set) do
+                                    pcall(function() made[k] = v end)
+                                end
+                            end
+                            if type(step) == "table" and step.key and step.input then
+                                local keys = type(layer.keyframes) == "table" and layer.keyframes or {}
+                                if #keys > 0 then
+                                    local spline = comp:BezierSpline()
+                                    if spline then
+                                        local kf_table = {}
+                                        for k = 1, math.min(#keys, 32) do
+                                            local kf = keys[k]
+                                            local frame_no = math.floor((tonumber(kf.timeSec) or 0) * fps)
+                                            local scale = tonumber(step.scale) or 1.0
+                                            local v = (tonumber(kf.value) or 0) / 100.0 * scale
+                                            kf_table[frame_no] = { v }
+                                        end
+                                        pcall(function() made[step.input] = spline end)
+                                        pcall(function() spline:SetKeyFrames(kf_table) end)
+                                    end
+                                end
+                            end
+                            if img then pcall(function() made.Background = img.Output end) end
+                            img = made
+                        end
+                    end
+
+                    local merge = comp:AddTool("Merge", -32768, -32768)
+                    if merge and img and prev then
+                        pcall(function() merge.Background = prev.Output end)
+                        pcall(function() merge.Foreground = img.Output end)
+                        local opacity = (tonumber(layer.opacity) or 100) / 100.0
+                        pcall(function() merge.Blend = opacity end)
+                        local op = OPERATORS[tostring(layer.blend or "normal")]
+                        if op then pcall(function() merge.Operator = op end) end
+
+                        local keys = type(layer.keyframes) == "table" and layer.keyframes or {}
+                        if #keys > 0 then
+                            local spline = comp:BezierSpline()
+                            if spline then
+                                local kf_table = {}
+                                for k = 1, math.min(#keys, 32) do
+                                    local kf = keys[k]
+                                    local frame_no = math.floor((tonumber(kf.timeSec) or 0) * fps)
+                                    local v = math.max(0, math.min(1,
+                                        (tonumber(kf.value) or 0) / 100.0 * opacity))
+                                    kf_table[frame_no] = { v }
+                                end
+                                pcall(function() merge.Blend = spline end)
+                                pcall(function() spline:SetKeyFrames(kf_table) end)
+                            end
+                        end
+                        prev = merge
+                        built[#built + 1] = label .. "[" .. table.concat(names, "->")
+                            .. "->Merge] "
+                            .. tostring(layer.blend or "normal")
+                            .. " " .. tostring(math.floor(tonumber(layer.opacity) or 100)) .. "%"
+                        order[#order + 1] = label
+                    end
+                end
+            end
+
+            if dst and prev and prev ~= src then
+                pcall(function() dst.Input = prev.Output end)
+                built[#built + 1] = "MediaOut1"
+            end
+            comp:Unlock()
+        end)
+    end
+
+    pcall(function()
+        item:AddMarker(
+            math.floor(fps * 0.5),
+            "Fuchsia",
+            "LAYERS: " .. tostring(#order) .. " stacked",
+            table.concat(order, " + "),
+            1
+        )
+    end)
+
+    return {
+        applied = true,
+        clipName = item:GetName(),
+        fusionNode = table.concat(built, " -> "),
+        layers = #order,
+        skipped = table.concat(skipped, ",")
+    }
+end
+
 Handlers.batch_ai_vfx = function(res, fus, args)
     local pm = res:GetProjectManager()
     local proj = pm and pm:GetCurrentProject()

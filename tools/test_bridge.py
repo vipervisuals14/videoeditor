@@ -505,6 +505,140 @@ def main():
     ))
 
     results.append(scenario(
+        "depth_apply → DepthMap + effect tools, keyframed and spliced",
+        [{
+            "id": "dp1", "op": "depth_apply",
+            "args": {
+                "focus": 45, "invert": False, "fps": 24,
+                "effects": [
+                    {"id": "dof", "label": "Depth of Field", "intensity": 72,
+                     "tools": ["Defocus", "Blur"], "param": "BlurSize", "value": 8.64,
+                     "keyframes": [{"timeSec": 0, "value": 20}, {"timeSec": 0.4, "value": 90}]},
+                    {"id": "haze", "label": "Depth Atmosphere", "intensity": 55,
+                     "tools": ["Fog", "BrightnessContrast"], "param": "Gain", "value": 0.275,
+                     "keyframes": [{"timeSec": 0.0, "value": 55}, {"timeSec": 0.5, "value": 80}]},
+                ],
+            },
+        }],
+        [
+            chk_response("ok", True, req_id="dp1"),
+            ("no error", chk_no_error),
+            chk_nested("result", "applied", expected=True, req_id="dp1"),
+            chk_nested("result", "effects", expected=2, req_id="dp1"),
+            ("report", lambda rt, h: _node_report(rt, h, "dp1", ["DepthMap", "Defocus", "Fog", "Merge"])),
+            ("spliced", lambda rt, h: _wired_report(rt, h, "dp1")),
+            ("calls.depthmap", lambda rt, h: _has_call(rt, "DepthMap")),
+            ("calls.spline", lambda rt, h: _has_call(rt, "spline:SetKeyFrames 2 keys")),
+            ("calls.marker", lambda rt, h: _has_call(rt, "item:AddMarker")),
+        ],
+    ))
+
+    results.append(scenario(
+        "depth_apply → missing Defocus/Fog fall back to Blur/BrightnessContrast",
+        [{
+            "id": "dp2", "op": "depth_apply",
+            "args": {
+                "focus": 50, "fps": 24,
+                "effects": [
+                    {"id": "dof", "label": "Depth of Field", "intensity": 60,
+                     "tools": ["Defocus", "Blur"], "param": "BlurSize", "value": 7.2,
+                     "keyframes": [{"timeSec": 0, "value": 60}]},
+                    {"id": "haze", "label": "Depth Atmosphere", "intensity": 40,
+                     "tools": ["Fog", "BrightnessContrast"], "param": "Gain", "value": 0.2,
+                     "keyframes": [{"timeSec": 0, "value": 40}]},
+                ],
+            },
+        }],
+        [
+            chk_response("ok", True, req_id="dp2"),
+            ("report", lambda rt, h: _node_report(rt, h, "dp2", ["DepthMap", "Blur", "BrightnessContrast"])),
+        ],
+        forbid=["Defocus", "Fog"],
+    ))
+
+    results.append(scenario(
+        "depth_apply → rejects an empty effect list",
+        [{"id": "dp3", "op": "depth_apply", "args": {"effects": []}}],
+        [
+            chk_response("ok", True, req_id="dp3"),
+            chk_nested("result", "applied", expected=False, req_id="dp3"),
+            ("error text", lambda rt, h: _error_mentions(rt, h, "dp3", "No depth effect selected")),
+        ],
+    ))
+
+    _halation = {"chain": [
+        {"tool": "SoftGlow", "set": {"Threshold": 0.6}, "optional": True},
+        {"tool": "Blur", "bg": True, "key": True, "input": "BlurSize", "scale": 4},
+    ]}
+    _print = {"chain": [
+        {"tool": "BrightnessContrast", "bg": True, "key": True, "input": "Contrast", "scale": 0.9},
+        {"tool": "Bitmap", "set": {"Level": 0.5}, "optional": True},
+    ]}
+
+    results.append(scenario(
+        "layers_apply → ordered stack with blend modes and per-layer keyframes",
+        [{
+            "id": "ly1", "op": "layers_apply",
+            "args": {
+                "fps": 24,
+                "layers": [
+                    {"id": "L1", "presetId": "opt_halation", "name": "500T Halation Bloom",
+                     "blend": "normal", "opacity": 100, "intensity": 80,
+                     "recipe": _halation,
+                     "keyframes": [{"timeSec": 0, "value": 20}, {"timeSec": 0.6, "value": 100}]},
+                    {"id": "L2", "presetId": "td_newsprint", "name": "Newsprint Ripple Halftone",
+                     "blend": "multiply", "opacity": 55, "intensity": 70,
+                     "recipe": _print,
+                     "keyframes": [{"timeSec": 0, "value": 70}]},
+                ],
+            },
+        }],
+        [
+            chk_response("ok", True, req_id="ly1"),
+            ("no error", chk_no_error),
+            chk_nested("result", "applied", expected=True, req_id="ly1"),
+            chk_nested("result", "layers", expected=2, req_id="ly1"),
+            ("report", lambda rt, h: _node_report(rt, h, "ly1",
+                ["500T Halation Bloom", "Newsprint Ripple Halftone", "Merge", "MediaOut1"])),
+            ("spliced", lambda rt, h: _wired_report(rt, h, "ly1")),
+            ("calls.operator", lambda rt, h: _has_call(rt, "Merge.Operator")),
+            ("calls.spline", lambda rt, h: _has_call(rt, "spline:SetKeyFrames 2 keys")),
+            ("calls.marker", lambda rt, h: _has_call(rt, "item:AddMarker")),
+        ],
+    ))
+
+    results.append(scenario(
+        "layers_apply → muted layer is skipped, missing optional tool degrades",
+        [{
+            "id": "ly2", "op": "layers_apply",
+            "args": {
+                "fps": 24,
+                "layers": [
+                    {"id": "L1", "name": "Print Halftone", "blend": "multiply", "opacity": 60,
+                     "recipe": _print, "keyframes": [{"timeSec": 0, "value": 60}]},
+                    {"id": "L2", "name": "Muted Layer", "enabled": False, "recipe": _halation},
+                ],
+            },
+        }],
+        [
+            chk_response("ok", True, req_id="ly2"),
+            chk_nested("result", "layers", expected=1, req_id="ly2"),
+            ("report", lambda rt, h: _node_report(rt, h, "ly2", ["Print Halftone"])),
+        ],
+        forbid=["Bitmap"],
+    ))
+
+    results.append(scenario(
+        "layers_apply → rejects an empty stack",
+        [{"id": "ly3", "op": "layers_apply", "args": {"layers": []}}],
+        [
+            chk_response("ok", True, req_id="ly3"),
+            chk_nested("result", "applied", expected=False, req_id="ly3"),
+            ("error text", lambda rt, h: _error_mentions(rt, h, "ly3", "No effect layers")),
+        ],
+    ))
+
+    results.append(scenario(
         "auto_edit_timeline → new timeline + appended subclips + beat markers",
         [{"id": "ae1", "op": "auto_edit_timeline", "args": {"mode": "music_video", "bpm": 128}}],
         [

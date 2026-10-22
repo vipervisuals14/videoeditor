@@ -19,7 +19,7 @@
           <span class="badge-version">RESOLVE FREE 21.1.1</span>
           <span class="badge-os" id="osBadge">macOS • Optical VFX + LYRC Engine</span>
         </div>
-        <p class="brand-subtitle">Optical & Film Lab VFX • 360° Shutter & Time • Magic Mask • LYRC Kinetic Typography • Silence Cutter • Media Pool AI</p>
+        <p class="brand-subtitle">Optical & Film Lab VFX • 360° Shutter & Time • Magic Mask • Depth Map • LYRC Kinetic Typography • Silence Cutter • Media Pool AI</p>
       </div>
     </div>
 
@@ -104,6 +104,12 @@
           <div class="tab-text">
             <span class="tab-name">05 • Magic Mask</span>
             <span class="tab-meta">Click-to-Matte + Track</span>
+          </div>
+        </button>
+        <button class="main-tab" data-tab="depth">
+          <div class="tab-text">
+            <span class="tab-name">06 • Depth Map</span>
+            <span class="tab-meta">11 Depth Effects</span>
           </div>
         </button>
       </nav>
@@ -224,6 +230,22 @@
 
         <!-- LIVE MINI-CANVAS PRESET CARDS GRID (EACH WITH ITS OWN INTENSITY SLIDER + KEYFRAME BUTTON) -->
         <div class="vfx-grid" id="vfxPresetGrid" data-module="presets"></div>
+
+        <!-- EFFECT LAYER STACK: layer any looks, in order, with opacity + blend -->
+        <div class="layer-panel" data-module="layers" data-label="Effect Layers">
+          <div class="layer-panel-head">
+            <div>
+              <h3>Effect Layers <span class="layer-count-badge hidden" id="layerCountBadge">0</span></h3>
+              <p>Stack looks on top of each other. Each layer keeps its own intensity, opacity and blend mode, and the whole rack goes to Resolve as one ordered graph.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="addLayerBtn" title="Add the highlighted effect card as a new layer">＋ Add Current Effect</button>
+              <button class="btn-mini" id="clearLayersBtn" title="Remove every layer">Clear</button>
+              <button class="btn-primary" id="applyLayersBtn">Send Stack to Resolve</button>
+            </div>
+          </div>
+          <div class="layer-rack" id="layerRack"></div>
+        </div>
       </div>
 
       <!-- ================================================================== -->
@@ -610,6 +632,77 @@
           </div>
         </div>
       </div>
+      <!-- ================================================================== -->
+      <!-- TAB 6: DEPTH MAP — estimate or load a map, then depth-driven looks  -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-depth">
+        <div class="pane-card" data-module="depth" data-label="Depth Map">
+          <div class="pane-card-header">
+            <div>
+              <h3>Depth Map &amp; Depth Effects</h3>
+              <p>Build a depth map from the plate (or load a real one), then drive 11 effects from it: depth of field, atmosphere, relight, parallax, print contours and more. Every effect has an intensity slider, keyframes, and exports native Fusion nodes.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="depthRescanBtn" title="Re-read the plate and rebuild the depth map">↻ Re-scan plate</button>
+              <button class="btn-primary" id="depthApplyAllBtn">Send Active Stack to Resolve</button>
+            </div>
+          </div>
+
+          <div class="depth-source-row">
+            <div class="depth-source-group" id="depthSourceGroup">
+              <button class="depth-source active" data-depth-source="estimate" title="Read the plate and estimate depth from haze, height, detail and saturation">Auto estimate</button>
+              <button class="depth-source" data-depth-source="mask" title="Use the Magic Mask subject as the near layer">From Magic Mask</button>
+              <button class="depth-source" data-depth-source="upload" title="Load a depth map you already have (iPhone LiDAR, Depth Anything, MiDaS, Resolve export)">Load depth map</button>
+            </div>
+            <select id="depthViewSelect" class="mask-select" title="How the depth map shows on the Live Preview">
+              <option value="off">Preview: picture only</option>
+              <option value="overlay">Preview: depth overlay</option>
+              <option value="map">Preview: depth map</option>
+              <option value="split">Preview: split compare</option>
+            </select>
+            <input type="file" id="depthUploadInput" accept="image/*" hidden />
+            <button class="btn-mini" id="depthInvertBtn" title="Flip near and far">Invert: OFF</button>
+            <button class="btn-mini" id="depthExportBtn" title="Save the depth map as a grayscale PNG (white = near)">⬇ Depth .PNG</button>
+          </div>
+
+          <div class="depth-body">
+            <div class="depth-left">
+              <canvas id="depthThumbCanvas" class="mask-thumb" width="320" height="180"></canvas>
+              <div class="mask-stat-strip">
+                <div class="mask-stat"><span>Source</span><strong id="depthSourceLabel">Plate</strong></div>
+                <div class="mask-stat"><span>Effects on</span><strong id="depthActiveCount">0</strong></div>
+                <div class="mask-stat"><span>Keyframes</span><strong id="depthKeyCount">0</strong></div>
+              </div>
+              <div class="depth-sliders">
+                <label class="mask-slider">
+                  <span>Smoothing <b id="depthSmoothVal">2</b></span>
+                  <input type="range" id="depthSmooth" min="0" max="4" value="2" />
+                </label>
+                <label class="mask-slider">
+                  <span>Depth contrast <b id="depthContrastVal">55</b></span>
+                  <input type="range" id="depthContrast" min="10" max="90" value="55" />
+                </label>
+                <label class="mask-slider">
+                  <span>Near bias <b id="depthNearVal">50</b></span>
+                  <input type="range" id="depthNear" min="0" max="100" value="50" />
+                </label>
+                <label class="mask-slider">
+                  <span>Focus plane <b id="depthFocusVal">45%</b></span>
+                  <input type="range" id="depthFocus" min="0" max="100" value="45" />
+                </label>
+                <label class="mask-slider">
+                  <span>Aperture <b id="depthApertureVal">100%</b></span>
+                  <input type="range" id="depthAperture" min="0" max="200" value="100" />
+                </label>
+              </div>
+              <p class="mask-status" id="depthStatus">Press ↻ Re-scan plate to build the depth map.</p>
+              <p class="mask-hint">The estimate reads haze, height, detail and saturation — useful, not magic. For a truly production-grade depth map, load one from iPhone LiDAR, Depth Anything, MiDaS or Resolve's own Depth Map export and every effect below becomes accurate.</p>
+            </div>
+
+            <div class="depth-rack" id="depthEffectRack"></div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- RIGHT / LIVE RESOLVE MONITOR + MULTI-TRACK TIMELINE SIMULATOR -->
@@ -801,6 +894,7 @@
   <div class="toast-container" id="toastContainer"></div>
 
   <script src="/touchdesigner.js"></script>
+  <script src="/depth.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
