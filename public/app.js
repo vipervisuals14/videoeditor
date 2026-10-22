@@ -5594,10 +5594,43 @@ function maskPolyCentroid(poly) {
 // Normalised subject/background histograms from one frame plus a matte. The
 // background is sampled from a ring around the matte, so a bright wall far away
 // cannot drag the model off.
+// The middle of the matte, with its rim shaved off. A box around a person is
+// half background: learning from the rim teaches the model that the wall is the
+// subject, and then every frame it picks a different piece of the wall. That is
+// exactly what made the outline jump.
+function maskCoreOf(buf, w, h) {
+  const bb = maskBBox(buf, w, h);
+  if (!bb) return null;
+  const shrink = Math.max(2, Math.min(9, Math.round(Math.min(bb.w, bb.h) * 0.2)));
+  // erosion by a small square keeps the interior and drops the boundary
+  let core = buf;
+  for (let s = 0; s < shrink; s++) {
+    const next = new Uint8Array(w * h);
+    for (let y = 1; y < h - 1; y++) {
+      const row = y * w;
+      for (let x = 1; x < w - 1; x++) {
+        const i = row + x;
+        if (core[i] <= 110) continue;
+        next[i] = Math.min(
+          core[i - 1], core[i + 1], core[i - w], core[i + w],
+          core[i - w - 1], core[i - w + 1], core[i + w - 1], core[i + w + 1]
+        ) > 110 ? 255 : 0;
+      }
+    }
+    core = next;
+  }
+  let area = 0;
+  for (let i = 0; i < core.length; i++) if (core[i] > 110) area++;
+  // a thin matte (a hand-drawn outline, a sliver) has no interior to speak of
+  if (area < 20) return { buf, weight: 0.35 };
+  return { buf: core, weight: 1 };
+}
+
 function maskBuildColorModel(data, w, h, buf, prev) {
   if (!data || !buf) return prev || null;
   const bb = maskBBox(buf, w, h);
   if (!bb) return prev || null;
+  const core = maskCoreOf(buf, w, h) || { buf, weight: 0.35 };
   const pad = Math.max(8, Math.round(Math.max(bb.w, bb.h) * 0.45));
   const x0 = Math.max(0, bb.x0 - pad);
   const x1 = Math.min(w - 1, bb.x1 + pad);
@@ -5612,20 +5645,30 @@ function maskBuildColorModel(data, w, h, buf, prev) {
       const i = y * w + x;
       const p = i * 4;
       const idx = maskHistIndex(data[p], data[p + 1], data[p + 2]);
-      if (buf[i] > 110) { fg[idx] += 1; fgN++; } else { bg[idx] += 1; bgN++; }
+      // the "background" sample is the ring around the matte, never the rim
+      // inside it, so a box's corners do not get counted as subject
+      const insideCore = core.buf[i] > 110;
+      const insideMatte = buf[i] > 110;
+      if (insideCore) { fg[idx] += core.weight; fgN += core.weight; }
+      else if (!insideMatte) { bg[idx] += 1; bgN += 1; }
     }
   }
   if (!fgN || !bgN) return prev || null;
+  // Slow adaptation only: a light change should not rewrite what the subject is.
   const mix = (mine, mineN, theirs) => {
     for (let i = 0; i < MASK_HIST_BINS; i++) {
       const share = mine[i] / mineN;
-      mine[i] = theirs ? share * 0.75 + theirs[i] * 0.25 : share;
+      mine[i] = theirs ? share * 0.78 + theirs[i] * 0.22 : share;
     }
-    return 1;
   };
   mix(fg, fgN, prev && prev.fg);
   mix(bg, bgN, prev && prev.bg);
-  return { fg, bg };
+  // The model from the frame you drew is kept for good. Without this the matte
+  // learns from its own shrinking result: each frame it selects a little less,
+  // the next model is a little narrower, and the outline collapses inwards.
+  const refFg = (prev && prev.refFg) || fg;
+  const refBg = (prev && prev.refBg) || bg;
+  return { fg, bg, refFg, refBg };
 }
 
 // How much more likely this colour is to belong to the subject than to the
@@ -5633,8 +5676,12 @@ function maskBuildColorModel(data, w, h, buf, prev) {
 function maskModelScore(model, data, p) {
   if (!model) return 0;
   const idx = maskHistIndex(data[p], data[p + 1], data[p + 2]);
-  const pf = model.fg[idx] + 0.0025;
-  const pb = model.bg[idx] + 0.0025;
+  const refFg = model.refFg || model.fg;
+  const refBg = model.refBg || model.bg;
+  // 60% what the subject looked like when it was picked, 40% what it looks like
+  // now — steady against drift, still able to follow a light change
+  const pf = (refFg[idx] * 0.6 + model.fg[idx] * 0.4) + 0.0025;
+  const pb = (refBg[idx] * 0.6 + model.bg[idx] * 0.4) + 0.0025;
   return Math.log(pf / pb);
 }
 
@@ -5747,10 +5794,14 @@ function maskSolveModel(data, model, box, hi, lo) {
     comps.push({ id, area, dist: Math.hypot(mx - cx, my - cy) });
   }
   if (!comps.length) return null;
+  // Proximity dominates: a big blob on the other side of the frame is a
+  // distractor, not the subject. Blobs that barely touch the prediction are out.
+  const wantArea = Math.max(20, (box.x1 - box.x0) * (box.y1 - box.y0) * 0.12);
   let best = null;
   let bestScore = -Infinity;
   comps.forEach((info) => {
-    const score = info.area * 0.55 - info.dist * 2.2;
+    if (info.area < wantArea * 0.25) return;
+    const score = Math.log(1 + info.area) * 0.5 - info.dist * 5.5;
     if (score > bestScore) { bestScore = score; best = info.id; }
   });
   if (!best) return null;
@@ -5779,15 +5830,78 @@ function maskSolveModel(data, model, box, hi, lo) {
   return maskFillHoles(out, w, h);
 }
 
+// The search window may move, but it must not shrink below the subject's own
+// size: a window built from last frame's mask shrinks the mask, which shrinks
+// the window — that feedback is what walked the matte down to a bright dot.
+function maskBoxWithFloor(box, minW, minH) {
+  if (!box) return box;
+  const cx = (box.x0 + box.x1) / 2;
+  const cy = (box.y0 + box.y1) / 2;
+  const w = Math.max(box.x1 - box.x0, minW || 0);
+  const h = Math.max(box.y1 - box.y0, minH || 0);
+  return {
+    x0: Math.max(0, Math.round(cx - w / 2)),
+    y0: Math.max(0, Math.round(cy - h / 2)),
+    x1: Math.min(MASK_W - 1, Math.round(cx + w / 2)),
+    y1: Math.min(MASK_H - 1, Math.round(cy + h / 2))
+  };
+}
+
+// Shape helpers for the follow. Every stored frame uses the same ring length and
+// the same starting point, so the outline eases from one frame to the next
+// instead of flickering between different point orders and different radii.
+function maskTranslateRing(ring, dx, dy) {
+  return ring.map((p) => ({ x: maskClamp01(p.x + dx), y: maskClamp01(p.y + dy) }));
+}
+
+function maskBlendRing(a, b, t, maxStep) {
+  const n = Math.min(a.length, b.length);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    let dx = b[i].x - a[i].x;
+    let dy = b[i].y - a[i].y;
+    const d = Math.hypot(dx, dy);
+    if (maxStep && d > maxStep) {
+      dx = (dx / d) * maxStep;
+      dy = (dy / d) * maxStep;
+    }
+    out.push({
+      x: maskClamp01(a[i].x + dx * t),
+      y: maskClamp01(a[i].y + dy * t)
+    });
+  }
+  return out;
+}
+
+function maskRingBBox(ring) {
+  if (!ring || !ring.length) return null;
+  let x0 = 1;
+  let y0 = 1;
+  let x1 = 0;
+  let y1 = 0;
+  ring.forEach((p) => {
+    if (p.x < x0) x0 = p.x;
+    if (p.y < y0) y0 = p.y;
+    if (p.x > x1) x1 = p.x;
+    if (p.y > y1) y1 = p.y;
+  });
+  return {
+    x0: x0 * (MASK_W - 1),
+    y0: y0 * (MASK_H - 1),
+    x1: x1 * (MASK_W - 1),
+    y1: y1 * (MASK_H - 1)
+  };
+}
+
 // One frame of the follow, with looser retries instead of an instant surrender.
-function maskTrackOneFrame(data, model, prev, vel) {
+function maskTrackOneFrame(data, model, prev, vel, minW, minH) {
   const tries = [
     { grow: 0.5, hi: 0.7, lo: 0.02 },
     { grow: 0.95, hi: 0.42, lo: -0.12 },
     { grow: 1.6, hi: 0.18, lo: -0.3 }
   ];
   for (let t = 0; t < tries.length; t++) {
-    const box = maskPredictBox(prev, vel, tries[t].grow);
+    const box = maskBoxWithFloor(maskPredictBox(prev, vel, tries[t].grow), minW, minH);
     const buf = maskSolveModel(data, model, box, tries[t].hi, tries[t].lo);
     if (!buf) continue;
     const cov = maskCoverage(buf);
@@ -5797,9 +5911,9 @@ function maskTrackOneFrame(data, model, prev, vel) {
     const at = maskPolyCentroid(poly);
     const ratio = cov / Math.max(1e-6, prev.cov);
     const loose = t === tries.length - 1;
-    if (!loose && (ratio < 0.22 || ratio > 4.2)) continue;
+    if (!loose && (ratio < 0.35 || ratio > 2.6)) continue;
     const jump = Math.hypot(at.x - prev.at.x, at.y - prev.at.y);
-    if (!loose && jump > 0.3) continue;
+    if (!loose && jump > 0.18) continue;
     return { mask: buf, poly, cov, at, box: maskBBox(buf, MASK_W, MASK_H) };
   }
   return null;
@@ -6536,6 +6650,8 @@ function maskPointerDown(e) {
   // so casual clicks elsewhere in the panel never leave a stray matte behind
   if (state.activeTab !== 'mask') return;
   const m = ensureMaskState();
+  // while the clip is being followed, a stray click would replace the shape
+  if (m.tracking) return;
   const pt = maskPointFromEvent(e, canvas);
   if (e.preventDefault) e.preventDefault();
   if (m.tool === 'magic') {
@@ -6662,6 +6778,8 @@ async function maskTrackFrames(direction) {
   let lostAt = null;
   let stuck = false;
   let staleFrames = 0;
+  let misses = 0;
+  let settledCov = null;
   let prev = {
     cov: m.coverage,
     at: maskPolyCentroid(m.polygon),
@@ -6669,6 +6787,12 @@ async function maskTrackFrames(direction) {
     poly: m.polygon.map((p) => ({ x: p.x, y: p.y })),
     mask: m.soft
   };
+  // the size of the subject as committed on the frame you built the matte:
+  // every later window is at least this big
+  const startBox0 = prev.box || maskBBox(m.soft, MASK_W, MASK_H);
+  const minW = startBox0 ? Math.max(16, startBox0.w * 1.15) : 24;
+  const minH = startBox0 ? Math.max(16, startBox0.h * 1.15) : 24;
+  const startCov0 = Math.max(0.0008, prev.cov);
   let vel = { x: 0, y: 0 };
   let model = null;
 
@@ -6705,7 +6829,7 @@ async function maskTrackFrames(direction) {
       maskSetStatus('Following the subject — frame ' + i + ' of ' + limit + '…');
       const img = await maskSampleFrame(sec);
       if (!img || !img.data) break;
-      if (!model) model = maskBuildColorModel(img.data, MASK_W, MASK_H, m.soft, null);
+
       // A codec that refuses to seek hands back the same picture forever. Say so
       // instead of reporting a tracking failure that is really a decode problem.
       if (img.seekOk === false) {
@@ -6714,45 +6838,110 @@ async function maskTrackFrames(direction) {
       } else {
         staleFrames = 0;
       }
-      let step = maskTrackOneFrame(img.data, model, prev, { x: vel.x * dir, y: vel.y * dir });
-      const accept = (buf) => {
-        if (!buf) return null;
-        const cov = maskCoverage(buf);
-        if (cov < 0.0006 || cov > 0.7) return null;
-        const ratio = cov / Math.max(1e-6, prev.cov);
-        if (ratio < 0.14 || ratio > 3.2) return null;
-        const poly = maskTracePolygon(buf, MASK_W, MASK_H, 40);
-        if (poly.length < 3) return null;
-        return { mask: buf, poly, cov, at: maskPolyCentroid(poly), box: maskBBox(buf, MASK_W, MASK_H) };
+      if (!model) model = maskBuildColorModel(img.data, MASK_W, MASK_H, m.soft, null);
+
+      // Where the subject should be, from the motion measured so far.
+      const predicted = {
+        x: prev.at.x + vel.x * dir,
+        y: prev.at.y + vel.y * dir
       };
+      const prevRing = maskResamplePolygon(prev.poly, 24);
+      const prevArea = Math.max(0.0004, prev.cov);
+
+      // A candidate is only the subject if it is where we expect, the right
+      // sort of size, and shaped like the thing we are following.
+      const judge = (cand) => {
+        if (!cand) return null;
+        const cov = maskCoverage(cand.mask);
+        // A box matte is bigger than the subject, so the first frames are
+        // allowed to settle onto the subject. After that the matte may not keep
+        // thinning — that is the shape collapsing to a dot.
+        // 92% of last frame: a subject does not lose 8% of itself every two
+        // frames. Gradual thinning is the failure mode, so it is not allowed.
+        const floorCov = settledCov ? Math.max(settledCov * 0.85, prevArea * 0.92) : prevArea * 0.32;
+        const ceilCov = settledCov ? settledCov * 1.9 : prevArea * 2.6;
+        if (cov < floorCov || cov > ceilCov) return null;
+        const poly = maskTracePolygon(cand.mask, MASK_W, MASK_H, 40);
+        if (poly.length < 3) return null;
+        const at = maskPolyCentroid(poly);
+        const residual = Math.hypot(at.x - predicted.x, at.y - predicted.y);
+        if (residual > 0.13) return null;                 // a jump, not a move
+        return { mask: cand.mask, poly, cov, at, box: maskBBox(cand.mask, MASK_W, MASK_H), residual };
+      };
+
+      // engine 1: colour model, window predicted from the measured motion
+      const win = (grow) => maskBoxWithFloor(
+        maskPredictBox(prev, { x: vel.x * dir, y: vel.y * dir }, grow),
+        minW,
+        minH
+      );
+      let step = judge(maskTrackOneFrame(img.data, model, prev, { x: vel.x * dir, y: vel.y * dir }, minW, minH));
+      // engine 2: the same model over a wide window, for a sudden move
       if (!step) {
-        // engine two: a wide-window pass, for a sudden move
-        step = accept(maskSolveModel(img.data, model, maskPredictBox(prev, { x: vel.x * dir, y: vel.y * dir }, 2.4), -0.05, -0.5));
+        step = judge({ mask: maskSolveModel(img.data, model, win(0.9), -0.05, -0.5) });
       }
+      // engine 3: a much looser read, for a light change or heavy motion blur
+      if (!step) step = judge({ mask: maskSolveModel(img.data, model, win(1.5), -0.4, -1.1) });
+      // engine 3: the seeded flood, which does not depend on the colour model
       if (!step) {
-        // engine three: the seeded flood over the whole frame, which does not
-        // depend on the colour model surviving a light change
         const seeds = maskSeedsFromBuffer(prev.mask || m.soft, 10, img.data);
         if (seeds.length) {
-          step = accept(maskSolveFromPixels(img.data, MASK_W, MASK_H, seeds, {
-            mode: m.mode,
-            sensitivity: m.sensitivity
-          }));
+          step = judge({
+            mask: maskSolveFromPixels(img.data, MASK_W, MASK_H, seeds, {
+              mode: m.mode,
+              sensitivity: m.sensitivity
+            })
+          });
         }
       }
-      if (!step) { lostAt = sec; break; }
 
-      // measured motion drives the next prediction, so a walk or a pan is
-      // followed without the outline dragging behind
-      vel = {
-        x: (step.at.x - lastAt.x) * dir,
-        y: (step.at.y - lastAt.y) * dir
+      if (!step) {
+        // Nothing convincing on this frame (motion blur, a hand over the face, a
+        // cut). Coast on the last good motion for a few frames, then stop and
+        // keep everything that was followed.
+        misses++;
+        if (misses > 3 || !prevRing.length) { lostAt = sec; break; }
+        const coast = maskTranslateRing(prevRing, vel.x * dir, vel.y * dir);
+        m.tracked = m.tracked.filter((f) => Math.abs(f.sec - sec) > 0.001);
+        m.tracked.push({ sec: +sec.toFixed(3), polygon: coast, coverage: +prev.cov.toFixed(3) });
+        prev = { cov: prev.cov, at: { x: prev.at.x + vel.x * dir, y: prev.at.y + vel.y * dir }, box: prev.box, poly: coast, mask: prev.mask };
+        added++;
+        continue;
+      }
+      misses = 0;
+
+      // Ease onto the new position: take most of the predicted move and only
+      // part of the correction, so one noisy frame cannot throw the outline.
+      const at = {
+        x: predicted.x + (step.at.x - predicted.x) * 0.6,
+        y: predicted.y + (step.at.y - predicted.y) * 0.6
       };
-      lastAt = step.at;
+      const move = { x: at.x - prev.at.x, y: at.y - prev.at.y };
+      // damped velocity, clamped, so a stutter cannot become a leap next frame
+      const damp = 0.65;
+      vel = {
+        x: vel.x * damp + move.x * (1 - damp),
+        y: vel.y * damp + move.y * (1 - damp)
+      };
+      const vmag = Math.hypot(vel.x, vel.y);
+      const vmax = 0.06;
+      if (vmag > vmax) { vel.x = (vel.x / vmag) * vmax; vel.y = (vel.y / vmag) * vmax; }
+
+      // Shape: the old ring moved to the new centre, eased towards the new ring.
+      const candRing = maskResamplePolygon(step.poly, 24);
+      const moved = maskTranslateRing(prevRing, move.x, move.y);
+      const ring = candRing.length === moved.length
+        ? maskBlendRing(moved, candRing, 0.4, 0.045)
+        : moved;
+
       m.tracked = m.tracked.filter((f) => Math.abs(f.sec - sec) > 0.001);
-      m.tracked.push({ sec: +sec.toFixed(3), polygon: step.poly, coverage: +step.cov.toFixed(3) });
-      model = maskBuildColorModel(img.data, MASK_W, MASK_H, step.mask, model);
-      prev = { cov: step.cov, at: step.at, box: step.box, poly: step.poly, mask: step.mask };
+      m.tracked.push({ sec: +sec.toFixed(3), polygon: ring, coverage: +step.cov.toFixed(3) });
+      // only let the model adapt while the matte is roughly the size it should
+      // be; a shrinking matte must not teach it a smaller subject
+      if (!settledCov) settledCov = step.cov;
+      const sizeOk = step.cov > settledCov * 0.75 && step.cov < settledCov * 1.5;
+      if (sizeOk) model = maskBuildColorModel(img.data, MASK_W, MASK_H, step.mask, model);
+      prev = { cov: step.cov, at, box: maskBBox(step.mask, MASK_W, MASK_H), poly: ring, mask: step.mask };
       added++;
     }
   } finally {

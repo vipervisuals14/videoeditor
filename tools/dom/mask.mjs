@@ -222,7 +222,7 @@ T.maskRebuild();
 await T.maskTrackFrames(1);
 const emptyStatus = String(document.getElementById('maskStatus').textContent || '');
 verify('tracking stops when the subject leaves the frame, keeping the frame you drew',
-  () => [m.tracked.length <= 1 && /could not follow|could not be followed/i.test(emptyStatus),
+  () => [m.tracked.length <= 5 && /lost it|could not follow|could not be followed|stopped handing/i.test(emptyStatus),
     `tracked=${m.tracked.length} status="${emptyStatus}"`]);
 
 // ---- a harder scene: textured room, walking subject, drifting exposure ----
@@ -286,8 +286,8 @@ verify('the outline stays on the subject (mean error under 3% of frame width)',
   () => [meanErr / W < 0.03, `mean error ${(meanErr / W * 100).toFixed(2)}% of width`]);
 
 verify('the matte keeps the subject size instead of creeping over the scene',
-  () => covs.every((c) => c > trueArea * 0.6 && c < trueArea * 1.7),
-  `coverage ${(Math.min(...covs) / trueArea).toFixed(2)}–${(Math.max(...covs) / trueArea).toFixed(2)}x true area`);
+  () => [covs.every((c) => c > trueArea * 0.6 && c < trueArea * 1.7),
+    `coverage ${(Math.min(...covs) / trueArea).toFixed(2)}-${(Math.max(...covs) / trueArea).toFixed(2)}x true area, n=${covs.length}`]);
 
 // ---- tracking backwards, from the clip's end -------------------------------
 st.playheadSec = 4;
@@ -306,6 +306,103 @@ const backTracked = m.tracked.slice();
 verify('Track back follows the subject into earlier frames',
   () => [backTracked.length >= 40 && backTracked[0].sec < backTracked[backTracked.length - 1].sec,
     `tracked=${backTracked.length} first=${backTracked[0] && backTracked[0].sec}`]);
+
+// ---- it must not jump: a look-alike object, and an occluded face ------------
+function sceneFrame(sec, opts = {}) {
+  const { distractor = false, hidden = false } = opts;
+  const data = new Uint8ClampedArray(W * H * 4);
+  const cx = 60 + sec * 18;
+  const cy = 92;
+  const r = 25;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const dither = ((x * 29 + y * 53) % 9) - 4;
+      let R = 30 + dither;
+      let G = 38 + dither;
+      let B = 54 + dither;
+      const d = Math.hypot(x - cx, y - cy);
+      if (!hidden && d <= r) {
+        const shade = 1 - d / (r * 3.6);
+        R = Math.round(198 * shade);
+        G = Math.round(152 * shade);
+        B = Math.round(120 * shade);
+      }
+      // a warm lamp on the far side of frame, same colours as the subject
+      if (distractor) {
+        const dx = x - (256 + Math.sin(sec) * 10);
+        const dy = y - 46;
+        if (Math.hypot(dx, dy) <= 16) {
+          R = Math.min(255, R + 190);
+          G = Math.min(255, G + 140);
+          B = Math.min(255, B + 110);
+        }
+      }
+      data[i] = R;
+      data[i + 1] = G;
+      data[i + 2] = B;
+      data[i + 3] = 255;
+    }
+  }
+  return data;
+}
+
+function runScene(opts, seedX) {
+  st.scene = 'custom_video';
+  st.totalDurSec = 8;
+  st.playheadSec = 1;
+  const mm = T.ensureMaskState();
+  mm.seeds = [];
+  mm.strokes = [];
+  mm.tracked = [];
+  mm.soft = null;
+  mm.raw = null;
+  mm.mode = 'subject';
+  mm.feather = 6;
+  // one click on the subject, exactly what an editor would do
+  window.maskSampleFrame = (sec) => Promise.resolve({ data: sceneFrame(Number(sec) || 0, opts), width: W, height: H });
+  const first = sceneFrame(1, opts);
+  const clicked = T.maskSolveFromPixels(first, W, H, [{ x: seedX / W, y: 92 / H }], { mode: 'subject', sensitivity: 38 });
+  mm.raw = clicked;
+  T.maskRebuild();
+  return mm;
+}
+
+const seedX = 60 + 18;
+const mmA = runScene({ distractor: true }, seedX);
+await T.maskTrackFrames(1);
+const distractTracked = mmA.tracked.slice();
+const distractErr = distractTracked.map((f) => Math.abs(centroidOf(f.polygon).x * W - (60 + f.sec * 18)));
+const worstErr = distractErr.length ? Math.max(...distractErr) : 999;
+const steps = [];
+for (let i = 1; i < distractTracked.length; i++) {
+  const a = centroidOf(distractTracked[i - 1].polygon);
+  const b = centroidOf(distractTracked[i].polygon);
+  steps.push(Math.hypot((b.x - a.x) * W, (b.y - a.y) * H));
+}
+const worstStep = steps.length ? Math.max(...steps) : 999;
+
+verify('a look-alike object elsewhere does not steal the matte',
+  () => [distractTracked.length > 30 && worstErr < 9,
+    `tracked=${distractTracked.length} worst error=${worstErr.toFixed(1)}px`]);
+
+verify('the outline never jumps: no frame moves more than 6px',
+  () => [worstStep < 6, `largest step=${worstStep.toFixed(1)}px`]);
+
+// occluded: two frames with nobody in them, then the subject returns
+const mmB = runScene({ hidden: false }, seedX);
+window.maskSampleFrame = (sec) => {
+  const t = Number(sec) || 0;
+  const hidden = t > 2.0 && t < 2.25;
+  return Promise.resolve({ data: sceneFrame(t, { hidden }), width: W, height: H });
+};
+await T.maskTrackFrames(1);
+const occl = mmB.tracked.slice();
+const afterOcc = occl.filter((f) => f.sec >= 2.4);
+const occlErr = afterOcc.map((f) => Math.abs(centroidOf(f.polygon).x * W - (60 + f.sec * 18)));
+verify('a couple of occluded frames do not throw the matte off',
+  () => [occl.length > 30 && (!occlErr.length || Math.max(...occlErr) < 12),
+    `tracked=${occl.length} worst after occlusion=${occlErr.length ? Math.max(...occlErr).toFixed(1) : 'n/a'}px`]);
 
 // a browser that will not hand over frames: say so, do not blame the matte
 window.maskSampleFrame = (sec) => Promise.resolve({
