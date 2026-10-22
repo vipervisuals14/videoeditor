@@ -494,11 +494,17 @@ with this site** (`vendor/asr/`). Nothing is uploaded, there is no API key, no a
 third-party call: turn the wifi off after the page loads and it still works.
 
 - ~41 MB of weights, cached by the browser after the first run, so the second visit is instant.
-- The runtime is an **ES module** (`vendor/asr/transformers.min.js`), imported by an inline
-  `<script type="module">` in `index.html` which hands it to `asr.js` through
-  `window.transformers` + a `pulse-asr-lib-ready` event. `asr.js` waits for that event, so a
-  click that lands before the module is parsed still works. Verified end to end by
-  `tools/asr_browser_check.mjs`, which runs the shipped bundle, wasm and weights.
+- The runtime ships as **a plain IIFE bundle** (`vendor/asr/transformers.bundle.js`, 790 KB,
+  built with esbuild from `@xenova/transformers`) loaded by an ordinary
+  `<script src defer>`. No module system, no MIME negotiation, no `import()` support to depend on:
+  it defines `window.transformers` the way a `<script>` has always worked. `asr.js` waits for that
+  global, and if it never appears it `fetch`es the file and reports the **exact HTTP status** so a
+  404 is never mistaken for a slow load.
+- Fallbacks, in order: classic bundle → ES module (`transformers.min.js`) → blob-module import for
+  hosts that serve `.js` with the wrong `Content-Type`. Every failure carries the URL and the
+  server's answer.
+- Verified end to end by `tools/asr_browser_check.mjs`, which evaluates the shipped bundle, the
+  shipped wasm and the shipped weights with relative paths, and transcribes a known recording.
 - Roughly **3× faster than real time** on CPU (measured: 11 s of speech in 3.3 s), so a 60-second
   talking head takes about 20 seconds.
 - Everything is transcribed up to **5 minutes** per pass, then it stops and says so.
@@ -621,7 +627,7 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 | **Live-depth worker** (protocol, transferable buffer, map range) | `node /tmp/domtest/liveworker.js` | pass |
 | Effect layers · Depth · Mask · Parameters (32) · Stack & shell (48) · **Lyrics auto-detect (53)** | `node tools/dom/{stack,params,depth,mask,lyrics}.mjs` | pass |
 | **Speech engine, real weights, known recording** | `node tools/asr_check.mjs` | 5/5 |
-| **Speech engine, the browser's own code path** (ES module + ort-web wasm + relative paths) | `node tools/asr_browser_check.mjs` | 8/8 |
+| **Speech engine, the browser's own code path** (IIFE bundle + ort-web wasm + relative paths) | `node tools/asr_browser_check.mjs` | 9/9 |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified

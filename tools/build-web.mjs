@@ -41,11 +41,11 @@ const VENDOR_FILES = [
 function rewriteHtml(html, stamp) {
   // The cache-buster matters: a browser holding yesterday's app.js shows a bug
   // that was fixed, and there is no way to tell from the page.
-  const assets = '(styles\\.css|app\\.js|touchdesigner\\.js|depth\\.js|audio-lab\\.js|asr\\.js|render\\.js|lua-export\\.js)';
+  const assets = '(styles\\.css|app\\.js|touchdesigner\\.js|depth\\.js|audio-lab\\.js|asr\\.js|render\\.js|lua-export\\.js|vendor/asr/transformers\\.bundle\\.js)';
   return html
     .replace(new RegExp('(href|src)="\\/?' + assets + '(\\?v=[^"]*)?"', 'g'), '$1="$2?v=' + stamp + '"')
     .replace(/\/download\/bridge\.lua/g, 'VFXKit_ResolveFree_Bridge.lua')
-    .replace(/'\/vendor\/asr\/transformers\.min\.js'/g, "'vendor/asr/transformers.min.js'")
+    .replace(/(href|src)="\/vendor\/asr\/"/g, '$1="vendor/asr/"')
     .replace(
       '<script src="touchdesigner.js"></script>',
       '<script src="web-config.js"></script>\n  <script src="touchdesigner.js"></script>'

@@ -111,7 +111,9 @@ export function boot({ html = path.join(PUB, 'index.html'), beforeScripts = null
   // ---- load the page's scripts in order, like the HTML does
   const scripts = [...window.document.querySelectorAll('script[src]')]
     .map((s) => s.getAttribute('src'))
-    .filter((src) => src && !/^https?:/.test(src));
+    // vendor bundles (the 800 KB speech runtime, the 40 MB depth model) are not
+    // app code: eval'ing them would slow every suite down for nothing
+    .filter((src) => src && !/^https?:/.test(src) && !/\/vendor\//.test(src));
   for (const src of scripts) {
     const file = path.join(PUB, src.replace(/^\.?\//, '').split('?')[0]);
     if (!fs.existsSync(file)) continue;

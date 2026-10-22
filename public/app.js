@@ -3422,6 +3422,12 @@ function initCaptionsTab() {
     state.backdropMode = e.target.value;
   });
 
+  // The speech runtime is 900 KB of JavaScript: fetch it when the tab opens so
+  // the first Detect is not waiting on it. The 41 MB model still waits for a click.
+  if (window.AsrLab && window.AsrLab.prewarm) {
+    window.AsrLab.prewarm().catch(() => {});
+  }
+
   // the speech model reports its own progress; show it in the same status line
   if (window.AsrLab && window.AsrLab.onState) {
     window.AsrLab.onState((info) => {
@@ -3957,6 +3963,7 @@ function segmentsFromAnalysis(analysis) {
 // 30-second window happened to begin.
 async function lyricTranscribe(audio, analysis) {
   const Asr = window.AsrLab;
+  if (Asr && Asr.state && Asr.state() === 'failed' && Asr.reset) Asr.reset();
   // Never fail quietly: an empty caption list with no explanation is the worst
   // possible outcome, so every early exit says something the user can read.
   if (!Asr) {

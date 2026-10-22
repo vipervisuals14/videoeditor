@@ -508,11 +508,14 @@ check('the speech engine ships with the page', () => {
 await check('with no whisper runtime present it fails loudly, not silently', async () => {
   const saved = window.transformers;
   delete window.transformers;
+  REAL_ASR.reset();
+  REAL_ASR.setRuntimeTimeout(300);
   let message = '';
   try { await REAL_ASR.load(); } catch (err) { message = err.message; }
   window.transformers = saved;
   REAL_ASR.reset();
-  return [/runtime (file )?did not load|speech engine script did not load/.test(message), message || 'no error raised'];
+  REAL_ASR.setRuntimeTimeout(15000);
+  return [/did not define window\.transformers|speech runtime could not be loaded|did not load/.test(message), message.slice(0, 90)];
 });
 
 await check('the tab types the words itself when a talking head is detected', async () => {
@@ -604,19 +607,52 @@ check('the Sound button mutes and unmutes the element', () => {
 //    window.transformers never existed and the failure was invisible behind a
 //    sideways-scrolled pane.
 // ---------------------------------------------------------------------------
-check('index.html imports the speech runtime as a module', () => {
+check('the runtime ships as a plain script the browser cannot refuse', () => {
+  const src = fs.readFileSync(path.join(PUB, 'asr.js'), 'utf8');
   const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
-  const moduleTag = /<script type="module">[\s\S]*?transformers\.min\.js[\s\S]*?<\/script>/.test(html);
-  const assign = /window\.transformers\s*=/.test(html);
-  const classic = /<script src="\/?vendor\/asr\/transformers\.min\.js"/.test(html);
-  return [moduleTag && assign && !classic,
-    `module=${moduleTag} assigns=${assign} wronglyClassic=${classic}`];
+  const tag = /<script src="\/?vendor\/asr\/transformers\.bundle\.js/.test(html);
+  const waits = /waitForGlobal\(/.test(src);
+  const bundle = fs.existsSync(path.join(PUB, 'vendor', 'asr', 'transformers.bundle.js'));
+  const noModuleOnly = !/<script type="module">/.test(html);
+  return [tag && waits && bundle && noModuleOnly,
+    `tag=${tag} waitsForGlobal=${waits} file=${bundle} noModuleTag=${noModuleOnly}`];
 });
 
-check('the engine waits for that module instead of failing at once', () => {
+check('a failed script tag is diagnosed, not just timed out', () => {
   const src = fs.readFileSync(path.join(PUB, 'asr.js'), 'utf8');
-  const waits = /pulse-asr-lib-ready/.test(src) && /waitForLib/.test(src);
-  return [waits, waits ? 'listens for pulse-asr-lib-ready' : 'no wait path'];
+  const diag = /HTTP ' \+ res\.status/.test(src) || /' → HTTP ' \+ res\.status/.test(src);
+  return [diag, diag ? 'reports the HTTP status of the runtime file' : 'no diagnosis'];
+});
+
+check('a host that serves the file wrongly still gets a second chance', () => {
+  const src = fs.readFileSync(path.join(PUB, 'asr.js'), 'utf8');
+  const blob = /new Blob\(\[code\], \{ type: 'text\/javascript' \}\)/.test(src);
+  const retries = /attempt\(i \+ 1\)/.test(src);
+  const base = /new URL\(BASE \+ 'transformers\.min\.js', pageBase/.test(src);
+  return [blob && retries && base, `blobFallback=${blob} retries=${retries} baseResolved=${base}`];
+});
+
+await check('a missing runtime file is reported with its URL and HTTP status', async () => {
+  const savedFetch = window.fetch;
+  const savedLib = window.transformers;
+  delete window.transformers;
+  window.fetch = () => Promise.resolve({ ok: false, status: 404, headers: { get: () => null } });
+  REAL_ASR.reset();
+  REAL_ASR.setRuntimeTimeout(300);
+  let message = '';
+  try { await REAL_ASR.load(); } catch (err) { message = err.message; }
+  window.fetch = savedFetch;
+  window.transformers = savedLib;
+  REAL_ASR.reset();
+  REAL_ASR.setRuntimeTimeout(15000);
+  return [/HTTP 404/.test(message) && /transformers\.(bundle|min)\.js/.test(message), message.slice(0, 120)];
+});
+
+check('opening the caption tab preloads the runtime, not the model', () => {
+  const src = fs.readFileSync(path.join(PUB, 'app.js'), 'utf8');
+  const calls = /AsrLab\.prewarm\(\)/.test(src);
+  const modelInPrewarm = /prewarm[\s\S]{0,400}pipeline\('automatic-speech-recognition'/.test(src);
+  return [calls && !modelInPrewarm, `prewarm=${calls}`];
 });
 
 check('asr.js is served and referenced by the page', () => {

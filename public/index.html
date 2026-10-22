@@ -1161,16 +1161,11 @@
   <script src="/audio-lab.js?v=6"></script>
   <script src="/asr.js?v=6"></script>
   <!--
-    The speech runtime is an ES module (it exports, it is not a UMD global), so it
-    has to be loaded as one. It is imported here and handed to asr.js through a
-    global plus an event; asr.js waits for it instead of assuming it is already up.
+    The speech runtime: a plain IIFE bundle with no module system, so it loads like
+    any other script. asr.js reads the window.transformers global it defines, and
+    if the tag ever fails it reports the exact HTTP status of the file.
   -->
-  <script type="module">
-    import * as Transformers from '/vendor/asr/transformers.min.js';
-    window.transformers = Transformers;
-    window.PULSE_ASR_LIB = 'ready';
-    try { window.dispatchEvent(new Event('pulse-asr-lib-ready')); } catch (e) { /* noop */ }
-  </script>
+  <script src="/vendor/asr/transformers.bundle.js?v=6" defer></script>
   <script src="/lua-export.js?v=6"></script>
   <script src="/touchdesigner.js?v=6"></script>
   <script src="/depth.js?v=6"></script>

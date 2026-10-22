@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine</title>
-  <link rel="stylesheet" href="styles.css?v=mvjdug19" />
+  <link rel="stylesheet" href="styles.css?v=mvjeqqu9" />
 </head>
 <body>
  <div class="app-window">
@@ -1158,23 +1158,18 @@
 
  </div>
 
-  <script src="audio-lab.js?v=mvjdug19"></script>
-  <script src="asr.js?v=mvjdug19"></script>
+  <script src="audio-lab.js?v=mvjeqqu9"></script>
+  <script src="asr.js?v=mvjeqqu9"></script>
   <!--
-    The speech runtime is an ES module (it exports, it is not a UMD global), so it
-    has to be loaded as one. It is imported here and handed to asr.js through a
-    global plus an event; asr.js waits for it instead of assuming it is already up.
+    The speech runtime: a plain IIFE bundle with no module system, so it loads like
+    any other script. asr.js reads the window.transformers global it defines, and
+    if the tag ever fails it reports the exact HTTP status of the file.
   -->
-  <script type="module">
-    import * as Transformers from 'vendor/asr/transformers.min.js';
-    window.transformers = Transformers;
-    window.PULSE_ASR_LIB = 'ready';
-    try { window.dispatchEvent(new Event('pulse-asr-lib-ready')); } catch (e) { /* noop */ }
-  </script>
-  <script src="lua-export.js?v=mvjdug19"></script>
-  <script src="touchdesigner.js?v=mvjdug19"></script>
-  <script src="depth.js?v=mvjdug19"></script>
-  <script src="render.js?v=mvjdug19"></script>
-  <script src="app.js?v=mvjdug19"></script>
+  <script src="vendor/asr/transformers.bundle.js?v=mvjeqqu9" defer></script>
+  <script src="lua-export.js?v=mvjeqqu9"></script>
+  <script src="touchdesigner.js?v=mvjeqqu9"></script>
+  <script src="depth.js?v=mvjeqqu9"></script>
+  <script src="render.js?v=mvjeqqu9"></script>
+  <script src="app.js?v=mvjeqqu9"></script>
 </body>
 </html>

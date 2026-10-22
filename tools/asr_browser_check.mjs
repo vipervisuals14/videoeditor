@@ -55,20 +55,30 @@ globalThis.fetch = async (url, opts) => {
 };
 
 // ---- 1. the runtime, loaded the way index.html loads it -------------------
+// It is a plain IIFE bundle (no modules), so evaluating it like a <script> tag
+// is exactly what the browser does.
 let T = null;
 {
+  const code = fs.readFileSync(path.join(ASR, 'transformers.bundle.js'), 'utf8');
   const saved = globalThis.process;
-  globalThis.process = undefined;
+  globalThis.process = undefined;     // make the bundle pick the browser backend
   try {
-    T = await import('file://' + path.join(ASR, 'transformers.min.js'));
+    (0, eval)(code);
+    T = globalThis.transformers;
   } catch (err) {
-    check('the vendored runtime imports as an ES module', false, err.message);
+    check('the vendored bundle evaluates like a classic script', false, err.message);
   } finally {
     globalThis.process = saved;
   }
 }
-check('the vendored runtime imports as an ES module', !!T && typeof T.pipeline === 'function',
-  T ? `pipeline=${typeof T.pipeline} v=${T.env.version}` : 'import failed');
+check('the vendored bundle evaluates like a classic script and defines a global',
+  !!T && typeof T.pipeline === 'function',
+  T ? `pipeline=${typeof T.pipeline} v=${T.env && T.env.version}` : 'no window.transformers');
+{
+  const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+  const tag = /<script src="\/?vendor\/asr\/transformers\.bundle\.js/.test(html);
+  check('the page ships that bundle as a plain script tag', tag, tag ? 'classic tag present' : 'no tag');
+}
 check('its browser backend is present (wasm, not the node binding)',
   !!(T && T.env.backends && T.env.backends.onnx && T.env.backends.onnx.wasm),
   T && T.env.backends ? `backends=${Object.keys(T.env.backends).join(',')}` : 'no env');

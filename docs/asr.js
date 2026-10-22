@@ -73,86 +73,201 @@
     return null;
   }
 
-  // The runtime is an ES module, so it arrives after the click that needs it.
-  // Wait for it (and for the wasm to be reachable) instead of reporting a
-  // failure the user cannot act on.
-  function waitForLib(timeoutMs) {
-    var direct = getLib();
-    if (direct) return Promise.resolve(direct);
+  // The runtime is an ES module. Rather than hoping a tag elsewhere on the page
+  // has already parsed it, this fetches it, says out loud what the server
+  // answered, and imports it two ways (native, then from a blob, which also
+  // works when a host serves the file with the wrong Content-Type).
+  function runtimeCandidates() {
+    var list = [];
+    var pageBase = (global.document && global.document.baseURI)
+      || (global.location && global.location.href) || '';
+    var push = function (href) {
+      if (href && list.indexOf(href) < 0) list.push(href);
+    };
+    try { push(new URL(BASE + 'transformers.min.js', pageBase || undefined).href); } catch (e) { /* ignore */ }
+    try { push(new URL('/vendor/asr/transformers.min.js', pageBase || undefined).href); } catch (e) { /* ignore */ }
+    try { push(new URL('vendor/asr/transformers.min.js', pageBase || undefined).href); } catch (e) { /* ignore */ }
+    return list;
+  }
+
+  // Read the response so we can report bytes, not just a timeout.
+  function readBody(res, onBytes) {
+    if (!res.body || !res.body.getReader) return res.text();
+    var reader = res.body.getReader();
+    var chunks = [];
+    var total = 0;
+    var pump = function () {
+      return reader.read().then(function (step) {
+        if (step.done) {
+          var size = 0;
+          chunks.forEach(function (c) { size += c.length; });
+          var out = new Uint8Array(size);
+          var at = 0;
+          chunks.forEach(function (c) { out.set(c, at); at += c.length; });
+          return new TextDecoder('utf-8').decode(out);
+        }
+        chunks.push(step.value);
+        total += step.value.length;
+        if (onBytes) onBytes(total);
+        return pump();
+      });
+    };
+    return pump();
+  }
+
+  // Primary path: a classic <script> tag. No module system, no MIME negotiation,
+  // no import() support question — index.html ships the tag, this waits for the
+  // global it defines.
+  var RUNTIME_TIMEOUT_MS = 15000;
+  function waitForGlobal(timeoutMs) {
+    if (getLib()) return Promise.resolve(getLib());
     return new Promise(function (resolve, reject) {
-      var done = false;
-      var finish = function (lib, err) {
-        if (done) return;
-        done = true;
-        global.removeEventListener('pulse-asr-lib-ready', onReady);
-        if (lib) resolve(lib); else reject(err);
-      };
-      var onReady = function () {
-        var lib = getLib();
-        if (lib) finish(lib);
-      };
-      global.addEventListener('pulse-asr-lib-ready', onReady);
       var started = Date.now();
       var tick = function () {
         var lib = getLib();
-        if (lib) return finish(lib);
+        if (lib) return resolve(lib);
         if (Date.now() - started > timeoutMs) {
-          return finish(null, new Error('the speech runtime file did not load — vendor/asr/transformers.min.js was not reachable (check the site was published with its vendor folder)'));
+          return reject(new Error('the speech runtime did not define window.transformers within '
+            + Math.round(timeoutMs / 1000) + 's'));
         }
-        setTimeout(tick, 120);
+        setTimeout(tick, 100);
       };
       tick();
     });
   }
 
+  // If the tag did not deliver, find out *why* before guessing: a 404 and a
+  // blocked script need completely different answers.
+  function diagnose(url) {
+    return fetch(url, { cache: 'no-store' }).then(function (res) {
+      if (!res.ok) return url + ' → HTTP ' + res.status;
+      var type = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
+      return url + ' → HTTP ' + res.status + (type ? ' (' + type + ')' : '') + ' but no window.transformers';
+    }).catch(function (err) {
+      return url + ' → ' + (err && err.message ? err.message : 'network error');
+    });
+  }
+
+  function loadViaScript() {
+    var urls = runtimeCandidates().map(function (u) { return u.replace(/transformers\.min\.js$/, 'transformers.bundle.js'); });
+    return waitForGlobal(RUNTIME_TIMEOUT_MS).catch(function (waitErr) {
+      return Promise.all(urls.map(diagnose)).then(function (notes) {
+        throw new Error(waitErr.message + ' — ' + notes.join(' · '));
+      });
+    });
+  }
+
+  function importRuntime() {
+    var urls = runtimeCandidates();
+    var tried = [];
+    var attempt = function (i) {
+      if (i >= urls.length) {
+        failed = 'the speech runtime could not be loaded — ' + tried.join(' · ');
+        return Promise.reject(new Error(failed));
+      }
+      var url = urls[i];
+      report('loading', 0.02, 'Fetching the speech runtime…');
+      return fetch(url, { cache: 'force-cache' }).then(function (res) {
+        if (!res.ok) {
+          tried.push(url + ' → HTTP ' + res.status);
+          return attempt(i + 1);
+        }
+        var type = res.headers && res.headers.get ? (res.headers.get('content-type') || '') : '';
+        var size = Number(res.headers && res.headers.get ? res.headers.get('content-length') : 0) || 0;
+        return readBody(res, function (bytes) {
+          var pct = size ? Math.min(0.06, (bytes / size) * 0.06) : 0.03;
+          report('loading', 0.02 + pct, 'Fetching the speech runtime (' + Math.round(bytes / 1024) + ' KB)…');
+        }).then(function (code) {
+          if (!code || code.length < 5000) {
+            tried.push(url + ' → empty response');
+            return attempt(i + 1);
+          }
+          // A module is the right way; a blob import is the fallback for hosts
+          // that answer with text/plain, which browsers refuse to execute.
+          var native = function () { return import(/* webpackIgnore: true */ url); };
+          return native().catch(function (first) {
+            var blobUrl = null;
+            try {
+              blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+              return import(/* webpackIgnore: true */ blobUrl).then(function (mod) {
+                try { URL.revokeObjectURL(blobUrl); } catch (e) { /* ignore */ }
+                return mod;
+              });
+            } catch (second) {
+              tried.push(url + ' → ' + (first && first.message ? first.message : first)
+                + (type ? ' [content-type ' + type + ']' : ''));
+              return attempt(i + 1);
+            }
+          });
+        });
+      }).catch(function (err) {
+        var msg = err && err.message ? err.message : String(err);
+        if (msg.indexOf(' → ') < 0) tried.push(url + ' → ' + msg);
+        return attempt(i + 1);
+      });
+    };
+    return attempt(0);
+  }
+
   function load() {
     if (loaded) return Promise.resolve(loaded);
     if (loading) return loading;
-    var lib = getLib();
-    if (!lib) {
-      // not there yet: wait for the module, then continue exactly as below
-      report('loading', 0.02, 'Starting the speech engine…');
-      loading = waitForLib(8000).then(function (late) {
+    if (failed) failed = null;            // every press retries; nothing is cached as hopeless
+
+    var direct = getLib();
+    if (direct) return boot(direct);
+
+    report('loading', 0.02, 'Starting the speech engine…');
+    loading = loadViaScript()
+      .then(function (classic) {
+        if (classic && classic.pipeline) return classic;
+        // the classic tag did not produce a global: try the ES module directly
+        report('loading', 0.03, 'Trying the module build of the speech runtime…');
+        return importRuntime();
+      })
+      .then(function (mod) {
+        var resolved = (mod && mod.pipeline) ? mod
+          : (mod && mod.default && mod.default.pipeline ? mod.default : null);
+        if (!resolved) throw new Error('the speech runtime loaded but exposed no pipeline()');
+        global.transformers = resolved;
+        return boot(resolved);
+      })
+      .then(function (pipe) {
         loading = null;
-        return boot(late);
-      }).catch(function (err) {
+        return pipe;
+      })
+      .catch(function (err) {
         loading = null;
         failed = err && err.message ? err.message : 'the speech runtime did not load';
         report('failed', null, failed);
         throw new Error(failed);
       });
-      return loading;
-    }
-    return boot(lib);
+    return loading;
   }
 
   function boot(lib) {
     if (loaded) return Promise.resolve(loaded);
-    if (loading) return loading;
     configure(lib);
     report('loading', 0.05, 'Loading the speech model (41 MB, cached after the first run)…');
     var p = lib.pipeline('automatic-speech-recognition', MODEL, {
       quantized: true,
-      progress_callback: function (p) {
-        if (!p) return;
-        if (p.status === 'progress' && p.total) {
-          report('loading', Math.min(0.95, (p.loaded || 0) / p.total), 'Loading the speech model…');
-        } else if (p.status === 'done') {
+      progress_callback: function (info) {
+        if (!info) return;
+        if (info.status === 'progress' && info.total) {
+          report('loading', Math.min(0.95, (info.loaded || 0) / info.total), 'Loading the speech model…');
+        } else if (info.status === 'done') {
           report('loading', 0.96, 'Speech model ready.');
         }
       }
     }).then(function (pipe) {
       loaded = pipe;
-      loading = null;
       report('ready', 1, 'Speech model ready.');
       return pipe;
     }).catch(function (err) {
-      loading = null;
       failed = (err && err.message) ? err.message : 'the model could not be loaded';
       report('failed', null, failed);
       throw new Error(failed);
     });
-    loading = p;
     return p;
   }
 
@@ -301,8 +416,26 @@
     });
   }
 
+  // Warm just the runtime (900 KB) when the caption tab opens, so the first
+  // Detect does not spend its first seconds downloading it. The 41 MB model is
+  // never fetched until the user actually asks for a transcription.
+  function prewarm() {
+    if (loaded || loading || getLib()) return Promise.resolve();
+    if (prewarming) return prewarming;
+    prewarming = loadViaScript().catch(function () { return importRuntime(); }).then(function (mod) {
+      prewarming = null;
+      if (mod && mod.pipeline && !global.transformers) global.transformers = mod;
+      return mod;
+    }).catch(function () { prewarming = null; return null; });
+    return prewarming;
+  }
+  var prewarming = null;
+
   var AsrLab = {
     version: '1.0',
+    setRuntimeTimeout: function (ms) { RUNTIME_TIMEOUT_MS = Math.max(100, Number(ms) || 15000); },
+    prewarm: prewarm,
+    runtimeCandidates: runtimeCandidates,
     base: BASE,
     model: MODEL,
     state: state,
