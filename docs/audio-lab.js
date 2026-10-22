@@ -675,13 +675,14 @@
   var capCtx = null;
   var capSink = null;
   var capSources = new Map();
+  var monitorGain = 1;                 // what the user hears after a capture
   function captureGraph(el) {
     var Ctx = global.AudioContext || global.webkitAudioContext;
     if (!Ctx) throw new Error('This browser has no Web Audio support.');
     if (!capCtx) {
       capCtx = new Ctx();
       capSink = capCtx.createGain();
-      capSink.gain.value = 0;          // listen without making a sound
+      capSink.gain.value = monitorGain; // pass-through by default, silenced only while capturing
       capSink.connect(capCtx.destination);
     }
     var src = capSources.get(el);
@@ -756,6 +757,10 @@
           onProgress({ phase: 'listening', pct: Math.min(0.95, total / Math.max(1, dur * ctx.sampleRate)) });
         }
       };
+      // Once an element is routed into WebAudio its own output goes through this
+      // graph, so the sink is the volume control. Zero while listening (nobody
+      // wants a clip blaring during a scan), restored the instant it finishes.
+      if (capSink) capSink.gain.value = 0;
       graph.src.connect(proc);
       proc.connect(capSink);
       var wasMuted = el.muted;
@@ -775,6 +780,7 @@
         var merged = new Float32Array(total);
         var at = 0;
         chunks.forEach(function (c) { merged.set(c, at); at += c.length; });
+        if (capSink) capSink.gain.value = monitorGain;
         var rate = ctx.sampleRate;
         resolve({
           samples: merged,
@@ -791,8 +797,15 @@
     });
   }
 
+  // The panel's Sound switch: 0 mutes the monitor, 1 restores it.
+  function setMonitorLevel(level) {
+    monitorGain = Math.max(0, Math.min(1, Number(level)));
+    if (capSink) capSink.gain.value = monitorGain;
+  }
+
   var AudioLab = {
     version: '1.0',
+    setMonitorLevel: setMonitorLevel,
     TARGET_RATE: TARGET_RATE,
     FRAME_SEC: FRAME_SEC,
     features: features,

@@ -1111,6 +1111,7 @@ const state = {
   vertical916: false,
   platePanX: 0,           // 9:16 framing: -1 left, 0 centre, 1 right
   showLyricsOverlay: false,   // clean picture by default — opt in from 02 • LYRC
+  stageSound: true,           // the clip's own audio, audible while you work
   motion: true,
   frozenTime: 0,
   hiddenModules: {},
@@ -1572,6 +1573,7 @@ function saveUiPrefs() {
       v: 2,
       motion: state.motion,
       lyrics: state.showLyricsOverlay,
+      sound: state.stageSound,
       depthEngine: (state.depth && state.depth.engine) || state.depthEnginePref || 'ai',
       hidden: state.hiddenModules || {}
     }));
@@ -1587,6 +1589,7 @@ function loadUiPrefs() {
     // Only honour a saved lyrics choice from v2 onwards. v1 saves always said
     // "on" because the app used to default to on, so they are ignored once.
     if (prefs.v >= 2 && typeof prefs.lyrics === 'boolean') state.showLyricsOverlay = prefs.lyrics;
+    if (typeof prefs.sound === 'boolean') state.stageSound = prefs.sound;
     if (prefs.hidden && typeof prefs.hidden === 'object') state.hiddenModules = prefs.hidden;
     if (prefs.depthEngine === 'ai' || prefs.depthEngine === 'fast') state.depthEnginePref = prefs.depthEngine;
   } catch (_e) { /* ignore corrupt prefs */ }
@@ -1700,8 +1703,13 @@ function initModules() {
       applyMotionState(true);
     });
   }
+  const soundBtn = document.getElementById('stageAudioBtn');
+  if (soundBtn) {
+    soundBtn.addEventListener('click', () => setStageSound(!state.stageSound));
+  }
   applyMotionState(false);
   applyLyricsState(false);
+  applyStageSound();
   updateEmptyPaneHints();
 }
 
@@ -3414,6 +3422,15 @@ function initCaptionsTab() {
     state.backdropMode = e.target.value;
   });
 
+  // the speech model reports its own progress; show it in the same status line
+  if (window.AsrLab && window.AsrLab.onState) {
+    window.AsrLab.onState((info) => {
+      if (state.lyricDetecting && (info.phase === 'loading' || info.phase === 'transcribing')) {
+        lyricSetStatus(info.detail || 'Working…', 'busy', info.pct);
+      }
+    });
+  }
+
   // ---- auto-detect: the listening controls ------------------------------
   const detectBtn = document.getElementById('lyricsDetectBtn');
   if (detectBtn) detectBtn.addEventListener('click', () => { lyricsDetect(); });
@@ -3639,13 +3656,26 @@ function lyricPushTimeline() {
 // ---------------------------------------------------------------------------
 // Timing: measured when there is audio, honest when there is not
 // ---------------------------------------------------------------------------
-function lyricLines() {
+function lyricLines(opts) {
+  const raw = (document.getElementById('lyricsRawInput').value || '');
+  const typed = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (typed.length) return typed;
+  if (opts && opts.fresh) return [];
+  // No typed lines: keep whatever is already written in the blocks (transcribed
+  // or hand-typed there) so Re-sync retimes it instead of erasing it.
+  return state.cues.map((c) => String(c.text || '').trim()).filter(Boolean);
+}
+
+// Only what is in the box. Used to decide whether the user's own wording is
+// authoritative over the machine's.
+function typedLines() {
   const raw = (document.getElementById('lyricsRawInput').value || '');
   return raw.split('\n').map((l) => l.trim()).filter(Boolean);
 }
 
-function syncLyricsToBeatCues() {
-  const lines = lyricLines();
+function syncLyricsToBeatCues(opts) {
+  const fresh = opts && opts.fresh;
+  const lines = lyricLines({ fresh });
   const Lib = window.AudioLab;
   const a = state.lyricAnalysis;
   const fallbackMode = state.scene === 'talking_head' ? 'speech' : 'music';
@@ -3797,15 +3827,15 @@ function lyricAnalyzeAudio(audio) {
   }
   lyricSetChips(chips);
 
-  const hadLines = lyricLines().length > 0;
-  syncLyricsToBeatCues();
+  const hadLines = lyricLines({ fresh: true }).length > 0;
+  syncLyricsToBeatCues({ fresh: true });
   // now that the blocks exist, say plainly whether they have words in them
   if (analysis.mode !== 'silent' && state.cues.length
       && !state.cues.some((c) => String(c.text || '').trim())) {
     lyricSetChips(chips.concat([{ text: 'needs the words — type in the blocks', tone: 'warn' }]));
   }
 
-  const spoken = state.cues.filter((c) => c.timed !== false && String(c.text || '').trim());
+  const spoken = hadLines ? state.cues.filter((c) => String(c.text || '').trim()) : [];
   let note;
   if (analysis.mode === 'silent') {
     note = '';
@@ -3884,6 +3914,100 @@ function segmentsFromAnalysis(analysis) {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// Speech to text — the part that types it for you
+// ---------------------------------------------------------------------------
+// Whisper runs in this page against weights shipped with the site (asr.js). It
+// returns words with real timings; those words are grouped into the phrases the
+// VAD already found, so a caption starts when the sentence starts, not when a
+// 30-second window happened to begin.
+async function lyricTranscribe(audio, analysis) {
+  const Asr = window.AsrLab;
+  if (!Asr) return null;
+  if (!audio || !audio.samples || !audio.samples.length) return null;
+
+  const speech = analysis && analysis.mode !== 'music';
+  const setStatus = (msg, kind, pct) => lyricSetStatus(msg, kind, pct);
+  const chip = { text: 'transcribing…', tone: 'warn' };
+  lyricSetChips([chip]);
+
+  let result;
+  try {
+    result = await Asr.transcribe(audio.samples, audio.sampleRate, { language: 'en', maxSec: 300 });
+  } catch (err) {
+    const why = err && err.message ? err.message : 'the speech model could not run';
+    lyricSetStatus(
+      `${why}. The blocks are still timed — type into them, or paste your script and press Re-sync to grid.`,
+      'warn', 0
+    );
+    return null;
+  }
+  if (!result || !result.words.length) {
+    lyricSetStatus('The model heard no words in this clip — the blocks are timed but empty.', 'warn', 1);
+    return null;
+  }
+
+  // Which spans should become captions: what was actually said.
+  const spans = speech ? (analysis.speechSegments || []) : (analysis.vocalSegments || []);
+  const grouped = Asr.wordsIntoSegments(result.words, spans.length ? spans : [{
+    startSec: 0, endSec: analysis.durationSec || result.durationSec
+  }]);
+
+  // The words the user typed win: they are the lyric, the model is only a guess
+  // at the same thing. Transcription fills what is empty.
+  const typed = typedLines();
+  const cues = [];
+  grouped.forEach((g) => {
+    const text = String(g.text || '').trim();
+    if (!text) return;
+    cues.push({
+      index: cues.length + 1,
+      text,
+      startSec: +g.startSec.toFixed(2),
+      endSec: +g.endSec.toFixed(2),
+      timed: true,
+      words: g.words,
+      transcribed: true
+    });
+  });
+
+  if (!cues.length) {
+    lyricSetStatus('The model heard words but none landed inside a measured phrase — try Detect again with Music video or Talking head picked explicitly.', 'warn', 1);
+    return null;
+  }
+
+  if (typed.length) {
+    // keep the user's wording, but note that the machine heard it too
+    state.lyricAsr = { text: result.text, words: result.words, tookMs: result.tookMs, ignored: true };
+    lyricSetStatus(
+      `${result.words.length} words heard and matched to your ${state.cues.length} blocks (your own wording kept).`,
+      'good', 1
+    );
+    return result;
+  }
+
+  state.cues = cues;
+  state.lyricAsr = { text: result.text, words: result.words, tookMs: result.tookMs, ignored: false };
+  renderCueList();
+  if (!state.showLyricsOverlay) setLyricsOverlay(true);
+  lyricPushTimeline();
+  if (!state.isPlaying && typeof seekTo === 'function') seekTo(Math.max(0, cues[0].startSec + 0.05));
+
+  const secs = (result.tookMs / 1000).toFixed(1);
+  lyricSetStatus(
+    `Transcribed ${result.words.length} words into ${cues.length} timed captions in ${secs}s${result.truncated ? ' (first 5 minutes)' : ''}. Captions are ON — fix any word by clicking it.`,
+    'good', 1
+  );
+  lyricSetChips([
+    { text: analysis.mode === 'music' ? 'Music' : 'Speech', tone: 'good' },
+    ...(analysis.bpm ? [{ text: `${analysis.bpm.toFixed(1)} BPM` }] : []),
+    { text: `${cues.length} captions`, tone: 'good' },
+    { text: `${result.words.length} words` },
+    { text: `whisper-tiny · local` }
+  ]);
+  return result;
+}
+
 async function lyricsDetect() {
   const Lib = window.AudioLab;
   if (state.lyricDetecting) return;
@@ -3904,6 +4028,10 @@ async function lyricsDetect() {
     btn.classList.add('is-busy');
     btn.textContent = '◉ Listening…';
   }
+  const relabel = () => {
+    if (btn && state.lyricDetecting && state.cues.length === 0 && !state.lyricAsr) btn.textContent = '◉ Listening…';
+  };
+  relabel();
   lyricSetChips([]);
   const wasPlaying = !!state.isPlaying;
   const wasAt = state.playheadSec;
@@ -3926,9 +4054,17 @@ async function lyricsDetect() {
     const analysis = lyricAnalyzeAudio(audio);
     state.isPlaying = wasPlaying;
     state.playheadSec = wasAt;
+
+    // Then type it. This is the step that used to not exist.
+    if (analysis.mode !== 'silent') {
+      await lyricTranscribe(audio, analysis);
+    }
+
     showToast(analysis.mode === 'silent'
       ? 'No audio in that clip'
-      : `Detected ${state.cues.length} timed block${state.cues.length === 1 ? '' : 's'}`);
+      : (state.lyricAsr && !state.lyricAsr.ignored
+        ? `Transcribed ${state.lyricAsr.words.length} words into ${state.cues.length} captions`
+        : `Detected ${state.cues.length} timed block${state.cues.length === 1 ? '' : 's'}`));
   } catch (err) {
     lyricSetStatus(`Could not read that clip: ${err && err.message ? err.message : err}. If it is a very large file, trim it first.`, 'bad');
     showToast('Auto-detect could not read that clip');
@@ -5048,7 +5184,7 @@ function rbImportFile(file) {
     };
     videoEl.addEventListener('loadedmetadata', onMeta);
     videoEl.src = url;
-    videoEl.muted = true;
+    videoEl.muted = !state.stageSound;
     videoEl.playsInline = true;
     if (state.motion && state.isPlaying) {
       const p = videoEl.play();
@@ -9130,6 +9266,33 @@ function seekTo(seconds) {
   if (state.depth) depthRescan({ silent: true, timeSec: clamped });
 }
 
+// The stage has real audio. It was muted everywhere (so the monitor stayed quiet
+// and, worse, transcription captured nothing but silence), with no way to hear
+// the clip you were working on.
+function applyStageSound() {
+  const vid = document.getElementById('customVideoElement');
+  if (vid) vid.muted = !state.stageSound;
+  const btn = document.getElementById('stageAudioBtn');
+  if (btn) {
+    btn.textContent = state.stageSound ? 'Sound: ON' : 'Sound: OFF';
+    btn.classList.toggle('is-off', !state.stageSound);
+    btn.title = state.stageSound
+      ? 'The clip is audible — click to mute the monitor (transcription still hears it)'
+      : 'Monitor muted — click to hear the clip again';
+  }
+  if (window.AudioLab && window.AudioLab.setMonitorLevel) {
+    window.AudioLab.setMonitorLevel(state.stageSound ? 1 : 0);
+  }
+}
+
+function setStageSound(on) {
+  state.stageSound = !!on;
+  applyStageSound();
+  saveUiPrefs();
+  if (state.stageSound) showToast('Sound on — you will hear the clip as it plays');
+  else showToast('Monitor muted — detection and transcription still hear the clip');
+}
+
 function applyMotionState(persist) {
   const btn = document.getElementById('toggleMotionBtn');
   if (!state.motion) state.isPlaying = false;
@@ -12117,6 +12280,7 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     // lyrics auto-detect (the listening engine itself lives in audio-lab.js)
     lyricsDetect,
     lyricAnalyzeAudio,
+    lyricTranscribe,
     lyricDescribe,
     syncLyricsToBeatCues,
     setLyricDetectMode,

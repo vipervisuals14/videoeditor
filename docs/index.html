@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine</title>
-  <link rel="stylesheet" href="styles.css?v=mvjcg5b4" />
+  <link rel="stylesheet" href="styles.css?v=mvjd5stw" />
 </head>
 <body>
  <div class="app-window">
@@ -73,6 +73,7 @@
             <button class="btn-mini" id="clearPlateBtn" title="Remove the loaded footage and go back to an empty stage">Clear</button>
           </div>
           <div class="viewer-controls-right">
+            <button class="btn-mini" id="stageAudioBtn" title="Hear the clip's own audio while you scrub and play — this is the sound the transcription listens to">Sound: ON</button>
             <button class="btn-mini" id="toggleMotionBtn" title="Freeze every animation: shaders, beat pulses, lyric motion and card previews">Motion: ON</button>
             <button class="btn-mini is-off" id="toggleLyricsOverlayBtn" title="Show or hide LYRC typography on the monitor">Lyrics: OFF</button>
             <button class="btn-mini" id="aspectRatioBtn" title="Switch between 16:9 Widescreen and 9:16 Reels/TikTok vertical frame">9:16: OFF</button>
@@ -91,7 +92,7 @@
         <!-- HTML5 REAL-TIME OPTICAL SHADER & LYRIC RENDERING CANVAS -->
         <div class="canvas-stage" id="canvasStage" title="Drop an image or a video straight onto the monitor to use it as the plate">
           <canvas id="livePreviewCanvas" width="640" height="360" title="Magic Mask: click your subject to build a matte"></canvas>
-          <video id="customVideoElement" loop muted playsinline hidden></video>
+          <video id="customVideoElement" loop playsinline hidden></video>
           <div class="empty-stage" id="emptyStage">
             <div class="empty-stage-mark">▣</div>
             <h2>Nothing loaded yet</h2>
@@ -1157,11 +1158,12 @@
 
  </div>
 
-  <script src="audio-lab.js?v=mvjcg5b4"></script>
-  <script src="lua-export.js?v=mvjcg5b4"></script>
-  <script src="touchdesigner.js?v=mvjcg5b4"></script>
-  <script src="depth.js?v=mvjcg5b4"></script>
-  <script src="render.js?v=mvjcg5b4"></script>
-  <script src="app.js?v=mvjcg5b4"></script>
+  <script src="audio-lab.js?v=mvjd5stw"></script>
+  <script src="asr.js?v=mvjd5stw"></script>
+  <script src="lua-export.js?v=mvjd5stw"></script>
+  <script src="touchdesigner.js?v=mvjd5stw"></script>
+  <script src="depth.js?v=mvjd5stw"></script>
+  <script src="render.js?v=mvjd5stw"></script>
+  <script src="app.js?v=mvjd5stw"></script>
 </body>
 </html>
