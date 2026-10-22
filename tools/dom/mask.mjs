@@ -225,7 +225,8 @@ T.maskRebuild();
 await T.maskTrackFrames(1);
 const emptyStatus = String(document.getElementById('maskStatus').textContent || '');
 verify('tracking stops when the subject leaves the frame, keeping the frame you drew',
-  () => [m.tracked.length <= 5 && /lost it|could not follow|could not be followed|stopped handing/i.test(emptyStatus),
+  // it coasts for half a second before admitting the subject is gone
+  () => [m.tracked.length <= 14 && /lost it|could not follow|could not be followed|stopped handing/i.test(emptyStatus),
     `tracked=${m.tracked.length} status="${emptyStatus}"`]);
 
 // ---- a harder scene: textured room, walking subject, drifting exposure ----
@@ -582,6 +583,104 @@ verify('the matte is person-shaped: taller than it is wide, centred on the click
       `box=${bb.x0},${bb.y0}-${bb.x1},${bb.y1}`];
   });
 
+
+// ---- full clip, strokes that travel, and edges that snap --------------------
+check('the tracker is not capped at a couple of seconds', () => {
+  const src = fs.readFileSync(path.join(PUB, 'app.js'), 'utf8');
+  const body = src.slice(src.indexOf('async function maskTrackFrames'), src.indexOf('function maskKeyframeMatte'));
+  const frameStep = /const stride = 1 \/ fps/.test(body);
+  const longRun = /Math\.min\(2400/.test(body);
+  const cancel = /trackCancel/.test(body);
+  return [frameStep && longRun && cancel, `frameStep=${frameStep} longRun=${longRun} cancel=${cancel}`];
+});
+
+check('the panel offers a stop button while following', () =>
+  !!document.getElementById('maskTrackCancelBtn'));
+
+check('strokes are carried with the subject, not painted once', () => {
+  const src = fs.readFileSync(path.join(PUB, 'app.js'), 'utf8');
+  const body = src.slice(src.indexOf('async function maskTrackFrames'), src.indexOf('function maskKeyframeMatte'));
+  return [/maskEnforceStrokes\(refined, m, sdx, sdy\)/.test(body),
+    'strokes are not enforced per frame'];
+});
+
+verify('a painted correction overrides the auto-select', () => {
+  // the subject's colours plus a stroke marking the lamp as background
+  const mm = T.ensureMaskState();
+  mm.seeds = [];
+  mm.tracked = [];
+  mm.mode = 'subject';
+  mm.raw = T.maskClickSelect(fixture.data, { x: 165 / (FW - 1), y: 120 / (FH - 1) });
+  T.maskRebuild();
+  const before = T.maskCoverage(mm.soft);
+  mm.strokes = [{ erase: true, radius: 90, points: [{ x: 60 / FW, y: 55 / FH }, { x: 80 / FW, y: 60 / FH }] }];
+  T.maskRebuild();
+  const after = T.maskCoverage(mm.soft);
+  mm.strokes = [];
+  T.maskRebuild();
+  return [after <= before + 0.0001, `coverage ${(before * 100).toFixed(1)}% -> ${(after * 100).toFixed(1)}%`];
+});
+
+verify('the outline snaps onto the silhouette', () => {
+  // a rectangle whose right side sits just inside a hard vertical edge
+  const ring = [];
+  const x0 = 0.35;
+  const x1 = 0.60;
+  const y0 = 0.35;
+  const y1 = 0.65;
+  for (let k = 0; k < 6; k++) ring.push({ x: x0 + ((x1 - x0) * k) / 5, y: y0 });
+  for (let k = 0; k < 6; k++) ring.push({ x: x1, y: y0 + ((y1 - y0) * k) / 5 });
+  for (let k = 0; k < 6; k++) ring.push({ x: x1 - ((x1 - x0) * k) / 5, y: y1 });
+  for (let k = 0; k < 6; k++) ring.push({ x: x0, y: y1 - ((y1 - y0) * k) / 5 });
+  const edgeX = Math.round(x1 * (W - 1)) + 2;   // 2px outside the ring
+  const luma = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) luma[y * W + x] = x < edgeX ? 20 : 200;
+  }
+  const snapped = T.maskSnapRing(ring, luma, 3);
+  const rightSide = ring.map((p, i) => ({ p, s: snapped[i] })).filter((o) => o.p.x > x1 - 0.005);
+  const moved = rightSide.filter((o) => Math.abs(o.s.x * (W - 1) - edgeX) < 2.5).length;
+  return [moved >= rightSide.length * 0.7,
+    `${moved}/${rightSide.length} right-edge points landed on the edge`];
+});
+
+verify('snapping raises the image detail under the outline on real footage', () => {
+  const luma = T.maskLuma(fixture.data, FW, FH);
+  const before = T.maskClickSelect(fixture.data, { x: 165 / (FW - 1), y: 120 / (FH - 1) });
+  const ring = T.maskResamplePolygon ? T.maskResamplePolygon(T.maskTracePolygon
+    ? T.maskTracePolygon(before, FW, FH, 24) : [], 24) : [];
+  if (!ring.length) return [false, 'no ring to test'];
+  const gradAt = (pts) => {
+    let sum = 0;
+    pts.forEach((p) => {
+      const xi = Math.round(p.x * (FW - 1));
+      const yi = Math.round(p.y * (FH - 1));
+      if (xi < 1 || yi < 1 || xi >= FW - 1 || yi >= FH - 1) return;
+      const i = yi * FW + xi;
+      const gx = luma[i + 1] - luma[i - 1];
+      const gy = luma[i + FW] - luma[i - FW];
+      sum += Math.hypot(gx, gy);
+    });
+    return sum / pts.length;
+  };
+  const snapped = T.maskSnapRing(ring, luma, 3);
+  const a = gradAt(ring);
+  const b = gradAt(snapped);
+  return [b >= a * 1.05, `edge strength ${a.toFixed(1)} -> ${b.toFixed(1)}`];
+});
+
+verify('the outline cannot shimmer while the subject is still', () => {
+  const a = [];
+  const b = [];
+  for (let k = 0; k < 24; k++) {
+    const ang = (k / 24) * Math.PI * 2;
+    a.push({ x: 0.5 + Math.cos(ang) * 0.1, y: 0.5 + Math.sin(ang) * 0.1 });
+    b.push({ x: 0.5 + Math.cos(ang) * 0.1 + 0.05, y: 0.5 + Math.sin(ang) * 0.1 });
+  }
+  const calmed = T.maskCalmRing(b, a, 0.014);
+  const moved = Math.max(...calmed.map((p, i) => Math.hypot(p.x - a[i].x, p.y - a[i].y)));
+  return [moved <= 0.0141, `largest per-point move=${moved.toFixed(4)}`];
+});
 
 check.summary('mask');
 window.close();

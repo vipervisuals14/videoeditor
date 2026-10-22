@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine</title>
-  <link rel="stylesheet" href="styles.css?v=mvj7336i" />
+  <link rel="stylesheet" href="styles.css?v=mvj7f1sa" />
 </head>
 <body>
  <div class="app-window">
@@ -746,7 +746,7 @@
           <ol class="mask-steps">
             <li><b>1</b> Click the person once in the Live Preview</li>
             <li><b>2</b> Clean the edge with ＋ Add / － Subtract</li>
-            <li><b>3</b> Press Track forward ▶ to follow it</li>
+            <li><b>3</b> Press Track forward ▶ — it follows the whole clip</li>
             <li><b>4</b> Send Mask to Resolve</li>
           </ol>
 
@@ -815,11 +815,13 @@
                 <button class="btn-secondary" id="maskTrackBackBtn">◀ Track back</button>
                 <button class="btn-secondary" id="maskTrackFwdBtn">Track forward ▶</button>
                 <button class="btn-secondary" id="maskKeyframeBtn">＋ Keyframe</button>
+                <button class="btn-mini hidden" id="maskTrackCancelBtn">Stop tracking</button>
               </div>
               <div class="mask-png-row">
                 <button class="btn-mini" id="maskExportPngBtn">⬇ Matte as .PNG (1920×1080)</button>
               </div>
               <p class="mask-status" id="maskStatus">Click your subject in the Live Preview to build a matte.</p>
+              <p class="mask-hint"><b>Strokes travel with the subject.</b> Anything you paint with ＋ Add or － Subtract keeps applying as the subject moves, the way Magic Mask and Roto Brush work — correct the first frame it goes wrong, then track on from there.</p>
               <p class="mask-hint"><b>Our own tracker.</b> Resolve Free has no matting tool, so this panel does the work itself: it learns the subject's colours on the frame you clicked, then follows that shape through the clip and re-checks it against every new frame. When you send it, you get native Fusion nodes with BezierSpline keyframes — the shape travels with the clip inside Resolve, no Studio licence involved.</p>
             </div>
           </div>
@@ -1114,10 +1116,10 @@
 
  </div>
 
-  <script src="lua-export.js?v=mvj7336i"></script>
-  <script src="touchdesigner.js?v=mvj7336i"></script>
-  <script src="depth.js?v=mvj7336i"></script>
-  <script src="render.js?v=mvj7336i"></script>
-  <script src="app.js?v=mvj7336i"></script>
+  <script src="lua-export.js?v=mvj7f1sa"></script>
+  <script src="touchdesigner.js?v=mvj7f1sa"></script>
+  <script src="depth.js?v=mvj7f1sa"></script>
+  <script src="render.js?v=mvj7f1sa"></script>
+  <script src="app.js?v=mvj7f1sa"></script>
 </body>
 </html>

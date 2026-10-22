@@ -5736,7 +5736,7 @@ function maskCoreOf(buf, w, h) {
   return { buf: core, weight: 1 };
 }
 
-function maskBuildColorModel(data, w, h, buf, prev) {
+function maskBuildColorModel(data, w, h, buf, prev, extra) {
   if (!data || !buf) return prev || null;
   const bb = maskBBox(buf, w, h);
   if (!bb) return prev || null;
@@ -5762,6 +5762,30 @@ function maskBuildColorModel(data, w, h, buf, prev) {
       if (insideCore) { fg[idx] += core.weight; fgN += core.weight; }
       else if (!insideMatte) { bg[idx] += 1; bgN += 1; }
     }
+  }
+  // Strokes are explicit instructions: sample them first and hard, so one
+  // correction outweighs thousands of pixels the auto-select got wrong.
+  if (extra) {
+    const weigh = (pts, hist, isFg) => {
+      (pts || []).forEach((p) => {
+        const x = Math.round(maskClamp01(p.x) * (w - 1));
+        const y = Math.round(maskClamp01(p.y) * (h - 1));
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+            const q = (ny * w + nx) * 4;
+            const b = maskHistIndex(data[q], data[q + 1], data[q + 2]);
+            // weight=6 is "listen to this", not "ignore the picture"
+            hist[b] += 6;
+            if (isFg) fgN += 6; else bgN += 6;
+          }
+        }
+      });
+    };
+    weigh(extra.fg, fg, true);
+    weigh(extra.bg, bg, false);
   }
   if (!fgN || !bgN) return prev || null;
   // Slow adaptation only: a light change should not rewrite what the subject is.
@@ -6114,6 +6138,71 @@ function maskGrowInBand(data, model, seeds, allowed, lo) {
   return maskFillHoles(out, w, h);
 }
 
+// ------------------------------------------------------------- edge snapping
+// Roto Brush and Magic Mask both end up with a boundary that sits on the actual
+// silhouette, not on the edge of a colour blob. Each outline point is allowed to
+// slide a few pixels along its own normal to the strongest image edge nearby;
+// along its normal only, so the shape cannot collapse or balloon.
+function maskSnapRing(ring, luma, maxSlide) {
+  const w = MASK_W;
+  const h = MASK_H;
+  if (!ring || ring.length < 8 || !luma) return ring;
+  const slide = Math.max(1, Math.min(6, maxSlide || 3));
+  const grad = (x, y) => {
+    const xi = Math.round(x);
+    const yi = Math.round(y);
+    if (xi < 1 || yi < 1 || xi >= w - 1 || yi >= h - 1) return 0;
+    const i = yi * w + xi;
+    const gx = luma[i + 1] - luma[i - 1];
+    const gy = luma[i + w] - luma[i - w];
+    return Math.sqrt(gx * gx + gy * gy);
+  };
+  return ring.map((p, k) => {
+    const prev = ring[(k - 1 + ring.length) % ring.length];
+    const next = ring[(k + 1) % ring.length];
+    // outward normal of the ring at this point
+    let nx = (next.y - prev.y);
+    let ny = -(next.x - prev.x);
+    const len = Math.hypot(nx, ny);
+    if (len < 1e-6) return p;
+    nx /= len;
+    ny /= len;
+    const px = p.x * (w - 1);
+    const py = p.y * (h - 1);
+    let bestScore = grad(px, py);
+    let bestT = 0;
+    for (let t = -slide; t <= slide; t += 0.5) {
+      if (Math.abs(t) < 0.4) continue;
+      const score = grad(px + nx * t, py + ny * t);
+      // prefer the nearest strong edge when two are similar
+      const biased = score * (1 - Math.abs(t) * 0.04);
+      if (biased > bestScore * 1.06) {
+        bestScore = biased;
+        bestT = t;
+      }
+    }
+    if (!bestT) return p;
+    return {
+      x: maskClamp01(p.x + (nx * bestT) / (w - 1)),
+      y: maskClamp01(p.y + (ny * bestT) / (h - 1))
+    };
+  });
+}
+
+// Reduce chatter: a point may not wander frame to frame more than a little, so
+// the outline does not shimmer while the subject is still.
+function maskCalmRing(ring, prevRing, maxMove) {
+  if (!ring || !prevRing || ring.length !== prevRing.length) return ring;
+  const cap = maxMove || 0.012;
+  return ring.map((p, i) => {
+    const dx = p.x - prevRing[i].x;
+    const dy = p.y - prevRing[i].y;
+    const d = Math.hypot(dx, dy);
+    if (d <= cap) return p;
+    return { x: prevRing[i].x + (dx / d) * cap, y: prevRing[i].y + (dy / d) * cap };
+  });
+}
+
 // Shape helpers for the follow. Every stored frame uses the same ring length and
 // the same starting point, so the outline eases from one frame to the next
 // instead of flickering between different point orders and different radii.
@@ -6451,6 +6540,41 @@ function maskStamp(buf, cx, cy, radiusPx, value) {
       buf[y * MASK_W + x] = value;
     }
   }
+}
+
+// ------------------------------------------------------------------ strokes
+// In Magic Mask a stroke is a persistent eyedropper, not a paint mark: it keeps
+// sampling the subject on every frame and it travels with the subject. These
+// helpers turn strokes into foreground/background evidence for the colour model
+// and carry them by whatever motion the tracker measured.
+function maskStrokePoints(m, erase, dx, dy) {
+  const pts = [];
+  (m.strokes || []).forEach((stroke) => {
+    if (!!stroke.erase !== !!erase) return;
+    stroke.points.forEach((p) => {
+      const x = p.x + (dx || 0);
+      const y = p.y + (dy || 0);
+      if (x < 0 || x > 1 || y < 0 || y > 1) return;
+      pts.push({ x, y });
+    });
+  });
+  return pts;
+}
+
+// Lock the strokes onto a solved matte: add-strokes are forced in,
+// subtract-strokes forced out, so a correction cannot be argued with.
+function maskEnforceStrokes(buf, m, dx, dy) {
+  if (!buf || !m) return buf;
+  const scale = MASK_W / MASK_PREVIEW_W;
+  const stamp = (pts, value) => {
+    pts.forEach((p) => {
+      const radius = Math.max(1.5, (26 * scale));
+      maskStamp(buf, p.x * (MASK_W - 1), p.y * (MASK_H - 1), radius, value);
+    });
+  };
+  stamp(maskStrokePoints(m, false, dx, dy), 255);
+  stamp(maskStrokePoints(m, true, dx, dy), 0);
+  return buf;
 }
 
 function maskApplyStrokes(buf) {
@@ -7046,14 +7170,23 @@ async function maskTrackFrames(direction) {
   }
 
   const fps = 24;
-  const stride = 2 / fps;
+  // Frame by frame for the whole clip, not a 2.5 second sample. A matte is
+  // judged on the shots you scrub past, not on the one you clicked.
+  const stride = 1 / fps;
   const startSec = Number(state.playheadSec) || 0;
-  const limit = 60;
+  const remaining = Math.abs(dir > 0 ? total - startSec : startSec);
+  const limit = Math.max(1, Math.min(2400, Math.round(remaining / stride) + 1));
 
   m.tracking = true;
   m.trackCancel = false;
-  const buttons = ['maskTrackFwdBtn', 'maskTrackBackBtn', 'maskApplyBtn'];
+  const buttons = ['maskTrackFwdBtn', 'maskTrackBackBtn', 'maskApplyBtn', 'maskClearBtn'];
   buttons.forEach((id) => { const b = document.getElementById(id); if (b) b.disabled = true; });
+  const stopBtn = document.getElementById('maskTrackCancelBtn');
+  if (stopBtn) {
+    stopBtn.disabled = false;
+    stopBtn.classList.remove('hidden');
+    stopBtn.textContent = 'Stop tracking';
+  }
 
   let added = 0;
   let lostAt = null;
@@ -7129,7 +7262,8 @@ async function maskTrackFrames(direction) {
     for (let i = 1; i <= limit && !m.trackCancel; i++) {
       const sec = startSec + dir * i * stride;
       if (sec < -0.001 || sec > total + 0.001) break;
-      maskSetStatus('Following the subject — frame ' + i + ' of ' + limit + '…');
+      maskSetStatus('Following the subject — frame ' + i + ' of ' + limit
+        + ' (' + Math.min(100, Math.round((i / limit) * 100)) + '%)');
       const img = await maskSampleFrame(sec);
       if (!img || !img.data) break;
 
@@ -7150,7 +7284,10 @@ async function maskTrackFrames(direction) {
         // nothing that looks like the subject: it is hidden, it left, or the
         // shot changed. Coast on the last motion for a few frames.
         scoreMisses++;
-        if (scoreMisses > 3) { lostAt = sec; break; }
+        // half a second of occlusion is normal (a hand, a pole, a cutaway); the
+        // matte rides on its own motion and picks the subject up again
+        if (scoreMisses > 12) { lostAt = sec; break; }
+        vel = { x: vel.x * 0.92, y: vel.y * 0.92 };
         const coast = maskTranslateRing(prevRing, vel.x * dir, vel.y * dir);
         m.tracked = m.tracked.filter((f) => Math.abs(f.sec - sec) > 0.001);
         m.tracked.push({ sec: +sec.toFixed(3), polygon: coast, coverage: +prev.cov.toFixed(3) });
@@ -7163,11 +7300,15 @@ async function maskTrackFrames(direction) {
 
       // 2) the matte at that position, then a small, guarded tidy-up
       const moved = maskShiftMaskSub(refMask, pos.x, pos.y);
+      // the strokes travel with the subject, exactly like the matte
+      const sdx = pos.x / (MASK_W - 1);
+      const sdy = pos.y / (MASK_H - 1);
       const band = maskMorph(moved, MASK_W, MASK_H, 3);
       const seeds = maskSeedsFromBuffer(moved, 8, img.data);
       let refined = seeds.length
         ? maskGrowInBand(img.data, model, seeds, band, -0.25)
         : new Uint8Array(MASK_W * MASK_H);
+      maskEnforceStrokes(refined, m, sdx, sdy);
       const cMoved = maskPolyCentroid(maskTracePolygon(moved, MASK_W, MASK_H, 16));
       const cRef = maskPolyCentroid(maskTracePolygon(refined, MASK_W, MASK_H, 16));
       if (Math.hypot(cRef.x - cMoved.x, cRef.y - cMoved.y) > 2.5 / MASK_W) refined = moved;
@@ -7183,7 +7324,7 @@ async function maskTrackFrames(direction) {
       }
       if (!(cov > lo * 0.9 && cov < hi * 1.1)) {
         misses++;
-        if (misses > 3) { lostAt = sec; break; }
+        if (misses > 8) { lostAt = sec; break; }
         const coast = maskTranslateRing(prevRing, vel.x * dir, vel.y * dir);
         m.tracked = m.tracked.filter((f) => Math.abs(f.sec - sec) > 0.001);
         m.tracked.push({ sec: +sec.toFixed(3), polygon: coast, coverage: +prev.cov.toFixed(3) });
@@ -7194,11 +7335,14 @@ async function maskTrackFrames(direction) {
       }
       misses = 0;
 
-      // 3) the outline handed back: resampled to a fixed ring, eased a little
-      const candRing = maskResamplePolygon(maskTracePolygon(refined, MASK_W, MASK_H, 24), 24);
-      const ring = candRing.length === prevRing.length
-        ? maskBlendRing(prevRing, candRing, 0.6, 0.03)
-        : candRing;
+      // 3) the outline handed back: resampled to a fixed ring, snapped to the
+      //    silhouette, eased, then calmed against the previous frame
+      const rawRing = maskResamplePolygon(maskTracePolygon(refined, MASK_W, MASK_H, 24), 24);
+      const snapped = maskSnapRing(rawRing, curLuma, 3);
+      let ring = snapped.length === prevRing.length
+        ? maskBlendRing(prevRing, snapped, 0.6, 0.03)
+        : snapped;
+      ring = maskCalmRing(ring, prevRing, 0.014);
       const at = maskPolyCentroid(ring);
 
       const move = { x: at.x - prev.at.x, y: at.y - prev.at.y };
@@ -7229,6 +7373,10 @@ async function maskTrackFrames(direction) {
     const vid = document.getElementById('customVideoElement');
     if (vid && videoHasSource(vid) && vid.paused) await maskSeekVideo(vid, startSec);
     buttons.forEach((id) => { const b = document.getElementById(id); if (b) b.disabled = false; });
+    if (stopBtn) {
+      stopBtn.classList.add('hidden');
+      stopBtn.disabled = false;
+    }
     m.tracked.sort((a, b) => a.sec - b.sec);
     if (m.tracked.length > 400) m.tracked = m.tracked.slice(-400);
     maskSyncUI();
@@ -7467,6 +7615,16 @@ function initMaskTab() {
   if (kf) kf.addEventListener('click', maskKeyframeMatte);
   const png = document.getElementById('maskExportPngBtn');
   if (png) png.addEventListener('click', maskExportPng);
+  const stop = document.getElementById('maskTrackCancelBtn');
+  if (stop) {
+    stop.addEventListener('click', () => {
+      const mm = ensureMaskState();
+      if (!mm.tracking) return;
+      mm.trackCancel = true;
+      stop.textContent = 'Stopping…';
+      stop.disabled = true;
+    });
+  }
 
   // the Live Preview is the drawing surface
   const canvas = document.getElementById('livePreviewCanvas');
@@ -8954,6 +9112,10 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     maskClickSelect,
     maskLuma,
     maskTemplateAt,
+    maskSnapRing,
+    maskResamplePolygon,
+    maskTracePolygon,
+    maskCalmRing,
     maskShiftMaskSub,
     maskGrowInBand,
     maskSeedsFromBuffer,
