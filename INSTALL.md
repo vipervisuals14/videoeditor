@@ -166,10 +166,10 @@ When the pill in the panel header turns green and reads
 **`Live: <your project> · Resolve 21.1.1`**, the pipe is open. That is all it means.
 
 **Nothing on your timeline changes until you press a button that sends something.**
-The panel is not a mirror of Resolve: its big preview renders on its own demo camera
-plates (`Camera Plate ▸ …`, or **`+ Load Video`** to use your own file), and the timeline
-strip at the bottom shows your **real** Resolve timeline once it is connected
-(look for the green `LIVE` tag; without it, the strip says `PREVIEW DEMO`).
+The panel is not a mirror of Resolve. Its big preview at the top of the page is **empty
+when you open the app** — it shows no stock footage and plays nothing — until you load your
+own clip or photo. Once connected, the timeline strip on the right shows your **real**
+Resolve timeline (look for the green `LIVE` tag).
 
 Two things to check, in this order:
 
@@ -303,18 +303,22 @@ it by hand.
 
 ## Using your own photos and clips
 
+The preview is the **first thing on the page**, and it starts blank on purpose: the app ships
+no footage, no demo clip and no music-video stand-in. Nothing appears until you load a file.
+
 **Your own photo** (a still frame, artwork, a photo you want to grade):
 
-1. Click **`🖼 Load Image`** in the row above the panel, next to `📂 Load Video`.
+1. Click **`Load photo`** in the bar above the preview, next to **`Load footage`**.
 2. Pick your file (PNG, JPEG, WebP, AVIF, TIFF or BMP). It appears on the **Live Preview** at once.
 3. Or skip the button: **drag the file from Finder straight onto the preview picture**.
 4. The button then shows your file's name, and everything in the panel works on that photo —
    effects, depth of field, Magic Mask, Effect Layers, and `07 • 4K Render` for a full-size export.
 
-To go back to the built-in camera plates, click **`Anamorphic Night`**, **`Studio Spotlight`** or
-**`Editorial Brand`**.
+To clear the preview and start over, click **`Clear`**. There are no built-in plates to go back to.
 
-**Your own video:** `📂 Load Video`, or drag the clip onto the preview. `Pause` stops it.
+**Your own video:** **`Load footage`**, or drag the clip onto the preview. Nothing auto-plays —
+press **`Play`** when you want it to move, and **`Pause`** to freeze it. The timeline, the silence
+detector and the lyric overlay all stay untouched until you switch them on.
 
 **Making a vertical (9:16) version of a wide photo:**
 

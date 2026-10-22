@@ -10,6 +10,25 @@ Inspired by **StayCreative's VFX Kit 2.0**, **AutoSubs v3.10+**, and **davinci-r
 
 ---
 
+## The stage starts empty — on purpose
+
+The preview sits at the **top of the page** and holds nothing until you load something.
+There are no stock clips, no generated stand-in plates and no demo footage in the build;
+the app opens on a dark frame that says **"Nothing loaded yet"**.
+
+| | Behaviour |
+| --- | --- |
+| Footage | blank until you press **Load footage** / **Load photo**, or drop a file on the frame |
+| Playback | never starts by itself. **Play / Pause** is the only thing that moves the picture |
+| Lyrics | off at boot. Turn them on in `02 • LYRC` or with the **Lyrics: OFF** button |
+| Timeline | empty. Clips appear only after you apply an effect |
+| Cut Silences | no analysis, no cuts and no timeline changes until you press **Detect silence** |
+
+Loading a file loads it **paused, at 0:00**. Clearing the stage (**Clear**) puts everything back
+to that blank, paused state.
+
+---
+
 ## Research Findings: How to Build a Pop-Up Plugin for DaVinci Resolve Free 21.1.1
 
 ### 1. How StayCreative VFX Kit Works

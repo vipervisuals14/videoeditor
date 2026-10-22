@@ -750,7 +750,8 @@ const INITIAL_MEDIA_POOL = [
 // APPLICATION STATE
 // ============================================================================
 const state = {
-  scene: 'music_video', // 'music_video' | 'lyric_canvas' | 'talking_head' | 'custom_video' | 'custom_image'
+  // 'empty' until real footage is loaded: no procedural stand-in plates.
+  scene: 'empty', // 'empty' | 'custom_video' | 'custom_image'
   activeTab: 'vfx',
   selectedVfxCat: 'ALL',
   vfxSearch: '',
@@ -764,11 +765,11 @@ const state = {
   platePanX: 0,           // 9:16 framing: -1 left, 0 centre, 1 right
   showLyricsOverlay: false,   // clean picture by default — opt in from 02 • LYRC
   motion: true,
-  frozenTime: 1.9,
+  frozenTime: 0,
   hiddenModules: {},
-  isPlaying: true,
-  playheadSec: 2.8,
-  totalDurSec: 16.0,
+  isPlaying: false,           // nothing plays until Play is pressed
+  playheadSec: 0,
+  totalDurSec: 0,             // 0 = nothing loaded yet
   hitFlashBurst: 0,
   clipShuffleSeed: 1,
 
@@ -789,7 +790,7 @@ const state = {
   silenceThresholdDb: -32,
   silenceMinMs: 300,
   silencePadMs: 60,
-  silenceSegments: structuredClone(INITIAL_SILENCE_SEGMENTS),
+  silenceSegments: [],        // nothing detected until you ask for it
 
   // LYRC.studio Captions & Lyrics state
   lyrcFilterCat: 'ALL',
@@ -810,29 +811,8 @@ const state = {
   mediaPool: structuredClone(INITIAL_MEDIA_POOL),
 
   // Timeline tracks state
-  timelineTracks: {
-    v3: [
-      { left: 2, width: 18, label: '500T Halation Bloom', presetId: 'opt_500t_halation' },
-      { left: 22, width: 16, label: '360° Shutter Smear', presetId: 'time_360_smear' },
-      { left: 42, width: 16, label: 'Split-Diopter +2', presetId: 'opt_split_diopter' },
-      { left: 62, width: 16, label: 'Bleach Bypass Ag', presetId: 'lab_bleach_bypass' },
-      { left: 80, width: 18, label: 'Damped Sub Thump', presetId: 'cam_sub_thump' }
-    ],
-    sub: [],
-    v2: [
-      { left: 16, width: 18, label: 'BROLL_Late_Night_Drive_500T' },
-      { left: 52, width: 20, label: 'BROLL_Sodium_Vapor_Tunnel' }
-    ],
-    v1: [
-      { left: 0, width: 24, label: 'A_CAM_AlexaMini_01' },
-      { left: 24, width: 26, label: 'B_CAM_16mm_Arriflex' },
-      { left: 50, width: 25, label: 'A_CAM_AlexaMini_01' },
-      { left: 75, width: 25, label: 'B_CAM_16mm_Arriflex' }
-    ],
-    a1: [
-      { left: 0, width: 100, label: 'MASTER_142BPM_Atari_24bit.wav (24.00 fps • Timecode Locked)' }
-    ]
-  }
+  // Edits appear here only after you make them — the timeline starts blank.
+  timelineTracks: { v3: [], v2: [], v1: [], sub: [], a1: [] },
 };
 
 // Offscreen frame buffer for authentic 360° Shutter Step-Printing / Motion Trail accumulation
@@ -863,6 +843,12 @@ document.addEventListener('DOMContentLoaded', () => {
   initModules();
   initBridgeModal();
   initConsoleModal();
+
+  // Start honest: empty stage, paused transport, lyrics off, blank timeline.
+  // Nothing is fabricating footage or edits before the user loads anything.
+  if (state.scene === 'empty') clearStage();
+  applyLyricsState(false);
+  renderTimelineTracks();
   initBackend().then(() => startBridgeStatusPoll());
   requestAnimationFrame(renderLivePreviewLoop);
 });
@@ -1414,6 +1400,14 @@ function initSceneSwitcher() {
     });
   });
 
+  const clearBtn = document.getElementById('clearPlateBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      clearStage();
+      showToast('Stage cleared');
+    });
+  }
+
   const imageInput = document.getElementById('customImageInput');
   if (imageInput) {
     imageInput.addEventListener('change', (e) => {
@@ -1431,7 +1425,7 @@ function initSceneSwitcher() {
       if (!file) return;
       const url = URL.createObjectURL(file);
       videoEl.src = url;
-      if (state.motion && state.isPlaying) videoEl.play().catch(() => {});
+      videoEl.pause();
       const trackAspect = () => {
         if (videoEl.videoWidth && videoEl.videoHeight) {
           lastPlateAspect = videoEl.videoWidth / videoEl.videoHeight;
@@ -1441,16 +1435,112 @@ function initSceneSwitcher() {
       videoEl.addEventListener('loadedmetadata', trackAspect, { once: true });
       trackAspect();
       state.scene = 'custom_video';
+      setStageLoaded('video', file.name, videoEl.duration);
+      // real duration only exists after metadata; fill it in when it lands
+      videoEl.addEventListener('loadedmetadata', () => {
+        setStageLoaded('video', file.name, videoEl.duration);
+      }, { once: true });
       if (state.depth) setTimeout(() => depthRescan(), 260);
-      document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
-      showToast(`Loaded custom video "${file.name}" into real-time optical shader pipeline`);
+      resetImageLabel();
+      showToast(`Loaded "${file.name}" — press Play when you are ready`);
     });
   }
 }
 
+// ---------------------------------------------------------------------------
+// THE STAGE
+// Nothing is on it until real footage is loaded, and loading something never
+// starts playback: the transport is the only thing that plays.
+// ---------------------------------------------------------------------------
+function setStageLoaded(kind, label, durationSec) {
+  const overlay = document.getElementById('emptyStage');
+  if (overlay) overlay.classList.add('hidden');
+
+  const src = document.getElementById('stageSourceLabel');
+  if (src) {
+    const short = label && label.length > 34 ? label.slice(0, 31) + '…' : (label || 'Footage');
+    src.textContent = short;
+    src.classList.add('is-loaded');
+  }
+
+  const play = document.getElementById('playPauseBtn');
+  if (play) {
+    play.disabled = false;
+    play.textContent = 'Play';
+    play.title = 'Play';
+  }
+  const scrub = document.getElementById('timelineScrubber');
+  if (scrub) {
+    scrub.disabled = false;
+    scrub.value = 0;
+  }
+
+  const dur = Number(durationSec);
+  // a still has no duration of its own; a 10 s hold gives the effects something
+  // to move against without pretending the photo is a clip
+  state.totalDurSec = Number.isFinite(dur) && dur > 0.05 ? dur : 10;
+  state.playheadSec = 0;
+  state.isPlaying = false;
+
+  if (kind !== 'video') {
+    const vid = document.getElementById('customVideoElement');
+    if (vid && videoHasSource(vid)) { try { vid.pause(); } catch (_e) { /* ignore */ } }
+  }
+
+  const durLabel = document.getElementById('transportDurLabel');
+  if (durLabel) durLabel.textContent = `0.0s / ${state.totalDurSec.toFixed(1)}s`;
+  const tc = document.getElementById('viewerTimecode');
+  if (tc) tc.textContent = '00:00:00:00';
+}
+
+function clearStage() {
+  const vid = document.getElementById('customVideoElement');
+  // Only touch the media element when it actually holds a clip: calling
+  // pause()/load() on an empty <video> is pointless and noisy.
+  if (vid && videoHasSource(vid)) {
+    try { vid.pause(); } catch (_e) { /* ignore */ }
+  }
+  if (vid) {
+    vid.removeAttribute('src');
+    if (videoHasSource(vid)) { try { vid.load(); } catch (_e) { /* ignore */ } }
+  }
+  customImageEl = null;
+  customImageInfo = null;
+  lastPlateAspect = 0;
+  state.scene = 'empty';
+  state.isPlaying = false;
+  state.playheadSec = 0;
+  state.totalDurSec = 0;
+
+  const overlay = document.getElementById('emptyStage');
+  if (overlay) overlay.classList.remove('hidden');
+  const src = document.getElementById('stageSourceLabel');
+  if (src) {
+    src.textContent = 'No footage loaded';
+    src.classList.remove('is-loaded');
+  }
+  const play = document.getElementById('playPauseBtn');
+  if (play) {
+    play.disabled = true;
+    play.textContent = 'Play';
+    play.title = 'Load footage first';
+  }
+  const scrub = document.getElementById('timelineScrubber');
+  if (scrub) {
+    scrub.disabled = true;
+    scrub.value = 0;
+  }
+  const durLabel = document.getElementById('transportDurLabel');
+  if (durLabel) durLabel.textContent = '0.0s / 0.0s';
+  const pill = document.getElementById('activeFxPill');
+  if (pill) pill.textContent = 'No effect applied';
+  resetImageLabel();
+  if (state.depth) depthRescan({ timeSec: 0 });
+}
+
 function resetImageLabel() {
   const label = document.getElementById('customImageLabelText');
-  if (label) label.textContent = '🖼 Load Image';
+  if (label) label.textContent = 'Load photo';
   const lbl = document.getElementById('customImageLabel');
   if (lbl) lbl.classList.remove('is-loaded');
 }
@@ -1481,6 +1571,7 @@ function loadImageAsPlate(file) {
       lastPlateAspect = width / height;
       state.platePanUserSet = false;
       state.scene = 'custom_image';
+      setStageLoaded('image', file.name, 10);
       // the still is now the source, so 4K export works at its native size
       rbAdoptSource({ name: file.name, kind: 'image', width, height });
       if (state.motion) {
@@ -2259,6 +2350,15 @@ function isSegmentCut(seg) {
 
 function renderSilenceSegments() {
   const listEl = document.getElementById('silenceSegmentsList');
+  if (listEl && !state.silenceSegments.length) {
+    // Nothing is detected until the user asks. Showing invented dead air would
+    // get edits applied to footage that was never analysed.
+    listEl.innerHTML = '<p class="empty-hint">No analysis yet — load footage and press <b>Detect silence</b>. '
+      + 'Nothing is cut, and nothing is added to your timeline, until you do.</p>';
+    const stat = document.getElementById('silenceSavedStat');
+    if (stat) stat.textContent = '0.0s';
+    return;
+  }
   let keptSec = 0;
   let cutCount = 0;
   const padSec = (state.silencePadMs / 1000) * 2;
@@ -2390,7 +2490,8 @@ function executeSilenceCut() {
 // ============================================================================
 function initCaptionsTab() {
   const rawInput = document.getElementById('lyricsRawInput');
-  rawInput.value = DEFAULT_LYRICS_TEXT;
+  // No stock lyrics: the tab stays empty until the user pastes their own.
+  if (!rawInput.value) rawInput.value = '';
 
   renderCaptionStyleStrip();
   updateContextualBar();
@@ -2592,6 +2693,13 @@ function syncLyricsToBeatCues() {
 
   document.getElementById('cueCountBadge').textContent = `${state.cues.length} Phrases`;
 
+  if (!lines.length) {
+    const emptyList = document.getElementById('captionCuesList');
+    if (emptyList) {
+      emptyList.innerHTML = '<p class="empty-hint">No lyrics yet — paste them above and each line becomes a timed block.</p>';
+    }
+  }
+
   const listEl = document.getElementById('captionCuesList');
   listEl.innerHTML = state.cues.map((c) => `
     <div class="cue-item" data-start="${c.startSec}">
@@ -2606,11 +2714,13 @@ function syncLyricsToBeatCues() {
     });
   });
 
-  state.timelineTracks.sub = state.cues.map((c) => ({
-    left: Math.round((c.startSec / state.totalDurSec) * 100),
-    width: Math.max(6, Math.round(((c.endSec - c.startSec) / state.totalDurSec) * 100) - 1),
+  // Lyric blocks belong on the timeline only while lyrics are actually on.
+  const cueSpan = Math.max(1, state.totalDurSec || 1);
+  state.timelineTracks.sub = state.showLyricsOverlay ? state.cues.map((c) => ({
+    left: Math.round((c.startSec / cueSpan) * 100),
+    width: Math.max(6, Math.round(((c.endSec - c.startSec) / cueSpan) * 100) - 1),
     label: `${state.captionStyle.name}: ${c.text}`
-  }));
+  })) : [];
   renderTimelineTracks();
 }
 
@@ -5844,6 +5954,12 @@ function initMonitorAndTimeline() {
 
   const playPauseBtn = document.getElementById('playPauseBtn');
   playPauseBtn.addEventListener('click', () => {
+    // nothing to play yet — say so instead of animating an empty stage.
+    // Pausing is always allowed; only starting needs something to play.
+    if (!state.isPlaying && !state.totalDurSec) {
+      showToast('Load footage first', 'warn');
+      return;
+    }
     state.isPlaying = !state.isPlaying;
     playPauseBtn.textContent = state.isPlaying ? 'Pause' : 'Play';
     // pause means "stop moving", not "keep animating but stop the clock"
@@ -5851,7 +5967,8 @@ function initMonitorAndTimeline() {
     applyMotionState(true);
   });
 
-  document.getElementById('triggerHitNowBtn').addEventListener('click', () => {
+  const hitBtn = document.getElementById('triggerHitNowBtn');
+  if (hitBtn) hitBtn.addEventListener('click', () => {
     state.hitFlashBurst = 1.15;
     showToast('Triggered 2-Frame Film Snip + Damped Sub-Bass Thump');
   });
@@ -5959,9 +6076,18 @@ function renderTimelineTracks() {
     return;
   }
 
+  const anyEdits = ['v3', 'v2', 'v1', 'sub', 'a1']
+    .some((lane) => Array.isArray(state.timelineTracks[lane]) && state.timelineTracks[lane].length);
+  const emptyNote = document.getElementById('tlEmptyNote');
+  if (emptyNote) emptyNote.classList.toggle('hidden', anyEdits);
+
   if (titleEl) {
-    titleEl.innerHTML = 'Timeline 1 — ANAMORPHIC_EDIT_24FPS <span class="demo-tag">PREVIEW DEMO</span>';
-    titleEl.title = 'Not connected to Resolve yet — this is the panel’s demo arrangement';
+    titleEl.textContent = anyEdits
+      ? 'Timeline 1 — your edits'
+      : 'No edits yet';
+    titleEl.title = anyEdits
+      ? 'Clips appear here as you apply effects'
+      : 'Nothing has been added to this timeline';
   }
   renderLane('laneV3', state.timelineTracks.v3, 'vfx-item');
   renderLane('laneSub', state.timelineTracks.sub, 'sub-item');
@@ -5985,7 +6111,7 @@ function renderLivePreviewLoop(now) {
     captureFrozenTime(now / 1000);
   }
 
-  if (state.isPlaying && state.motion) {
+  if (state.isPlaying && state.motion && state.totalDurSec > 0) {
     state.playheadSec = (state.playheadSec + dt) % state.totalDurSec;
     const pct = (state.playheadSec / state.totalDurSec) * 100;
     const scrubber = document.getElementById('timelineScrubber');
@@ -6073,7 +6199,7 @@ function applyMotionState(persist) {
 // The viewer-bar badge: names the active style when the overlay is on, and says
 // plainly when it is off instead of advertising a style that is not drawing.
 function refreshLyricsPill() {
-  const pill = document.getElementById('activeCapPill');
+  const pill = document.getElementById('activeCapPill');   // removed in the simplified top bar
   if (!pill) return;
   if (!state.showLyricsOverlay) {
     pill.textContent = 'LYRC: off';
@@ -6088,7 +6214,9 @@ function refreshLyricsPill() {
 
 function setLyricsOverlay(on, persist) {
   state.showLyricsOverlay = !!on;
+  if (!state.showLyricsOverlay) state.timelineTracks.sub = [];
   applyLyricsState(persist !== false);
+  renderTimelineTracks();
 }
 
 // When the 9:16 slot first appears, choose a crop instead of blindly centring.
@@ -6152,6 +6280,19 @@ function drawMonitorFrame(t) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width;
   const h = canvas.height;
+
+  // Nothing loaded: a flat, still, unlit frame. No procedural stand-in — the
+  // empty-state message is HTML on top of this, so it stays crisp at any size.
+  if (state.scene === 'empty') {
+    ctx.save();
+    ctx.fillStyle = '#04060a';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+    // Typography is the one thing that can be previewed without footage,
+    // because the user asked for it explicitly by switching lyrics on.
+    if (state.showLyricsOverlay) drawLyrcStudioTypography(ctx, w, h, t, 0);
+    return;
+  }
 
   if (!offscreenBuffer) {
     offscreenBuffer = document.createElement('canvas');

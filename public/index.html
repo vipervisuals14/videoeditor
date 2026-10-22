@@ -15,28 +15,10 @@
       </div>
       <div>
         <div class="brand-title-row">
-          <h1 class="brand-title">PULSEVFX STUDIO</h1>
-          <span class="badge-version">RESOLVE FREE 21.1.1</span>
-          <span class="badge-os" id="osBadge">macOS • Optical VFX + LYRC Engine</span>
+          <h1 class="brand-title">PULSEVFX</h1>
+          <span class="badge-version">Resolve Free 21.1.1 · macOS</span>
         </div>
-        <p class="brand-subtitle">Optical & Film Lab VFX • 360° Shutter & Time • Magic Mask • Depth Map • 4K Render • LYRC Kinetic Typography • Silence Cutter • Media Pool AI</p>
       </div>
-    </div>
-
-    <!-- SCENE / FOOTAGE MODE SWITCHER FOR LIVE VIEWER -->
-    <div class="scene-switcher" title="Switch camera plate, or load your own MP4/MOV video clip or a still image">
-      <span class="scene-label">Camera Plate:</span>
-      <button class="scene-btn active" data-scene="music_video">Anamorphic Night</button>
-      <button class="scene-btn" data-scene="lyric_canvas">Studio Spotlight</button>
-      <button class="scene-btn" data-scene="talking_head">Editorial Brand</button>
-      <label class="scene-upload-btn" title="Load a local .mp4 / .mov / .webm file into the live shader monitor">
-        <span>📂 Load Video</span>
-        <input type="file" id="customVideoInput" accept="video/*" hidden />
-      </label>
-      <label class="scene-upload-btn" id="customImageLabel" title="Load a still image (PNG, JPEG, WebP, TIFF, AVIF) as the camera plate — you can also drag one straight onto the monitor">
-        <span id="customImageLabelText">🖼 Load Image</span>
-        <input type="file" id="customImageInput" accept="image/*" hidden />
-      </label>
     </div>
 
     <div class="topbar-actions">
@@ -62,6 +44,61 @@
     <div class="layout-list" id="layoutList"></div>
     <p class="layout-hint">Hidden panels can be added back here at any time. Your choice is remembered.</p>
   </div>
+
+  <!-- ==================================================================== -->
+  <!-- LIVE PREVIEW — always the first thing on the page                     -->
+  <!-- ==================================================================== -->
+  <section class="stage-wrap" id="stageWrap">
+      <!-- LIVE VIEWER CARD -->
+      <div class="viewer-card" data-module="monitor" data-label="Live Preview">
+        <div class="viewer-topbar">
+          <div class="viewer-left-group">
+            <span class="viewer-tc" id="viewerTimecode">00:00:00:00</span>
+            <span class="stage-source" id="stageSourceLabel">No footage loaded</span>
+            <span class="active-fx-pill" id="activeFxPill">No effect applied</span>
+          </div>
+          <div class="viewer-load-group">
+            <label class="btn-primary btn-load" id="loadVideoLabel" title="Load your own .mp4 / .mov / .webm clip into this monitor">
+              <span>Load footage</span>
+              <input type="file" id="customVideoInput" accept="video/*" hidden />
+            </label>
+            <label class="btn-secondary btn-load" id="customImageLabel" title="Load a still photo as the plate — you can also drag one onto the monitor">
+              <span id="customImageLabelText">Load photo</span>
+              <input type="file" id="customImageInput" accept="image/*" hidden />
+            </label>
+            <button class="btn-mini" id="clearPlateBtn" title="Remove the loaded footage and go back to an empty stage">Clear</button>
+          </div>
+          <div class="viewer-controls-right">
+            <button class="btn-mini" id="toggleMotionBtn" title="Freeze every animation: shaders, beat pulses, lyric motion and card previews">Motion: ON</button>
+            <button class="btn-mini is-off" id="toggleLyricsOverlayBtn" title="Show or hide LYRC typography on the monitor">Lyrics: OFF</button>
+            <button class="btn-mini" id="aspectRatioBtn" title="Switch between 16:9 Widescreen and 9:16 Reels/TikTok vertical frame">9:16: OFF</button>
+            <button class="btn-mini is-off" id="framingBtn" title="Which part of the picture the 9:16 crop keeps — click to move it">Framing: Centre</button>
+            <button class="btn-mini" id="compareSplitBtn" title="Before / After Split Wipe Comparison">Split Wipe: OFF</button>
+          </div>
+        </div>
+
+        <!-- HTML5 REAL-TIME OPTICAL SHADER & LYRIC RENDERING CANVAS -->
+        <div class="canvas-stage" id="canvasStage" title="Drop an image or a video straight onto the monitor to use it as the plate">
+          <canvas id="livePreviewCanvas" width="640" height="360" title="Magic Mask: click your subject to build a matte"></canvas>
+          <video id="customVideoElement" loop muted playsinline hidden></video>
+          <div class="empty-stage" id="emptyStage">
+            <div class="empty-stage-mark">▣</div>
+            <h2>Nothing loaded yet</h2>
+            <p>Drop a video or a photo onto this frame, or use <b>Load footage</b> above.</p>
+          </div>
+        </div>
+
+        <!-- TRANSPORT BAR -->
+        <div class="transport-bar">
+          <button class="transport-btn" id="playPauseBtn" disabled title="Load footage first">Play</button>
+          <div class="scrubber-wrap">
+            <input type="range" id="timelineScrubber" min="0" max="1000" value="0" disabled />
+          </div>
+          <span class="transport-dur" id="transportDurLabel">0.0s / 0.0s</span>
+        </div>
+      </div>
+
+  </section>
 
   <!-- MAIN WORKSPACE GRID -->
   <main class="workspace" id="workspaceRoot">
@@ -139,8 +176,7 @@
               type="text"
               id="vfxPromptInput"
               class="prompt-input"
-              placeholder="e.g., TouchDesigner Simplex UV displace, blob-track CV boxes, Rutt-Etra scanlines, 360 shutter smear..."
-              value="TouchDesigner Simplex UV Displace TOP, Blob-Track CV telemetry, Rutt-Etra Z-scanlines & Liquid Melt transitions"
+              placeholder="Describe a look — e.g. TouchDesigner UV displace, 360 shutter smear, 500T halation…"
             />
             <button class="btn-primary" id="runAiVfxBtn">Build Timeline Pass</button>
           </div>
@@ -288,7 +324,7 @@
           <div class="lyrc-template-bar">
             <div class="lyrc-template-info">
               <span class="template-badge">SONG TEMPLATE SAVED</span>
-              <strong id="songTemplateTitle">midnight_atari.wav • 142 BPM (8 Phrases + Beat Cuts Locked)</strong>
+              <strong id="songTemplateTitle">No lyrics loaded — paste them in the box below</strong>
             </div>
             <div class="lyrc-template-actions">
               <button class="btn-variation" id="lyricVariationBtn" title="Generate a new spatial arrangement seed for this LYRC preset while keeping fonts & colors">
@@ -361,7 +397,7 @@
                   <button class="btn-mini accent" id="autoSyncLyricsBtn">Sync to Beats</button>
                 </div>
               </div>
-              <textarea id="lyricsRawInput" class="lyrics-textarea" rows="6"></textarea>
+              <textarea id="lyricsRawInput" class="lyrics-textarea" rows="6" placeholder="Paste your lyrics here — one line per phrase"></textarea>
               <div class="caption-customizers">
                 <label class="color-Field">
                   <span>Primary Text</span>
@@ -848,47 +884,13 @@
       </div>
     </section>
 
-    <!-- RIGHT / LIVE RESOLVE MONITOR + MULTI-TRACK TIMELINE SIMULATOR -->
+    <!-- RIGHT COLUMN: TIMELINE + PANEL TIPS -->
     <aside class="monitor-column" id="monitorColumn">
-      <!-- LIVE VIEWER CARD -->
-      <div class="viewer-card" data-module="monitor" data-label="Live Preview">
-        <div class="viewer-topbar">
-          <div class="viewer-tc" id="viewerTimecode">01:00:02:14</div>
-          <div class="viewer-active-badges">
-            <span class="active-fx-pill" id="activeFxPill">Optical: 500T Halation Bloom</span>
-            <span class="active-cap-pill" id="activeCapPill">LYRC: Duet (Seed #1)</span>
-          </div>
-          <div class="viewer-controls-right">
-            <button class="btn-mini" id="toggleMotionBtn" title="Freeze every animation: shaders, beat pulses, lyric motion and card previews">Motion: ON</button>
-            <button class="btn-mini" id="toggleLyricsOverlayBtn" title="Show or hide LYRC typography overlay on monitor">Lyrics: ON</button>
-            <button class="btn-mini" id="aspectRatioBtn" title="Switch between 16:9 Widescreen and 9:16 Reels/TikTok vertical frame">9:16: OFF</button>
-            <button class="btn-mini is-off" id="framingBtn" title="Which part of the picture the 9:16 crop keeps — click to move it">Framing: Centre</button>
-            <button class="btn-mini" id="compareSplitBtn" title="Before / After Split Wipe Comparison">Split Wipe: OFF</button>
-          </div>
-        </div>
-
-        <!-- HTML5 REAL-TIME OPTICAL SHADER & LYRIC RENDERING CANVAS -->
-        <div class="canvas-stage" id="canvasStage" title="Drop an image or a video straight onto the monitor to use it as the plate">
-          <canvas id="livePreviewCanvas" width="640" height="360" title="Magic Mask: click your subject to build a matte"></canvas>
-          <video id="customVideoElement" loop muted playsinline hidden></video>
-        </div>
-
-        <!-- TRANSPORT BAR -->
-        <div class="transport-bar">
-          <button class="transport-btn" id="playPauseBtn">Pause</button>
-          <button class="transport-btn" id="triggerHitNowBtn" title="Trigger a 2-Frame Film Snip + Sub-Bass Lens Thump at the playhead">Test Film Snip / Transient</button>
-          <div class="scrubber-wrap">
-            <input type="range" id="timelineScrubber" min="0" max="1000" value="180" />
-          </div>
-          <span class="transport-dur" id="transportDurLabel">02.9s / 16.0s</span>
-        </div>
-      </div>
-
       <!-- MULTI-TRACK DAVINCI RESOLVE TIMELINE PREVIEW -->
       <div class="timeline-card" data-module="timeline" data-label="Timeline">
         <div class="timeline-header">
           <div class="tl-title-group">
-            <strong id="activeTimelineTitle">Timeline 1 — ANAMORPHIC_EDIT_24FPS</strong>
+            <strong id="activeTimelineTitle">No timeline opened yet</strong>
           </div>
           <div class="tl-actions">
             <button class="btn-mini" id="clearVfxTrackBtn">Clear FX Track</button>
@@ -898,6 +900,7 @@
 
         <!-- TIMELINE TRACKS -->
         <div class="timeline-tracks" id="timelineTracksContainer">
+          <div class="tl-empty-note" id="tlEmptyNote">No edits yet — apply an effect and its clips land here.</div>
           <div class="tl-playhead" id="tlPlayhead" style="left: 18%;"></div>
 
           <div class="tl-track">
