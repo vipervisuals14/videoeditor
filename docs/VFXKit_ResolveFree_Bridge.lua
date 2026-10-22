@@ -333,6 +333,69 @@ Handlers.get_media_pool = function(res, _fus, _args)
 end
 
 -- 3. Apply a VFX Preset to the clip under playhead or selected clip
+-- ---------------------------------------------------------------------------
+-- Stack bookkeeping
+-- ---------------------------------------------------------------------------
+-- Two effects on one clip must both render. Fusion does that by chaining them,
+-- so every node the panel creates is named PulseVFX_*, and each apply either
+-- continues the chain that is already feeding MediaOut1 (a normal apply) or
+-- clears our nodes and rebuilds from MediaIn1 (a full stack sync). Anything the
+-- editor built by hand in the Fusion page is never touched.
+-- ---------------------------------------------------------------------------
+local PULSE_PREFIX = "PulseVFX_"
+
+local function pvfx_tag(tool, label, seq)
+    if not tool then return end
+    local safe = tostring(label or "fx"):gsub("[^%w]+", "_"):sub(1, 24)
+    pcall(function()
+        tool:SetAttrs({ TOOLS_Name = PULSE_PREFIX .. tostring(seq) .. "_" .. safe })
+    end)
+end
+
+local function pvfx_clear(comp)
+    local removed = 0
+    pcall(function()
+        for _, tool in ipairs(comp:GetToolList(false) or {}) do
+            local nm = ""
+            pcall(function() nm = tostring(tool:GetAttrs().TOOLS_Name or "") end)
+            if nm == "" then pcall(function() nm = tostring(tool.Name or "") end) end
+            if nm:sub(1, #PULSE_PREFIX) == PULSE_PREFIX then
+                pcall(function() tool:Delete() end)
+                removed = removed + 1
+            end
+        end
+    end)
+    return removed
+end
+
+-- The tool currently plugged into MediaOut1. That is the end of the stack, and
+-- the point a new effect has to continue from -- not MediaIn1, which would
+-- orphan everything stacked before it.
+local function pvfx_tail(comp, src, dst)
+    local tail = nil
+    pcall(function()
+        if not dst then return end
+        local link = dst:GetInput("Input")
+        local tool = link and link.GetTool and link:GetTool()
+        if tool and tool ~= src then tail = tool end
+    end)
+    return tail
+end
+
+local function pvfx_stack_names(comp)
+    local names = {}
+    pcall(function()
+        for _, tool in ipairs(comp:GetToolList(false) or {}) do
+            local nm = ""
+            pcall(function() nm = tostring(tool:GetAttrs().TOOLS_Name or "") end)
+            if nm:sub(1, #PULSE_PREFIX) == PULSE_PREFIX then
+                names[#names + 1] = nm
+            end
+        end
+    end)
+    return names
+end
+
 Handlers.apply_vfx = function(res, _fus, args)
     local pm = res:GetProjectManager()
     local proj = pm and pm:GetCurrentProject()
@@ -375,6 +438,9 @@ Handlers.apply_vfx = function(res, _fus, args)
     local node_added = "InspectorZoom+Marker"
     local keyframes = type(args.keyframes) == "table" and args.keyframes or {}
     local recipe = args.recipe
+    local cleared = 0
+    local seq = 0
+    local stacked_on = nil
 
     if comp then
         pcall(function()
@@ -404,8 +470,18 @@ Handlers.apply_vfx = function(res, _fus, args)
                     src = comp:FindTool("MediaIn1") or comp:FindTool("MediaIn")
                     dst = comp:FindTool("MediaOut1") or comp:FindTool("MediaOut")
                 end)
-                local prev = src      -- last node created (Background/Foreground semantics)
-                local image = src     -- last node that actually carries an image
+                -- A stack is a chain: continue from whatever already feeds
+                -- MediaOut1, otherwise this effect would replace the previous
+                -- one instead of sitting on top of it.
+                if args.stackClear == true then
+                    cleared = pvfx_clear(comp)
+                end
+                local tail = pvfx_tail(comp, src, dst)
+                if tail then
+                    pcall(function() stacked_on = tostring(tail.Name) end)
+                end
+                local prev = tail or src      -- last node in the chain
+                local image = tail or src     -- last node that actually carries an image
                 local wired = 0
 
                 for step_i = 1, #recipe.chain do
@@ -427,6 +503,8 @@ Handlers.apply_vfx = function(res, _fus, args)
                     end
 
                     if tool then
+                        seq = seq + 1
+                        pvfx_tag(tool, step.tool, seq)
                         if type(step.set) == "table" then
                             for k, v in pairs(step.set) do
                                 pcall(function() tool[k] = v end)
@@ -438,10 +516,14 @@ Handlers.apply_vfx = function(res, _fus, args)
                         if step.fg and prev then
                             if pcall(function() tool.Foreground = prev.Output end) then linked = true end
                         end
+                        -- Background is the plate this node sits on: the last
+                        -- node that carried an image, which may be several
+                        -- generators further back than `prev`.
+                        local plate = image or prev
                         if step.source and src then
                             if pcall(function() tool.Background = src.Output end) then linked = true end
-                        elseif step.bg and prev then
-                            if pcall(function() tool.Background = prev.Output end) then linked = true end
+                        elseif step.bg and plate then
+                            if pcall(function() tool.Background = plate.Output end) then linked = true end
                         elseif not step.fg and not step.source and image then
                             if pcall(function() tool.Input = image.Output end) then linked = true end
                         end
@@ -488,6 +570,12 @@ Handlers.apply_vfx = function(res, _fus, args)
                 end
 
                 node_added = (#built > 0) and table.concat(built, " -> ") or "no nodes"
+                if stacked_on then
+                    node_added = node_added .. " [stacked on " .. stacked_on .. "]"
+                end
+                if cleared > 0 then
+                    node_added = node_added .. " [replaced " .. cleared .. " PulseVFX nodes]"
+                end
                 if #skipped > 0 then
                     node_added = node_added .. " [skipped: " .. table.concat(skipped, ", ") .. "]"
                 end
@@ -559,6 +647,8 @@ Handlers.apply_vfx = function(res, _fus, args)
             end
 
             if tool and param_name then
+                seq = seq + 1
+                pvfx_tag(tool, preset_name, seq)
                 if #keyframes > 0 then
                     local spline = comp:BezierSpline()
                     tool[param_name] = spline
@@ -599,13 +689,18 @@ Handlers.apply_vfx = function(res, _fus, args)
         item:AddMarker(offset_frame, m_color, "VFX: " .. preset_name, "Category: " .. category .. " | Intensity: " .. intensity .. "%", 1)
     end)
 
+    local stack = comp and pvfx_stack_names(comp) or {}
     return {
         applied = true,
         clipName = item:GetName() or "Selected Clip",
         presetName = preset_name,
         category = category,
         intensity = intensity,
-        fusionNode = node_added
+        fusionNode = node_added,
+        stackedOn = stacked_on,
+        replaced = cleared,
+        stackDepth = #stack,
+        stack = stack
     }
 end
 
@@ -995,6 +1090,9 @@ Handlers.layers_apply = function(res, _fus, args)
     local built = {}
     local order = {}
     local skipped = {}
+    local cleared = 0
+    local appended_to = nil
+    local seq = 0
     local OPERATORS = {
         screen = "Screen", multiply = "Multiply", overlay = "Overlay",
         lighten = "Lighten", difference = "Difference", softlight = "Soft Light"
@@ -1003,15 +1101,27 @@ Handlers.layers_apply = function(res, _fus, args)
     if comp then
         pcall(function()
             comp:Lock()
-            local src = comp:FindTool("MediaIn1")
-            local dst = comp:FindTool("MediaOut1")
-            local prev = src
+            local src = comp:FindTool("MediaIn1") or comp:FindTool("MediaIn")
+            local dst = comp:FindTool("MediaOut1") or comp:FindTool("MediaOut")
+
+            -- The panel's rack is the source of truth, so a stack send replaces
+            -- the previous stack instead of piling a second copy on top of it.
+            -- Hand-built nodes (anything not named PulseVFX_*) survive.
+            if a.replace ~= false then
+                cleared = pvfx_clear(comp)
+            end
+            local prev = pvfx_tail(comp, src, dst) or src
+            if prev ~= src then
+                pcall(function() appended_to = tostring(prev.Name) end)
+            end
 
             for li = 1, #layers do
                 local layer = layers[li]
                 if type(layer) == "table" and layer.enabled ~= false then
                     local label = tostring(layer.name or layer.presetId or ("layer " .. li))
-                    local img = src
+                    -- Each effect processes the result of the layers below it,
+                    -- so "bloom then grain" grains the bloom, not the raw clip.
+                    local img = prev
                     local names = {}
                     local chain = (type(layer.recipe) == "table" and type(layer.recipe.chain) == "table")
                         and layer.recipe.chain or {}
@@ -1027,6 +1137,8 @@ Handlers.layers_apply = function(res, _fus, args)
                             if ok_add and tool then made = tool else skipped[#skipped + 1] = tostring(tool_name) end
                         end
                         if made then
+                            seq = seq + 1
+                            pvfx_tag(made, tostring(tool_name), seq)
                             names[#names + 1] = tostring(tool_name)
                             if type(step) == "table" and type(step.set) == "table" then
                                 for k, v in pairs(step.set) do
@@ -1051,12 +1163,18 @@ Handlers.layers_apply = function(res, _fus, args)
                                     end
                                 end
                             end
-                            if img then pcall(function() made.Background = img.Output end) end
+                            local from = img
+                            if type(step) == "table" and step.source then from = src end
+                            if from then pcall(function() made.Background = from.Output end) end
                             img = made
                         end
                     end
 
                     local merge = comp:AddTool("Merge", -32768, -32768)
+                    if merge then
+                        seq = seq + 1
+                        pvfx_tag(merge, "stack_" .. li, seq)
+                    end
                     if merge and img and prev then
                         pcall(function() merge.Background = prev.Output end)
                         pcall(function() merge.Foreground = img.Output end)
@@ -1114,7 +1232,11 @@ Handlers.layers_apply = function(res, _fus, args)
         clipName = item:GetName(),
         fusionNode = table.concat(built, " -> "),
         layers = #order,
-        skipped = table.concat(skipped, ",")
+        skipped = table.concat(skipped, ","),
+        replaced = cleared,
+        appendedTo = appended_to,
+        stackDepth = #order,
+        stack = order
     }
 end
 

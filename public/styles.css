@@ -3940,3 +3940,381 @@ input[type="range"] { accent-color: var(--paper); }
   color: var(--ink);
   border-color: var(--paper);
 }
+
+/* ============================================================================
+   WORKBENCH SHELL — one screen, no page scroll
+   ----------------------------------------------------------------------------
+   The reference plugin is a fixed window: presets down one side, picture in the
+   middle, controls under it. Ours scrolled the whole document to reach the
+   effect grid, which is why picking a look meant losing the picture.
+
+   Now the page is a 2 x 3 grid that never scrolls:
+       topbar
+       rail   | stage    (preview + transport + detail controls)
+       rail   | detail   (timeline, wire, lua)
+   The rail scrolls its own preset list; the stage never moves.
+   ==========================================================================*/
+body {
+  display: grid;
+  grid-template-columns: 404px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "top  top"
+    "rail stage"
+    "rail detail";
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  margin: 0;
+}
+body > .topbar { grid-area: top; position: static; }
+body > .layout-menu { z-index: 60; }
+body > .stage-wrap { grid-area: stage; }
+body > .workspace { display: contents; }
+body > .workspace > .popup-panel { grid-area: rail; }
+body > .workspace > .monitor-column { grid-area: detail; }
+
+/* ---- the rail: mode tabs, stack, preset browser, install story ---------- */
+.popup-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: var(--ink-raised);
+  padding: 0;
+}
+.popup-panel .panel-window-bar {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--line);
+  background: var(--ink);
+}
+.popup-panel .main-tabs {
+  flex: 0 0 auto;
+  position: static;
+  border-bottom: 1px solid var(--line);
+  background: var(--ink);
+}
+.popup-panel .pane-switcher { flex: 0 0 auto; }
+
+.tab-pane {
+  padding: 0;
+  min-height: 0;
+}
+.tab-pane.active {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.tab-pane.active::-webkit-scrollbar { width: 8px; }
+.tab-pane.active::-webkit-scrollbar-thumb { background: var(--line-strong); }
+
+/* effects tab: stack + filters stay put, the list does the scrolling */
+#tab-vfx.active {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#tab-vfx > .stack-panel,
+#tab-vfx > .vfx-subtabs-bar { flex: 0 0 auto; margin: 0; border-left: 0; border-right: 0; }
+#tab-vfx > .stack-panel { border-top: 0; }
+#tab-vfx > .vfx-subtabs-bar {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+}
+#tab-vfx > .vfx-subtabs { gap: 6px; }
+#tab-vfx > .vfx-subtabs-bar .vfx-search { margin: 6px 0 0; width: 100%; }
+#tab-vfx > .vfx-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: none;
+  padding: 0;
+  gap: 1px;
+  background: var(--line);
+  grid-template-columns: 1fr;
+  align-content: start;
+  overscroll-behavior: contain;
+}
+#tab-vfx > .install-strip,
+#tab-vfx > .install-steps,
+#tab-vfx > .advanced-toggle,
+#tab-vfx > .advanced-tools { flex: 0 0 auto; }
+
+/* preset rows: thumbnail, name, meta — a list you can read at a glance */
+#tab-vfx .vfx-card {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--panel);
+  min-height: 76px;
+}
+#tab-vfx .vfx-card:hover { background: var(--panel-2); }
+#tab-vfx .vfx-card.selected { background: var(--ink); box-shadow: inset 3px 0 0 var(--paper); }
+#tab-vfx .vfx-card .vfx-thumb {
+  flex: 0 0 104px;
+  width: 104px;
+  height: auto;
+  border-right: 1px solid var(--line);
+}
+#tab-vfx .vfx-card .vfx-thumb-canvas { width: 100%; height: 100%; min-height: 74px; object-fit: cover; }
+#tab-vfx .vfx-card .vfx-thumb-badge,
+#tab-vfx .vfx-card .vfx-thumb-spec { display: none; }
+#tab-vfx .vfx-card .vfx-card-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 9px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+#tab-vfx .vfx-card .vfx-card-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--paper);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#tab-vfx .vfx-card .vfx-card-desc {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+#tab-vfx .vfx-card .vfx-card-slider-row { margin-top: 2px; }
+#tab-vfx .vfx-card .vfx-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+}
+#tab-vfx .vfx-card .vfx-node-tag {
+  font: 600 8.5px/1 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#tab-vfx .vfx-card .vfx-apply-btn {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+/* ---- the stage: picture grows, transport stays, detail sits under it ---- */
+.stage-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 10px 12px 0;
+  gap: 0;
+}
+.stage-wrap .viewer-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+}
+.stage-wrap .viewer-card .viewer-topbar { flex: 0 0 auto; flex-wrap: wrap; row-gap: 6px; }
+.stage-wrap .canvas-stage {
+  flex: 1 1 auto;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #050506;
+}
+.stage-wrap .canvas-stage #livePreviewCanvas {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.stage-wrap .transport-bar { flex: 0 0 auto; border-top: 1px solid var(--line); }
+
+/* detail controls under the preview (keyframe editor lives here now) */
+.stage-detail {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--ink-raised);
+}
+.stage-detail .kf-placeholder { margin: 0; }
+.stage-detail .keyframe-inspector-card { margin: 0; border: 0; background: transparent; }
+
+/* timeline + wire + lua drawer: a docked strip under the stage */
+.monitor-column {
+  position: static;
+  top: auto;
+  max-height: 26vh;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+}
+.monitor-column .timeline-card { border-radius: 0; }
+
+/* ---- narrow windows: go back to a single scrolling column -------------- */
+@media (max-width: 1100px) {
+  body {
+    display: block;
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+  body > .workspace { display: block; }
+  .stage-wrap { padding: 10px 10px 0; }
+  .stage-wrap .canvas-stage { min-height: 220px; }
+  .popup-panel { border-right: 0; border-top: 1px solid var(--line); }
+  #tab-vfx.active { display: block; overflow: visible; }
+  #tab-vfx > .vfx-grid { max-height: 60vh; background: var(--line); }
+  .monitor-column { max-height: none; }
+}
+
+/* ---- rail chrome: five modes as a segmented strip, not five cards ------- */
+.popup-panel .panel-window-bar { padding: 7px 10px; gap: 8px; }
+.popup-panel .panel-window-bar .window-title {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.popup-panel .panel-window-bar .window-fps { display: none; }
+.popup-panel .main-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+}
+.popup-panel .main-tab {
+  display: block;
+  min-width: 0;
+  padding: 8px 6px 7px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--ink);
+  text-align: left;
+}
+.popup-panel .main-tab:last-child { border-right: 0; }
+.popup-panel .main-tab .tab-text { display: block; gap: 0; }
+.popup-panel .main-tab .tab-name {
+  display: block;
+  font: 700 9px/1.25 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.popup-panel .main-tab .tab-meta { display: none; }
+.popup-panel .main-tab.active { background: var(--paper); }
+.popup-panel .main-tab.active .tab-name { color: var(--ink); }
+.popup-panel .main-tab:hover:not(.active) { background: var(--panel); }
+
+/* dock mode keeps the rail, just wider — the picture stays put */
+body:has(.workspace.compact-dock) { grid-template-columns: 460px minmax(0, 1fr); }
+body:has(.workspace.compact-dock) .popup-panel { font-size: 12px; }
+.stage-detail { max-height: 34vh; }
+.stage-detail:has(.kf-placeholder:not(.hidden)) { max-height: 64px; }
+
+/* ---- rail polish: one row of filters, a compact install strip ----------- */
+#tab-vfx .vfx-subtabs {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 4px;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+#tab-vfx .vfx-subtabs::-webkit-scrollbar { height: 0; }
+#tab-vfx .vfx-subtab {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  font: 700 9px/1 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 0;
+  white-space: nowrap;
+}
+#tab-vfx .vfx-search {
+  height: 28px;
+  font-size: 10.5px;
+  border-radius: 0;
+}
+
+#tab-vfx .install-strip {
+  padding: 10px 12px;
+  gap: 8px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: var(--ink);
+}
+#tab-vfx .install-strip .install-kicker {
+  font-size: 8.5px;
+  letter-spacing: 0.2em;
+}
+#tab-vfx .install-strip p {
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 4px 0 0;
+}
+#tab-vfx .install-strip .install-actions { gap: 4px; flex-wrap: wrap; }
+#tab-vfx .install-strip .btn-secondary,
+#tab-vfx .install-strip .btn-primary,
+#tab-vfx .install-strip .btn-mini { padding: 5px 8px; font-size: 9px; letter-spacing: 0.08em; }
+
+/* the viewer's control bar: fewer rows, so the picture keeps the height */
+.stage-wrap .viewer-topbar { padding: 6px 10px; gap: 6px; }
+.stage-wrap .viewer-topbar .btn-mini,
+.stage-wrap .viewer-topbar .btn-load {
+  padding: 4px 7px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  border-radius: 0;
+  white-space: nowrap;
+}
+.stage-wrap .viewer-topbar .viewer-tc {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.stage-wrap .viewer-topbar .stage-source,
+.stage-wrap .viewer-topbar .active-fx-pill {
+  font-size: 9px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stage-wrap .transport-bar { padding: 6px 10px; }

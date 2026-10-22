@@ -81,6 +81,12 @@ export function boot({ html = path.join(PUB, 'index.html') } = {}) {
       destination: {}, close: () => Promise.resolve(), state: 'running', resume: () => Promise.resolve()
     };
   };
+  // No animation loop and no polling: these are DOM assertions, and a 60 fps
+  // render loop would both burn the sandbox and keep node alive forever.
+  window.requestAnimationFrame = () => 0;
+  window.cancelAnimationFrame = () => {};
+  window.setInterval = () => 0;
+  window.clearInterval = () => {};
   window.structuredClone = window.structuredClone || ((v) => JSON.parse(JSON.stringify(v)));
   window.matchMedia = window.matchMedia || (() => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
   window.HTMLCanvasElement.prototype.transferControlToOffscreen = undefined;
@@ -101,6 +107,11 @@ export function boot({ html = path.join(PUB, 'index.html') } = {}) {
       throw new Error(`failed to load ${src}: ${err && err.message}`);
     }
   }
+
+  // jsdom finishes parsing before we eval the page's scripts, so the
+  // DOMContentLoaded that app.js waits for has already been and gone.
+  window.document.dispatchEvent(new window.Event('DOMContentLoaded', { bubbles: true }));
+  window.dispatchEvent(new window.Event('load'));
 
   return { dom, window, document: window.document, calls };
 }
