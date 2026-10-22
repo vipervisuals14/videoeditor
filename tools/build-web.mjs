@@ -10,7 +10,7 @@
  * server. In this mode the panel builds the Resolve Lua itself and hands it to
  * you to paste into Workspace ▸ Console.
  */
-import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -84,10 +84,12 @@ async function main() {
 
   // The Fusion macros, zipped, so the hosted page can hand them to anyone who
   // wants the native-effects route without cloning the repo.
-  const effectsZip = path.join(OUT, 'PulseVFX-Effects.zip');
+  // Written into public/ so the local build serves it too, then copied out.
+  const effectsZip = path.join(ROOT, 'public', 'PulseVFX-Effects.zip');
   try {
     await rm(effectsZip, { force: true });
     execFileSync('zip', ['-qr', effectsZip, '.', '-i', '*.setting'], { cwd: path.join(ROOT, 'fusion-macros') });
+    await copyFile(effectsZip, path.join(OUT, 'PulseVFX-Effects.zip'));
     console.log('\n  PulseVFX-Effects.zip written (' + ((await stat(effectsZip)).size / 1024).toFixed(0) + ' KB)');
   } catch (err) {
     console.warn('\n  (skipped PulseVFX-Effects.zip: ' + (err && err.message) + ')');
