@@ -129,7 +129,7 @@ Built from the supplied TouchDesigner reference set (data/print corner of TOP wo
 | Copperplate Engrave Hatch | real burin hatch: one 34° line field masked into three tone bands (+ cross-hatch in shadow), stroke **weight** builds tone |
 | Flow Dash Glyph Field | oriented dashes following the image gradient, length tracking luma |
 
-![Data & Print TOP family](docs/data-print-presets.png)
+![Data & Print TOP family](docs/media/data-print-presets.png)
 
 ### Glitch & Bitmap TOPs (8) — degraded-signal family
 Matched to the second reference set (ink prints, luma-key cut-outs, bitmap posters,
@@ -146,7 +146,7 @@ smears and chroma ghosts). Same rules as the rest: intensity 0–200% + keyframe
 | Window Slice Displace | rectangular window carved out and refilled with sliced, chroma-boosted duplicates |
 | Chroma Bleed Ghost | duotone field with magenta/cyan edge-difference ghosts and tear bands |
 
-![Glitch & Bitmap TOP family](docs/glitch-bitmap-presets.png)
+![Glitch & Bitmap TOP family](docs/media/glitch-bitmap-presets.png)
 
 ---
 
@@ -186,7 +186,7 @@ lens ramp with a thin specular crest, the newsprint ripple slices at `h/11` so 4
 stair-steps at 31px, and every print plate trades contrast for legibility
 (1.10–1.42 at gamma 0.92–0.98) instead of crushing to black.
 
-![All 72 presets rendered at 3840x2160](docs/4k-verification.png)
+![All 72 presets rendered at 3840x2160](docs/media/4k-verification.png)
 
 ### Measured cost (Node + Skia, CPU only, one core — a Mac is several times faster)
 
@@ -334,13 +334,13 @@ map you are looking at.
 | Cost | one-time **49 MB** cached download | **no extra download** | none |
 | Honest use | live work, anything exported | a still you are about to finish | a rough read, and the fallback |
 
-![Fast estimate versus Depth Anything V2](docs/depth-ai-vs-fast.png)
+![Fast estimate versus Depth Anything V2](docs/media/depth-ai-vs-fast.png)
 
 *Left: the source. Top right: the old heuristic, which reads the bright window and the blind
 slats as "near" and the subject's face as "far". Bottom: the AI model, which returns the subject's
 volume, her face relief, the wall behind her and the window recessed to the right.*
 
-![Standard versus high detail](docs/depth-ai-high-detail.png)
+![Standard versus high detail](docs/media/depth-ai-high-detail.png)
 
 *The same model at 518 px and 1036 px. The 2× pass separates the jaw, the nose bridge and the
 edge of the hair from the wall behind; the standard pass reads the head as one soft mass.*

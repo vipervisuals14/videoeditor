@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- TOP APPLICATION BAR -->
+  <header class="topbar">
+    <div class="brand-group">
+      <div class="brand-logo">
+        <span class="logo-mark">PFX</span>
+      </div>
+      <div>
+        <div class="brand-title-row">
+          <h1 class="brand-title">PULSEVFX</h1>
+          <span class="badge-version">Resolve Free 21.1.1 · macOS</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="btn-ghost" id="layoutMenuBtn" title="Turn any panel on or off, and add hidden panels back">
+        <span>▦ Panels</span><span class="layout-count hidden" id="layoutHiddenCount">0</span>
+      </button>
+      <button class="btn-ghost" id="toggleCompactBtn" title="Shrink into a narrow floating pop-up dock to place beside DaVinci Resolve">
+        <span id="compactBtnLabel">Pop-Up Dock Mode</span>
+      </button>
+      <button class="btn-bridge" id="openBridgeModalBtn">
+        <span class="status-dot" id="bridgeStatusDot"></span>
+        <span id="bridgeStatusText">Resolve 21.1.1 Bridge</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- PANEL / LAYOUT MENU: every region can be switched off and added back -->
+  <div class="layout-menu hidden" id="layoutMenu">
+    <div class="layout-menu-head">
+      <strong>Panels</strong>
+      <button class="layout-showall" id="layoutShowAllBtn">Add all</button>
+    </div>
+    <div class="layout-list" id="layoutList"></div>
+    <p class="layout-hint">Hidden panels can be added back here at any time. Your choice is remembered.</p>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- LIVE PREVIEW — always the first thing on the page                     -->
+  <!-- ==================================================================== -->
+  <section class="stage-wrap" id="stageWrap">
+      <!-- LIVE VIEWER CARD -->
+      <div class="viewer-card" data-module="monitor" data-label="Live Preview">
+        <div class="viewer-topbar">
+          <div class="viewer-left-group">
+            <span class="viewer-tc" id="viewerTimecode">00:00:00:00</span>
+            <span class="stage-source" id="stageSourceLabel">No footage loaded</span>
+            <span class="active-fx-pill" id="activeFxPill">No effect applied</span>
+          </div>
+          <div class="viewer-load-group">
+            <label class="btn-primary btn-load" id="loadVideoLabel" title="Load your own .mp4 / .mov / .webm clip into this monitor">
+              <span>Load footage</span>
+              <input type="file" id="customVideoInput" accept="video/*" hidden />
+            </label>
+            <label class="btn-secondary btn-load" id="customImageLabel" title="Load a still photo as the plate — you can also drag one onto the monitor">
+              <span id="customImageLabelText">Load photo</span>
+              <input type="file" id="customImageInput" accept="image/*" hidden />
+            </label>
+            <button class="btn-mini" id="clearPlateBtn" title="Remove the loaded footage and go back to an empty stage">Clear</button>
+          </div>
+          <div class="viewer-controls-right">
+            <button class="btn-mini" id="toggleMotionBtn" title="Freeze every animation: shaders, beat pulses, lyric motion and card previews">Motion: ON</button>
+            <button class="btn-mini is-off" id="toggleLyricsOverlayBtn" title="Show or hide LYRC typography on the monitor">Lyrics: OFF</button>
+            <button class="btn-mini" id="aspectRatioBtn" title="Switch between 16:9 Widescreen and 9:16 Reels/TikTok vertical frame">9:16: OFF</button>
+            <button class="btn-mini is-off" id="framingBtn" title="Which part of the picture the 9:16 crop keeps — click to move it">Framing: Centre</button>
+            <button class="btn-mini" id="compareSplitBtn" title="Before / After Split Wipe Comparison">Split Wipe: OFF</button>
+          </div>
+        </div>
+
+        <!-- HTML5 REAL-TIME OPTICAL SHADER & LYRIC RENDERING CANVAS -->
+        <div class="canvas-stage" id="canvasStage" title="Drop an image or a video straight onto the monitor to use it as the plate">
+          <canvas id="livePreviewCanvas" width="640" height="360" title="Magic Mask: click your subject to build a matte"></canvas>
+          <video id="customVideoElement" loop muted playsinline hidden></video>
+          <div class="empty-stage" id="emptyStage">
+            <div class="empty-stage-mark">▣</div>
+            <h2>Nothing loaded yet</h2>
+            <p>Drop a video or a photo onto this frame, or use <b>Load footage</b> above.</p>
+          </div>
+        </div>
+
+        <!-- TRANSPORT BAR -->
+        <div class="transport-bar">
+          <button class="transport-btn" id="playPauseBtn" disabled title="Load footage first">Play</button>
+          <div class="scrubber-wrap">
+            <input type="range" id="timelineScrubber" min="0" max="1000" value="0" disabled />
+          </div>
+          <span class="transport-dur" id="transportDurLabel">0.0s / 0.0s</span>
+        </div>
+      </div>
+
+  </section>
+
+  <!-- MAIN WORKSPACE GRID -->
+  <main class="workspace" id="workspaceRoot">
+    <!-- LEFT / MAIN: POP-UP EXTENSION PANEL -->
+    <section class="popup-panel" id="popupPanel">
+      <!-- EXTENSION WINDOW HEADER -->
+      <div class="panel-window-bar">
+        <div class="window-dots">
+          <span class="wdot red"></span>
+          <span class="wdot yellow"></span>
+          <span class="wdot green"></span>
+        </div>
+        <span class="window-title">Workspace ▸ Scripts ▸ PulseVFX_PopUp_Panel (Resolve Free 21.1.1)</span>
+        <span class="window-fps">24.00 fps • Native Fusion Nodes</span>
+      </div>
+
+      <!-- FIVE WORKFLOW TABS (mask+depth live under Subject, silences+media
+           pool live under Editing) -->
+      <nav class="main-tabs" role="tablist">
+        <button class="main-tab active" data-group="vfx">
+          <div class="tab-text">
+            <span class="tab-name">01 • Effects</span>
+            <span class="tab-meta">72 looks · keyframes</span>
+          </div>
+        </button>
+        <button class="main-tab" data-group="captions">
+          <div class="tab-text">
+            <span class="tab-name">02 • Lyrics</span>
+            <span class="tab-meta">20 styles</span>
+          </div>
+        </button>
+        <button class="main-tab" data-group="subject">
+          <div class="tab-text">
+            <span class="tab-name">03 • Subject</span>
+            <span class="tab-meta">Mask · Depth</span>
+          </div>
+        </button>
+        <button class="main-tab" data-group="editing">
+          <div class="tab-text">
+            <span class="tab-name">04 • Editing</span>
+            <span class="tab-meta">Silences · Media Pool</span>
+          </div>
+        </button>
+        <button class="main-tab" data-group="render">
+          <div class="tab-text">
+            <span class="tab-name">05 • Render</span>
+            <span class="tab-meta">4K in · out</span>
+          </div>
+        </button>
+      </nav>
+
+      <!-- Segmented control for tabs that hold two panels -->
+      <div class="pane-switcher hidden" id="paneSwitcher" role="tablist"></div>
+
+      <!-- ================================================================== -->
+      <!-- TAB 1: EFFECTS — the grid first, the rest on demand                 -->
+      <!-- ================================================================== -->
+      <div class="tab-pane active" id="tab-vfx">
+        <!-- Shown until an effect is picked; the editor itself stays hidden -->
+        <div class="kf-placeholder" id="kfPlaceholder">
+          <span>◆</span>
+          <span><strong>Pick an effect below</strong> to open its intensity curve and keyframes.</span>
+        </div>
+
+        <!-- 8 CATEGORY SUB-TABS (INCLUDING TOUCHDESIGNER TOPs & TRANSITIONS) -->
+        <div class="vfx-subtabs-bar" data-module="presets" data-label="Effect Browser">
+          <div class="vfx-subtabs" id="vfxCategoryTabs">
+            <button class="vfx-subtab active" data-cat="ALL">All (72)</button>
+            <button class="vfx-subtab" data-cat="TouchDesigner TOPs">TouchDesigner TOPs (12)</button>
+            <button class="vfx-subtab" data-cat="Data & Print TOPs">Data & Print TOPs (8)</button>
+            <button class="vfx-subtab" data-cat="Glitch & Bitmap TOPs">Glitch & Bitmap TOPs (8)</button>
+            <button class="vfx-subtab" data-cat="Transitions & Morphs">Transitions & Morphs (8)</button>
+            <button class="vfx-subtab" data-cat="Optical & Glass">Optical & Glass</button>
+            <button class="vfx-subtab" data-cat="Shutter & Time">Shutter & Time</button>
+            <button class="vfx-subtab" data-cat="Film Lab & Grade">Film Lab & Grade</button>
+            <button class="vfx-subtab" data-cat="Camera Weight">Camera Weight</button>
+            <button class="vfx-subtab" data-cat="Depth & Subject">Depth & Subject</button>
+          </div>
+          <input type="search" id="vfxSearchInput" class="vfx-search" placeholder="Filter TouchDesigner / Optical / Transitions..." />
+        </div>
+
+        <!-- LIVE MINI-CANVAS PRESET CARDS GRID (EACH WITH ITS OWN INTENSITY SLIDER + KEYFRAME BUTTON) -->
+        <div class="vfx-grid" id="vfxPresetGrid" data-module="presets"></div>
+
+        <!-- INTERACTIVE KEYFRAME & INTENSITY CURVE INSPECTOR (FOR ALL EFFECTS & TRANSITIONS) -->
+        <div class="keyframe-inspector-card hidden" id="keyframeEditorBox" data-module="keyframes" data-label="Keyframe Editor">
+          <div class="kf-header-row">
+            <div class="kf-title-group">
+              <span class="kf-diamond-icon">◆</span>
+              <div>
+                <div class="kf-active-title">
+                  Keyframe & Intensity Curve: <strong id="kfInspectorPresetName">TD Simplex UV Displace TOP</strong>
+                </div>
+                <div class="kf-active-sub" id="kfInspectorNodeSub">
+                  Click on the curve canvas to place/drag keyframes • Animates intensity in real time & exports Resolve BezierSplines
+                </div>
+              </div>
+            </div>
+            <div class="kf-controls-cluster">
+              <button class="btn-kf-nav" id="prevKeyframeBtn" title="Jump to Previous Keyframe">◀</button>
+              <button class="btn-kf-add" id="addKeyframeBtn" title="Insert or Update Keyframe at Current Playhead">
+                ◆ Keyframe (<span id="kfCountBadge">3</span>)
+              </button>
+              <button class="btn-kf-nav" id="nextKeyframeBtn" title="Jump to Next Keyframe">▶</button>
+              <button class="btn-kf-clear" id="clearKeyframesBtn" title="Clear All Keyframes for This Effect">Clear KFs</button>
+            </div>
+          </div>
+
+          <div class="kf-body-grid">
+            <!-- Left: Live Intensity Slider + Curve Envelope Presets -->
+            <div class="kf-left-controls">
+              <div class="slider-group">
+                <div class="slider-head">
+                  <span>Active Intensity (Keyframable)</span>
+                  <strong id="masterIntensityVal">100%</strong>
+                </div>
+                <input type="range" id="masterIntensitySlider" min="0" max="200" value="100" />
+              </div>
+              <div class="kf-envelope-row">
+                <span class="pill-label">Auto-Curve:</span>
+                <button class="kf-env-pill" data-env="peak">Transition Peak (0→100→0%)</button>
+                <button class="kf-env-pill" data-env="ramp_in">Ramp In (0→100%)</button>
+                <button class="kf-env-pill" data-env="decay">Impact Decay (130→0%)</button>
+                <button class="kf-env-pill" data-env="lfo">CHOP Sine LFO</button>
+              </div>
+              <div class="tweaker-mini-row">
+                <div class="slider-group">
+                  <div class="slider-head"><span>CHOP Frequency / BPM</span><strong id="shakeSpeedVal">142 BPM</strong></div>
+                  <input type="range" id="shakeSpeedSlider" min="80" max="190" value="142" />
+                </div>
+                <div class="slider-group">
+                  <div class="slider-head"><span>UV Scale / Optics</span><strong id="mixShakesVal">70%</strong></div>
+                  <input type="range" id="mixShakesSlider" min="0" max="100" value="70" />
+                </div>
+                <div class="slider-group">
+                  <div class="slider-head"><span>Noise / Grain Seed</span><strong id="mixStylizedVal">45%</strong></div>
+                  <input type="range" id="mixStylizedSlider" min="0" max="100" value="45" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Interactive Bezier Keyframe Spline Canvas -->
+            <div class="kf-canvas-wrap">
+              <canvas id="keyframeCurveCanvas" width="380" height="92" title="Click or drag anywhere to set Intensity Keyframes (0% - 200%)"></canvas>
+              <div class="kf-canvas-legend">
+                <span id="kfPlayheadReadout">Playhead: 02.8s</span>
+                <span id="kfInterpolatedReadout">Evaluated Intensity: 85%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ADVANCED TOOLS: collapsed until asked for -->
+        <button class="advanced-toggle" id="advancedToolsBtn" aria-expanded="false">
+          <span>More tools — Look Director (type a look) · Effect Layers (stack looks)</span>
+          <span class="adv-caret">▾</span>
+        </button>
+        <div class="advanced-tools hidden" id="advancedTools">
+        <!-- AI LOOK DIRECTOR BAR -->
+        <div class="ai-prompt-card" data-module="look" data-label="Look Director">
+          <div class="ai-prompt-header">
+            <span class="ai-sparkle">LOOK DIRECTOR & TIMELINE PASS</span>
+            <span class="ai-hint">Describe the TouchDesigner / optical look — builds a keyframed multi-node pass across your timeline</span>
+          </div>
+          <div class="ai-prompt-input-row">
+            <input
+              type="text"
+              id="vfxPromptInput"
+              class="prompt-input"
+              placeholder="Describe a look — e.g. TouchDesigner UV displace, 360 shutter smear, 500T halation…"
+            />
+            <button class="btn-primary" id="runAiVfxBtn">Build Timeline Pass</button>
+          </div>
+          <div class="quick-vibe-pills">
+            <span class="pill-label">Reference Looks:</span>
+            <button class="vibe-pill" data-prompt="TouchDesigner Simplex UV Displace TOP, Blob-Track CV telemetry, Feedback Slope loop, Liquid UV Melt transition">TouchDesigner / Generative TOPs</button>
+            <button class="vibe-pill" data-prompt="360 shutter step-print smear, 2-frame film snip cuts, 500T halation bloom, split-diopter refraction">AWGE / 16mm Shutter Drag</button>
+            <button class="vibe-pill" data-prompt="bleach bypass silver retention, damped sub-bass lens thump, crash-zoom barrel snap, threshold ink print">Division Paris / Silver Brutalist</button>
+            <button class="vibe-pill" data-prompt="anamorphic edge chromatic fringing, 500T halation, weighted shoulder-rig float, kodak 2383 print curve">A24 / Anamorphic 35mm</button>
+          </div>
+        </div>
+
+        <!-- EFFECT LAYER STACK: layer any looks, in order, with opacity + blend -->
+        <div class="layer-panel" data-module="layers" data-label="Effect Layers">
+          <div class="layer-panel-head">
+            <div>
+              <h3>Effect Layers <span class="layer-count-badge hidden" id="layerCountBadge">0</span></h3>
+              <p>Stack looks on top of each other. Each layer keeps its own intensity, opacity and blend mode, and the whole rack goes to Resolve as one ordered graph.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="addLayerBtn" title="Add the highlighted effect card as a new layer">＋ Add Current Effect</button>
+              <button class="btn-mini" id="clearLayersBtn" title="Remove every layer">Clear</button>
+              <button class="btn-primary" id="applyLayersBtn">Send Stack to Resolve</button>
+            </div>
+          </div>
+          <div class="layer-rack" id="layerRack"></div>
+        </div>
+        </div>
+      </div>
+
+      <!-- ================================================================== -->
+      <!-- TAB 2: LYRC.STUDIO KINETIC LYRIC STYLES & SUBTITLES                -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-captions">
+        <div class="pane-card" data-module="lyrc" data-label="LYRC Typography">
+          <div class="pane-card-header">
+            <div>
+              <h3>LYRC.studio Kinetic Lyric Presets & Brand Captions</h3>
+              <p>Multi-word phrase arrangements, two-font role trading (Duet), selective red inversion (Redline), shifting tiles (Tiled Wave), and reusable Song Templates.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="exportSrtBtn">⬇ .SRT</button>
+              <button class="btn-primary" id="pushCaptionsResolveBtn">Place on Resolve Timeline</button>
+            </div>
+          </div>
+
+          <!-- OVERLAY SWITCH: lyrics are opt-in, so the tab says so up front -->
+          <div class="lyrc-overlay-bar">
+            <div class="lyrc-overlay-copy">
+              <strong>Kinetic typography on the monitor</strong>
+              <span id="lyricsTabHint">Hidden — your footage plays clean. Turn it on when you want the typography.</span>
+            </div>
+            <button class="lyrc-overlay-switch is-off" id="lyricsTabToggleBtn" aria-pressed="false"
+                    title="Show or hide LYRC typography on the Live Preview and in exports">Lyrics on monitor: OFF</button>
+          </div>
+
+          <!-- LYRC SONG TEMPLATE & VARIATION BAR -->
+          <div class="lyrc-template-bar">
+            <div class="lyrc-template-info">
+              <span class="template-badge">SONG TEMPLATE SAVED</span>
+              <strong id="songTemplateTitle">No lyrics loaded — paste them in the box below</strong>
+            </div>
+            <div class="lyrc-template-actions">
+              <button class="btn-variation" id="lyricVariationBtn" title="Generate a new spatial arrangement seed for this LYRC preset while keeping fonts & colors">
+                Variation <span id="variationSeedBadge">#1</span>
+              </button>
+              <button class="btn-shuffle" id="lyricShuffleClipsBtn" title="Keep lyrics & beat timing locked, and shuffle Media Pool clips underneath in one tap!">
+                Shuffle Footage Clips
+              </button>
+            </div>
+          </div>
+
+          <!-- MODE + LYRC CATEGORY FILTER BAR -->
+          <div class="lyrc-filter-row">
+            <div class="lyrc-cat-pills" id="lyrcCategoryPills">
+              <button class="lyrc-cat-pill active" data-lcat="ALL">All Styles (20)</button>
+              <button class="lyrc-cat-pill" data-lcat="Bold">Bold (Duet, Redline, Brat...)</button>
+              <button class="lyrc-cat-pill" data-lcat="Layered">Layered (Tiled Wave, Margin, Relay...)</button>
+              <button class="lyrc-cat-pill" data-lcat="Minimal">Minimal (Quiet, Afterglow, Deep Focus...)</button>
+              <button class="lyrc-cat-pill" data-lcat="Talking">Talking Head Captions</button>
+              <button class="lyrc-cat-pill" data-lcat="FAV">★ Favorites</button>
+            </div>
+          </div>
+
+          <!-- LYRC PRESET GALLERY GRID -->
+          <div class="lyrc-presets-grid" id="captionStyleStrip"></div>
+
+          <!-- CONTEXTUAL PRESET SETTINGS BAR -->
+          <div class="lyrc-contextual-bar" id="lyrcContextualBar">
+            <div class="ctx-left">
+              <span class="ctx-preset-label" id="ctxPresetLabel">Active Preset: <strong>Duet</strong> — Two font roles trade emphasis as words arrive</span>
+            </div>
+            <div class="ctx-controls">
+              <label class="ctx-field">
+                <span>Font Pair</span>
+                <select id="lyrcFontPairSelect" class="select-input">
+                  <option value="sans_serif" selected>Grotesque Bold + Serif Italic (Duet)</option>
+                  <option value="condensed_mono">Condensed Impact + Tech Mono</option>
+                  <option value="editorial_display">Editorial Display + Script</option>
+                  <option value="lowercase_brat">Stretched Arial Lowercase (Brat)</option>
+                </select>
+              </label>
+              <label class="ctx-field">
+                <span>Alignment</span>
+                <select id="lyrcAlignSelect" class="select-input">
+                  <option value="center" selected>Center Lockup</option>
+                  <option value="left">Left Editorial Margin</option>
+                  <option value="right">Right Editorial Margin</option>
+                </select>
+              </label>
+              <label class="ctx-field">
+                <span>Backdrop / Knockout</span>
+                <select id="lyrcBackdropSelect" class="select-input">
+                  <option value="auto" selected>Preset Default (Redline / Relay Auto)</option>
+                  <option value="knockout">Force Inverted Knockout Box</option>
+                  <option value="solid_cards">Solid Color Phrase Cards</option>
+                  <option value="clean">Clean Typography Only (No Box)</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <!-- LYRIC / TRANSCRIPT INPUT + TIMED CUES -->
+          <div class="caption-editor-split">
+            <div class="caption-input-col">
+              <div class="col-header">
+                <span id="captionInputLabel">Paste Song Lyrics or Transcript (1 line per phrase)</span>
+                <div style="display:flex; gap:5px;">
+                  <button class="btn-mini" id="loadSampleLyricsBtn">Song Hook</button>
+                  <button class="btn-mini" id="loadSampleTalkingBtn">Brand Script</button>
+                  <button class="btn-mini accent" id="autoSyncLyricsBtn">Sync to Beats</button>
+                </div>
+              </div>
+              <textarea id="lyricsRawInput" class="lyrics-textarea" rows="6" placeholder="Paste your lyrics here — one line per phrase"></textarea>
+              <div class="caption-customizers">
+                <label class="color-Field">
+                  <span>Primary Text</span>
+                  <input type="color" id="capPrimaryColor" value="#ffffff" />
+                </label>
+                <label class="color-Field">
+                  <span>Emphasis / Knockout</span>
+                  <input type="color" id="capAccentColor" value="#ef4444" />
+                </label>
+                <label class="range-mini">
+                  <span>Scale</span>
+                  <input type="range" id="capFontSizeSlider" min="70" max="150" value="105" />
+                </label>
+                <label class="range-mini">
+                  <span>Y-Pos</span>
+                  <input type="range" id="capPosYSlider" min="20" max="85" value="52" />
+                </label>
+              </div>
+            </div>
+
+            <div class="caption-cues-col">
+              <div class="col-header">
+                <span>Timed Lyric Blocks & Beat Cuts (Click to preview)</span>
+                <span class="cue-count" id="cueCountBadge">8 Phrases</span>
+              </div>
+              <div class="cues-scroll" id="captionCuesList"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================== -->
+      <!-- TAB 3: CUT SILENCES (TALKING HEAD & BRAND CONTENT)                 -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-silences">
+        <div class="pane-card" data-module="silences" data-label="Cut Silences">
+          <div class="pane-card-header">
+            <div>
+              <h3>Smart Silence & Dead-Air Cutter</h3>
+              <p>Strips pauses from talking-head brand videos & vlogs and rebuilds a tight subclip timeline in Resolve Free 21.1.1.</p>
+            </div>
+            <button class="btn-primary" id="applySilenceCutBtn">Cut Silences in Resolve</button>
+          </div>
+
+          <div class="stats-strip">
+            <div class="stat-box">
+              <span class="stat-label">Original Length</span>
+              <strong class="stat-val" id="silenceOrigDur">00:36.0s</strong>
+            </div>
+            <div class="stat-box accent">
+              <span class="stat-label">Tight Cut Length</span>
+              <strong class="stat-val" id="silenceNewDur">00:24.8s</strong>
+            </div>
+            <div class="stat-box success">
+              <span class="stat-label">Dead Air Removed</span>
+              <strong class="stat-val" id="silenceSavedPct">31% (-11.2s)</strong>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Jump Cuts</span>
+              <strong class="stat-val" id="silenceCutCount">5 cuts</strong>
+            </div>
+          </div>
+
+          <div class="waveform-container">
+            <div class="waveform-header">
+              <span>Audio Track A1 Waveform — Red Zones = Detected Dead Air (Click any region to toggle Keep/Cut)</span>
+              <span class="waveform-badge" id="thresholdBadge">Threshold: -32 dB</span>
+            </div>
+            <canvas id="silenceWaveformCanvas" width="760" height="115"></canvas>
+          </div>
+
+          <div class="controls-grid-3">
+            <div class="slider-group">
+              <div class="slider-head"><span>Silence Threshold</span><strong id="silenceDbVal">-32 dB</strong></div>
+              <input type="range" id="silenceDbSlider" min="-50" max="-18" value="-32" />
+              <span class="control-help">Higher (-20dB) cuts quieter breaths; lower (-45dB) only cuts full dead air</span>
+            </div>
+            <div class="slider-group">
+              <div class="slider-head"><span>Min Pause Duration</span><strong id="silenceMinMsVal">300 ms</strong></div>
+              <input type="range" id="silenceMinMsSlider" min="120" max="900" step="20" value="300" />
+              <span class="control-help">Ignore micro-pauses shorter than this</span>
+            </div>
+            <div class="slider-group">
+              <div class="slider-head"><span>Breath Padding (In/Out)</span><strong id="silencePadMsVal">60 ms</strong></div>
+              <input type="range" id="silencePadMsSlider" min="0" max="220" step="10" value="60" />
+              <span class="control-help">Leaves natural room before & after words</span>
+            </div>
+          </div>
+
+          <div class="toggle-row">
+            <label class="checkbox-pill">
+              <input type="checkbox" id="autoZoomJumpCut" checked />
+              <span>2-Cam Focal Switch (1.08x) on Alternating Jump Cuts (Hides talking-head cuts)</span>
+            </label>
+            <label class="checkbox-pill">
+              <input type="checkbox" id="jCutOverlap" checked />
+              <span>Add 2-Frame Audio J-Cut Overlap for Natural Room Flow</span>
+            </label>
+          </div>
+
+          <div class="segments-list-header">
+            <span>Detected Speech & Silence Segments (Click to preview or override)</span>
+          </div>
+          <div class="segments-list" id="silenceSegmentsList"></div>
+        </div>
+      </div>
+
+      <!-- ================================================================== -->
+      <!-- TAB 4: MEDIA POOL AI AUTO-EDITOR (VLOG & MUSIC VIDEO BUILDER)      -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-mediapool">
+        <div class="pane-card" data-module="mediapool" data-label="Media Pool AI">
+          <div class="pane-card-header">
+            <div>
+              <h3>Media Pool Smart Auto-Editor</h3>
+              <p>Reads clips directly from your Resolve Media Pool and automatically cuts a beat-synced Music Video or Talking-Head Vlog.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="syncMediaPoolBtn">Scan Resolve Media Pool</button>
+              <button class="btn-primary" id="autoAssembleBtn">Auto-Cut Timeline Now</button>
+            </div>
+          </div>
+
+          <div class="director-cards">
+            <div class="director-card active" data-director="music_video" id="dirMusicVideo">
+              <div class="dir-top">
+                <div>
+                  <h4>Music Video Beat-Cutter</h4>
+                  <p>Analyzes song BPM & transients, alternates Artist Performance angles with B-Roll, and applies optical/shutter VFX on beat drops.</p>
+                </div>
+              </div>
+              <div class="dir-settings">
+                <label>
+                  <span>Audio BPM</span>
+                  <input type="number" id="mvBpmInput" value="142" min="60" max="220" class="num-input" />
+                </label>
+                <label>
+                  <span>Cut Pacing</span>
+                  <select id="mvPacingSelect" class="select-input">
+                    <option value="1">Fast Cadence (Every 1 Beat / ~0.42s)</option>
+                    <option value="2" selected>Standard Sync (Every 2 Beats / ~0.85s)</option>
+                    <option value="4">Slow Cinema (Every 4 Beats / ~1.7s)</option>
+                    <option value="dynamic">Dynamic Ramp (Slow Verse ▸ Fast Hook)</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Optical Pass on Cuts</span>
+                  <select id="mvAutoVfxSelect" class="select-input">
+                    <option value="drill" selected>500T Halation + 2-Frame Snip + Sub Thump</option>
+                    <option value="grunge">Bleach Bypass Silver + 360° Shutter Smear</option>
+                    <option value="crt">16mm Gate Weave + Anamorphic Fringe</option>
+                    <option value="none">Clean Editorial Cuts Only</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="director-card" data-director="vlog" id="dirVlog">
+              <div class="dir-top">
+                <div>
+                  <h4>Vlog & Talking-Head Brand Assembler</h4>
+                  <p>Sequences A-Roll speech chronologically, strips dead air, adds 1.08x jump-cut focal switches, and layers B-Roll clips on V2.</p>
+                </div>
+              </div>
+              <div class="dir-settings">
+                <label>
+                  <span>B-Roll Overlay Frequency</span>
+                  <select id="vlogBrollFreq" class="select-input">
+                    <option value="every_2" selected>Layer B-Roll every 2nd segment</option>
+                    <option value="every_3">Layer B-Roll every 3rd segment</option>
+                    <option value="intro_outro">Hook Intro + Outro B-Roll</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Auto Captions + Silence Cut</span>
+                  <select id="vlogPolishMode" class="select-input">
+                    <option value="full" selected>Strip Silences + Add Brand Captions</option>
+                    <option value="silences_only">Strip Silences Only</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mediapool-toolbar">
+            <div class="mp-bins" id="mediaPoolBinTabs">
+              <button class="mp-bin active" data-bin="ALL">All Media Pool (10)</button>
+              <button class="mp-bin" data-bin="Performance">Performance Takes</button>
+              <button class="mp-bin" data-bin="B-Roll">B-Roll Visuals</button>
+              <button class="mp-bin" data-bin="Talking Head">Talking Head A-Cam</button>
+              <button class="mp-bin" data-bin="Audio">Audio Masters</button>
+            </div>
+            <button class="btn-mini" id="addCustomPoolClipBtn">+ Simulate New Media Pool Clip</button>
+          </div>
+
+          <div class="mediapool-grid" id="mediaPoolGrid"></div>
+        </div>
+      </div>
+
+      <!-- ================================================================== -->
+      <!-- TAB 5: MAGIC MASK — click-to-matte, refine, track, send to Resolve  -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-mask">
+        <div class="pane-card" data-module="mask" data-label="Magic Mask">
+          <div class="pane-card-header">
+            <div>
+              <h3>Magic Mask &amp; AI Matte Studio</h3>
+              <p>Click the person, face or object once in the Live Preview. It builds a soft matte, follows it frame by frame, and writes a real Fusion <b>Paint → Polygon → Blur → MatteControl → Merge</b> graph onto the clip.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="maskClearBtn">Clear matte</button>
+              <button class="btn-primary" id="maskApplyBtn">Send Mask to Resolve</button>
+            </div>
+          </div>
+
+          <div class="mask-tool-row">
+            <div class="mask-tool-group" id="maskToolGroup">
+              <button class="mask-tool active" data-mask-tool="magic" title="Click your subject once — colour similarity plus edge detection builds the matte">✦ Magic Select</button>
+              <button class="mask-tool" data-mask-tool="brush" title="Paint more of the subject into the matte">＋ Add</button>
+              <button class="mask-tool" data-mask-tool="erase" title="Paint away parts the matte picked up by mistake">－ Subtract</button>
+              <button class="mask-tool" data-mask-tool="rect" title="Drag a box around the subject">▭ Box</button>
+            </div>
+            <div class="mask-mode-group" id="maskModeGroup">
+              <button class="mask-mode active" data-mask-mode="subject" title="Best for people and products">Person</button>
+              <button class="mask-mode" data-mask-mode="skin" title="Isolates skin tones such as faces and hands">Skin</button>
+              <button class="mask-mode" data-mask-mode="sky" title="Isolates the sky, so you can grade it on its own">Sky</button>
+              <button class="mask-mode" data-mask-mode="luma" title="Isolates a brightness range such as highlights">Brightness</button>
+              <button class="mask-mode" data-mask-mode="color" title="Isolates the exact colour you clicked">Colour</button>
+            </div>
+            <select id="maskViewSelect" class="mask-select" title="How the matte is shown on the Live Preview">
+              <option value="overlay">Preview: darken outside</option>
+              <option value="matte">Preview: black &amp; white matte</option>
+              <option value="outline">Preview: outline only</option>
+              <option value="off">Preview: hidden</option>
+            </select>
+          </div>
+
+          <div class="mask-body">
+            <div class="mask-sliders" id="maskSliders">
+              <label class="mask-slider">
+                <span>Select sensitivity <b id="maskSensitivityVal">38</b></span>
+                <input type="range" id="maskSensitivity" min="4" max="90" value="38" />
+              </label>
+              <label class="mask-slider">
+                <span>Feather <b id="maskFeatherVal">6 px</b></span>
+                <input type="range" id="maskFeather" min="0" max="40" value="6" />
+              </label>
+              <label class="mask-slider">
+                <span>Grow / shrink <b id="maskExpandVal">0 px</b></span>
+                <input type="range" id="maskExpand" min="-20" max="20" value="0" />
+              </label>
+              <label class="mask-slider">
+                <span>Edge softness <b id="maskSoftnessVal">35</b></span>
+                <input type="range" id="maskSoftness" min="0" max="100" value="35" />
+              </label>
+              <label class="mask-slider">
+                <span>Matte opacity <b id="maskOpacityVal">85%</b></span>
+                <input type="range" id="maskOpacity" min="0" max="100" value="85" />
+              </label>
+              <label class="mask-slider">
+                <span>Brush size <b id="maskBrushVal">26 px</b></span>
+                <input type="range" id="maskBrushSize" min="4" max="90" value="26" />
+              </label>
+            </div>
+
+            <div class="mask-side">
+              <canvas id="maskThumbCanvas" class="mask-thumb" width="320" height="180"></canvas>
+              <div class="mask-stat-strip">
+                <div class="mask-stat"><span>Frame coverage</span><strong id="maskCoverage">0.0%</strong></div>
+                <div class="mask-stat"><span>Tracked frames</span><strong id="maskTrackCount">0</strong></div>
+                <div class="mask-stat"><span>Polygon points</span><strong id="maskPolyCount">0</strong></div>
+              </div>
+              <div class="mask-toggles">
+                <button class="btn-mini" id="maskInvertBtn">Invert: OFF</button>
+                <button class="btn-mini" id="maskShowBtn">On preview: ON</button>
+              </div>
+              <div class="mask-track-row">
+                <button class="btn-secondary" id="maskTrackBackBtn">◀ Track back</button>
+                <button class="btn-secondary" id="maskTrackFwdBtn">Track forward ▶</button>
+                <button class="btn-secondary" id="maskKeyframeBtn">＋ Keyframe</button>
+              </div>
+              <div class="mask-png-row">
+                <button class="btn-mini" id="maskExportPngBtn">⬇ Matte as .PNG (1920×1080)</button>
+              </div>
+              <p class="mask-status" id="maskStatus">Click your subject in the Live Preview to build a matte.</p>
+              <p class="mask-hint">Resolve <b>Free</b> can't run Magic Mask — that tool is Studio-only. This builds the same idea here (click-to-select, add/subtract, feather, frame tracking) and then writes native Fusion nodes, with BezierSpline keyframes, so the clip keeps the matte after you export.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- ================================================================== -->
+      <!-- TAB 6: DEPTH MAP — estimate or load a map, then depth-driven looks  -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-depth">
+        <div class="pane-card" data-module="depth" data-label="Depth Map">
+          <div class="pane-card-header">
+            <div>
+              <h3>Depth Map &amp; Depth Effects</h3>
+              <p>Build a depth map from the plate (or load a real one), then drive 11 effects from it: depth of field, atmosphere, relight, parallax, print contours and more. Every effect has an intensity slider, keyframes, and exports native Fusion nodes.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="depthRescanBtn" title="Re-read the plate and rebuild the depth map">↻ Re-scan plate</button>
+              <button class="btn-primary" id="depthApplyAllBtn">Send Active Stack to Resolve</button>
+            </div>
+          </div>
+
+          <!-- WHICH ENGINE BUILDS THE MAP -->
+          <div class="depth-engine-row">
+            <div class="depth-engine-group" id="depthEngineGroup">
+              <button class="depth-engine" data-depth-engine="ai" title="Run Depth Anything V2 in this browser. Real monocular depth — crisp silhouettes, correct ground plane. One-time 49 MB download, then cached.">
+                <span class="depth-engine-name">🧠 AI depth</span>
+                <span class="depth-engine-sub">Depth Anything V2</span>
+              </button>
+              <button class="depth-engine" data-depth-engine="ai-hq" title="The same model at 2x resolution: more spatial detail for fine hair, foliage and thin edges. No extra download; several seconds per frame, so it is made for stills rather than playback.">
+                <span class="depth-engine-name">🔬 AI high detail</span>
+                <span class="depth-engine-sub">2× resolution · slower</span>
+              </button>
+              <button class="depth-engine" data-depth-engine="fast" title="Estimate depth from the picture with no download. Instant, but it guesses — use it for a rough read, not for a finishing job.">
+                <span class="depth-engine-name">⚡ Fast estimate</span>
+                <span class="depth-engine-sub">no download · instant</span>
+              </button>
+            </div>
+            <div class="depth-engine-status">
+              <span id="depthEngineStatus">Fast estimate — instant, no download.</span>
+              <div class="depth-engine-progress hidden" id="depthEngineProgressWrap">
+                <div class="depth-engine-progress-fill" id="depthEngineProgressFill"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="depth-source-row">
+            <div class="depth-source-group" id="depthSourceGroup">
+              <button class="depth-source active" data-depth-source="estimate" title="Read the plate and estimate depth from haze, height, detail and saturation">Auto estimate</button>
+              <button class="depth-source" data-depth-source="mask" title="Use the Magic Mask subject as the near layer">From Magic Mask</button>
+              <button class="depth-source" data-depth-source="upload" title="Load a depth map you already have (iPhone LiDAR, Depth Anything, MiDaS, Resolve export)">Load depth map</button>
+            </div>
+            <select id="depthViewSelect" class="mask-select" title="How the depth map shows on the Live Preview">
+              <option value="off">Preview: picture only</option>
+              <option value="overlay">Preview: depth overlay</option>
+              <option value="map">Preview: depth map</option>
+              <option value="split">Preview: split compare</option>
+            </select>
+            <input type="file" id="depthUploadInput" accept="image/*" hidden />
+            <button class="btn-mini is-on" id="depthLiveBtn" title="Re-read the current frame while the clip plays, so the depth map always matches what you see">Live depth: ON</button>
+            <button class="btn-mini" id="depthInvertBtn" title="Flip near and far">Invert: OFF</button>
+            <button class="btn-mini" id="depthExportBtn" title="Save the depth map as a grayscale PNG (white = near)">⬇ Depth .PNG</button>
+          </div>
+
+          <div class="depth-body">
+            <div class="depth-left">
+              <div class="depth-thumb-wrap">
+                <canvas id="depthThumbCanvas" class="mask-thumb" width="320" height="180"></canvas>
+                <span class="depth-ai-stamp hidden" id="depthAiStamp">AI · Depth Anything V2</span>
+              </div>
+              <div class="mask-stat-strip">
+                <div class="mask-stat"><span>Source</span><strong id="depthSourceLabel">Plate</strong></div>
+                <div class="mask-stat"><span>Engine</span><strong id="depthEngineLabel">Fast</strong></div>
+                <div class="mask-stat"><span>Effects on</span><strong id="depthActiveCount">0</strong></div>
+                <div class="mask-stat"><span>Keyframes</span><strong id="depthKeyCount">0</strong></div>
+              </div>
+              <div class="depth-sliders">
+                <label class="mask-slider">
+                  <span>Smoothing <b id="depthSmoothVal">2</b></span>
+                  <input type="range" id="depthSmooth" min="0" max="4" value="2" />
+                </label>
+                <label class="mask-slider">
+                  <span>Depth contrast <b id="depthContrastVal">55</b></span>
+                  <input type="range" id="depthContrast" min="10" max="90" value="55" />
+                </label>
+                <label class="mask-slider">
+                  <span>Near bias <b id="depthNearVal">50</b></span>
+                  <input type="range" id="depthNear" min="0" max="100" value="50" />
+                </label>
+                <label class="mask-slider">
+                  <span>Focus plane <b id="depthFocusVal">45%</b></span>
+                  <input type="range" id="depthFocus" min="0" max="100" value="45" />
+                </label>
+                <label class="mask-slider">
+                  <span>Aperture <b id="depthApertureVal">100%</b></span>
+                  <input type="range" id="depthAperture" min="0" max="200" value="100" />
+                </label>
+              </div>
+              <p class="mask-status" id="depthStatus">Press ↻ Re-scan plate to build the depth map.</p>
+              <p class="mask-hint">The estimate reads haze, height, detail and saturation — useful, not magic. For a truly production-grade depth map, load one from iPhone LiDAR, Depth Anything, MiDaS or Resolve's own Depth Map export and every effect below becomes accurate.</p>
+            </div>
+
+            <div class="depth-rack" id="depthEffectRack"></div>
+          </div>
+        </div>
+      </div>
+      <!-- ================================================================== -->
+      <!-- TAB 7: 4K RENDER — true-resolution import and export               -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-render">
+        <div class="pane-card" data-module="render" data-label="4K Render">
+          <div class="pane-card-header">
+            <div>
+              <h3>4K Import &amp; Export</h3>
+              <p>Bring in any clip or still at its real resolution, then render out at 3840&nbsp;×&nbsp;2160 — single frames, a numbered PNG sequence Resolve imports directly, a review video, or let Resolve render the native graph at 4K.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="rbImportBtn">⬆ Import footage</button>
+              <button class="btn-primary" id="rbStillBtn">⬇ Export still</button>
+            </div>
+          </div>
+
+          <div class="rb-source">
+            <div class="rb-source-info">
+              <div class="rb-source-name" id="rbSourceName">No footage imported — the procedural plate is the source.</div>
+              <div class="rb-source-meta">
+                <span class="rb-chip" id="rbSourceRes">— × —</span>
+                <span class="rb-chip" id="rbSourceKind">procedural</span>
+                <span class="rb-chip rb-chip-4k hidden" id="rbSource4k">4K source</span>
+              </div>
+              <p class="rb-source-verdict" id="rbSourceVerdict">Import a clip to work at its native resolution.</p>
+            </div>
+            <div class="rb-source-actions">
+              <input type="file" id="rbFileInput" accept="video/*,image/*" hidden />
+              <label class="rb-drop" id="rbDropZone" for="rbFileInput">
+                <strong>Drop a video or image here</strong>
+                <span>MP4, MOV, WebM, PNG, TIFF, EXR-to-PNG — any resolution, up to 6K</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="rb-grid">
+            <label class="rb-field">
+              <span>Export size</span>
+              <select id="rbSizeSelect"></select>
+            </label>
+            <label class="rb-field">
+              <span>Frame rate</span>
+              <select id="rbFpsSelect">
+                <option value="24" selected>24 fps</option>
+                <option value="25">25 fps</option>
+                <option value="30">30 fps</option>
+                <option value="48">48 fps</option>
+                <option value="60">60 fps</option>
+              </select>
+            </label>
+            <label class="rb-field">
+              <span>Image format</span>
+              <select id="rbFormatSelect">
+                <option value="png" selected>PNG (lossless, 16-bit workflow)</option>
+                <option value="jpeg">JPEG (smaller, delivery)</option>
+                <option value="webp">WebP</option>
+              </select>
+            </label>
+            <label class="rb-field">
+              <span>Sequence length</span>
+              <div class="rb-inline">
+                <input type="number" id="rbSeqSeconds" min="1" max="60" value="4" />
+                <span>sec</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="rb-memory" id="rbMemory">—</div>
+
+          <div class="rb-actions">
+            <button class="btn-secondary" id="rbSequenceBtn">⬇ Render PNG sequence (ZIP)</button>
+            <button class="btn-secondary" id="rbVideoBtn">⬇ Render review .webm at 4K</button>
+            <button class="btn-secondary" id="rbResolve4KBtn">▦ Make Resolve render 4K natively</button>
+            <button class="btn-mini" id="rbCancelBtn" hidden>Cancel</button>
+          </div>
+
+          <div class="rb-progress-wrap" id="rbProgressWrap" hidden>
+            <div class="rb-progress"><div class="rb-progress-fill" id="rbProgressFill"></div></div>
+            <div class="rb-progress-text" id="rbProgressText">Idle</div>
+          </div>
+
+          <label class="rb-checkbox">
+            <input type="checkbox" id="rbPassDepth" />
+            <span>Also export the <b>depth map</b> pass (separate folder, for compositing)</span>
+          </label>
+          <label class="rb-checkbox">
+            <input type="checkbox" id="rbPassMatte" />
+            <span>Also export the <b>Magic Mask</b> pass (separate folder, alpha matte)</span>
+          </label>
+
+          <pre class="rb-log" id="rbLog">Ready.</pre>
+          <p class="mask-hint">A browser can't write ProRes or DNxHR, so for a finishing master use <b>Make Resolve render 4K natively</b>: the panel sends the same Fusion graph and Resolve renders final frames at 3840 × 2160 with its own codecs. The PNG sequence is the lossless alternative that imports straight back into Resolve's Media Pool.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN: TIMELINE + PANEL TIPS -->
+    <aside class="monitor-column" id="monitorColumn">
+      <!-- MULTI-TRACK DAVINCI RESOLVE TIMELINE PREVIEW -->
+      <div class="timeline-card" data-module="timeline" data-label="Timeline">
+        <div class="timeline-header">
+          <div class="tl-title-group">
+            <strong id="activeTimelineTitle">No timeline opened yet</strong>
+          </div>
+          <div class="tl-actions">
+            <button class="btn-mini" id="clearVfxTrackBtn">Clear FX Track</button>
+            <button class="btn-mini accent" id="openLuaDrawerBtn">Resolve 21.1.1 Lua</button>
+          </div>
+        </div>
+
+        <!-- TIMELINE TRACKS -->
+        <div class="timeline-tracks" id="timelineTracksContainer">
+          <div class="tl-empty-note" id="tlEmptyNote">No edits yet — apply an effect and its clips land here.</div>
+          <div class="tl-playhead" id="tlPlayhead" style="left: 18%;"></div>
+
+          <div class="tl-track">
+            <div class="tl-track-label vfx-label">V3 • Optical FX</div>
+            <div class="tl-track-lane" id="laneV3"></div>
+          </div>
+
+          <div class="tl-track">
+            <div class="tl-track-label sub-label">V2/ST • LYRC</div>
+            <div class="tl-track-lane" id="laneSub"></div>
+          </div>
+
+          <div class="tl-track">
+            <div class="tl-track-label v2-label">V2 • B-Roll</div>
+            <div class="tl-track-lane" id="laneV2"></div>
+          </div>
+
+          <div class="tl-track">
+            <div class="tl-track-label v1-label">V1 • Main Cut</div>
+            <div class="tl-track-lane" id="laneV1"></div>
+          </div>
+
+          <div class="tl-track">
+            <div class="tl-track-label a1-label">A1 • Master</div>
+            <div class="tl-track-lane" id="laneA1"></div>
+          </div>
+        </div>
+
+        <!-- LIVE RESOLVE LUA / BRIDGE LOG DRAWER -->
+        <div class="wire-strip" id="wireStrip" data-module="wire" data-label="Resolve Wire">
+          <span class="wire-pill" id="wireState">Bridge idle</span>
+          <span class="wire-chain" id="wireChain">No graph dispatched yet</span>
+          <span class="wire-pill" id="wireRecipeCount">-- recipes</span>
+          <button class="wire-pill wire-btn" id="wireTestBtn" title="Ask the resident Resolve bridge what it can see right now">Test bridge</button>
+        </div>
+        <div class="lua-drawer" id="luaDrawer" data-module="lua" data-label="Lua Console">
+          <div class="lua-drawer-head">
+            <span>DaVinci Resolve Free 21.1.1 Bridge & Console Snippet</span>
+            <div class="lua-drawer-btns">
+              <button class="btn-mini" id="copyLuaBtn">Copy Lua for Resolve Console</button>
+              <a class="btn-mini" href="VFXKit_ResolveFree_Bridge.lua" download="VFXKit_ResolveFree_Bridge.lua">Download Bridge .lua</a>
+            </div>
+          </div>
+          <pre class="lua-code-box" id="luaCodeOutput">-- Click any Optical/Film VFX preset, LYRC style, Silence Cut, or Media Pool Auto-Edit button
+-- to dispatch directly to DaVinci Resolve Free 21.1.1 via the File-Mailbox Bridge
+-- OR copy the generated Lua snippet directly into Workspace > Console > Lua!</pre>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- MODAL: HOW THE RESOLVE FREE 21.1.1 MACOS BRIDGE WORKS + 1-CLICK INSTALL -->
+  <div class="modal-backdrop hidden" id="bridgeModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2>DaVinci Resolve Free 21.1.1 — macOS Live Bridge Setup</h2>
+          <p>How this tool connects to Resolve Free 21.1.1 using the Lua File-Mailbox + Fusion.prefs channel</p>
+        </div>
+        <button class="modal-close" id="closeBridgeModalBtn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="callout-warning">
+          <strong>DaVinci Resolve Free 21.1 / 21.1.1 Technical Architecture:</strong>
+          <p>
+            In Resolve 19.1, Blackmagic restricted <code>UIManager</code> to Studio. In <strong>Resolve 21.1 / 21.1.1</strong>, Blackmagic disabled Python (<code>.py</code>) scripts in the Free edition and sandboxed Lua (disabling <code>io.open</code>, <code>os.execute</code>, and <code>require</code>).
+          </p>
+          <p style="margin-top:6px;">
+            <strong>How Our Bridge Works in Resolve Free 21.1.1:</strong> Resolve Free 21.1.1 still runs <code>.lua</code> scripts from <code>Workspace ▸ Scripts</code> with access to <code>resolve</code>, <code>MediaPool</code>, <code>Timeline</code>, <code>Fusion</code>, <code>loadfile()</code>, and <code>fusion:SavePrefs()</code>. Our resident bridge script (<code>VFXKit_ResolveFree_Bridge.lua</code>) reads requests via <code>loadfile()</code> and responds through <code>Fusion.prefs</code> in ~50ms.
+          </p>
+        </div>
+
+        <div class="setup-steps">
+          <div class="setup-step">
+            <span class="step-num">1</span>
+            <div>
+              <h4>Install the Lua Bridge & Native Fusion Macros (macOS)</h4>
+              <p>Copies <code>VFXKit_ResolveFree_Bridge.lua</code> into <code>~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/</code> and installs our zero-plugin <code>.setting</code> macros.</p>
+              <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn-primary" id="installBridgeNowBtn">One-Click Install to macOS Paths</button>
+                <a class="btn-secondary" href="VFXKit_ResolveFree_Bridge.lua" download="VFXKit_ResolveFree_Bridge.lua">Download VFXKit_ResolveFree_Bridge.lua</a>
+              </div>
+              <div id="installResultBox" class="install-result"></div>
+            </div>
+          </div>
+
+          <div class="setup-step">
+            <span class="step-num">2</span>
+            <div>
+              <h4>Activate Once per Session in DaVinci Resolve Free 21.1.1</h4>
+              <p>Open your project in DaVinci Resolve 21.1.1 and click in the top menu bar:</p>
+              <code class="path-code">Workspace ▸ Scripts ▸ VFXKit_ResolveFree_Bridge</code>
+            </div>
+          </div>
+
+          <div class="setup-step">
+            <span class="step-num">3</span>
+            <div>
+              <h4>Keep This Panel in "Pop-Up Dock Mode" Beside Resolve</h4>
+              <p>Click <strong>"Pop-Up Dock Mode"</strong> in the top bar of this app to shrink it into a sleek floating extension strip next to your DaVinci Resolve viewer.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <!-- MODAL: WEB / CONSOLE MODE — the static build applies effects by one paste -->
+  <div class="modal-backdrop hidden" id="consoleModal">
+    <div class="modal-card console-modal-card">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow">DAVINCI RESOLVE FREE 21.1.1 · CONSOLE MODE</span>
+          <h2 id="consoleModalTitle">Paste this into Resolve</h2>
+        </div>
+        <button class="modal-close" id="closeConsoleModalBtn">✕</button>
+      </div>
+      <ol class="console-steps">
+        <li>In Resolve: <code>Workspace ▸ Console</code>, make sure the <b>Lua</b> tab is selected.</li>
+        <li>Press <b>Copy Lua</b> (the whole snippet is already selected for you).</li>
+        <li>Click into the console box, paste with <b>⌘V</b>, then press <b>Return</b>.</li>
+      </ol>
+      <pre class="lua-code-box console-lua" id="consoleLua"></pre>
+      <div class="console-actions">
+        <button class="btn-primary" id="copyConsoleLuaBtn">Copy Lua</button>
+        <button class="btn-secondary" id="downloadConsoleLuaBtn">Download .lua</button>
+        <span class="console-hint" id="consoleModalHint"></span>
+      </div>
+      <p class="console-note">
+        The hosted web version has no local bridge — each effect is applied by one paste.
+        One paste per effect, per clip. (The desktop build applies them with a click.)
+      </p>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="web-config.js"></script>
+  <script src="lua-export.js"></script>
+  <script src="touchdesigner.js"></script>
+  <script src="depth.js"></script>
+  <script src="render.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
