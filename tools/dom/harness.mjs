@@ -14,7 +14,7 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const PUB = path.join(ROOT, 'public');
 
-export function boot({ html = path.join(PUB, 'index.html') } = {}) {
+export function boot({ html = path.join(PUB, 'index.html'), beforeScripts = null } = {}) {
   const calls = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', () => {});
@@ -104,6 +104,9 @@ export function boot({ html = path.join(PUB, 'index.html') } = {}) {
   window.OffscreenCanvas = window.OffscreenCanvas || function () { return window.document.createElement('canvas'); };
   window.URL.createObjectURL = window.URL.createObjectURL || (() => 'blob:stub');
   window.URL.revokeObjectURL = window.URL.revokeObjectURL || (() => {});
+
+  // a suite can set flags the page reads at load time (the mask test seam)
+  if (typeof beforeScripts === 'function') beforeScripts(window);
 
   // ---- load the page's scripts in order, like the HTML does
   const scripts = [...window.document.querySelectorAll('script[src]')]

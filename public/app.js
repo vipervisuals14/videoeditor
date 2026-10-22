@@ -4333,7 +4333,7 @@ function depthRescan(opts) {
   }
   if (d.source === 'mask') {
     if (!m || !m.soft) {
-      d.status = 'No Magic Mask yet — open 05 • Magic Mask, click your subject, then come back.';
+      d.status = 'No Magic Mask yet — open Masking in the left menu, click your subject, then come back.';
       depthSyncUI();
       return;
     }
@@ -5298,8 +5298,8 @@ function initDepthTab() {
 // strokes and a box tool, then grown/shrunk, softened and tracked across
 // frames. Everything is exported with BezierSpline keyframes.
 // ============================================================================
-const MASK_W = 160;
-const MASK_H = 90;
+const MASK_W = 320;
+const MASK_H = 180;
 const MASK_PREVIEW_W = 640;   // the monitor canvas width the brush sizes are in
 
 let maskSampleCanvas = null;
@@ -5378,6 +5378,19 @@ function maskNearRef(data, i, ref, tol) {
 
 // Pure segmentation core — no canvas, so it can be unit tested with raw pixels.
 // Returns a hard 0/255 mask at the given resolution.
+// ---------------------------------------------------------------- smart select
+// A magic wand needs more than one colour threshold. On a real frame a single
+// threshold either leaks into the wall or misses the subject's own shadows,
+// which is exactly why "click the subject" used to select nothing (or the room).
+// This grows the selection in three passes instead:
+//
+//   1. hysteresis   — a loose limit to travel through, a tight one to be trusted
+//   2. local follow — a pixel far from the clicked colour but close to the pixel
+//                     it touches is still the same surface (folds, shading)
+//   3. cleanup      — pinholes filled, so the traced polygon is not swiss cheese
+//
+// The edge map is the wall: growth stops at a hard luminance step, so a subject
+// cannot spill into a background it is silhouetted against.
 function maskSolveFromPixels(data, w, h, seeds, opts) {
   const o = opts || {};
   const mode = o.mode || 'subject';
@@ -5390,7 +5403,7 @@ function maskSolveFromPixels(data, w, h, seeds, opts) {
 
   const { luma, grad } = maskEdgeMap(data, w, h);
 
-  // Reference colours: a 3x3 patch around every click, so a noisy plate can't
+  // Reference colours: a 3x3 patch around every click, so a noisy plate cannot
   // make the whole selection hinge on one unlucky pixel.
   const ref = [];
   seedPx.forEach((p) => {
@@ -5408,63 +5421,216 @@ function maskSolveFromPixels(data, w, h, seeds, opts) {
   ref.forEach((c) => { refLuma += 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; });
   refLuma /= Math.max(1, ref.length);
 
-  const tol = mode === 'luma' ? sensitivity * 0.6
-    : mode === 'sky' ? sensitivity * 3.2
-      : mode === 'skin' ? sensitivity * 2.4
-        : mode === 'color' ? sensitivity * 2.6
-          : sensitivity * 1.9;
-  // "Person" leans hardest on edges; colour matching alone drifts onto the wall.
-  const edgeLimit = mode === 'subject' ? 16 + sensitivity * 0.85
-    : mode === 'skin' ? 24 + sensitivity
-      : mode === 'sky' ? 40 + sensitivity * 1.5
-        : Infinity;
+  // mode-specific limits (0..255 colour space)
+  const base = mode === 'luma' ? sensitivity * 0.7
+    : mode === 'sky' ? sensitivity * 3.4
+      : mode === 'skin' ? sensitivity * 2.6
+        : mode === 'color' ? sensitivity * 2.2
+          : sensitivity * 2.0;
+  const edgeLimit = mode === 'subject' ? 30 + sensitivity * 1.15
+    : mode === 'skin' ? 34 + sensitivity * 1.2
+      : mode === 'sky' ? 60 + sensitivity * 1.6
+        : mode === 'color' ? 90 + sensitivity
+          : Infinity;
+  const localTol = 12 + sensitivity * 0.6;
   const skyTop = h * 0.68;
 
-  const accept = (x, y) => {
-    const i = y * w + x;
+  // distance from every pixel to the closest clicked colour, computed once
+  const dist = new Float32Array(w * h);
+  for (let i = 0, n = w * h; i < n; i++) {
     const p = i * 4;
-    if (mode === 'luma' && Math.abs(luma[i] - refLuma) > tol) return false;
-    if (mode === 'sky' && y > skyTop) return false;
-    if (mode === 'skin') {
-      const r = data[p];
-      const g = data[p + 1];
-      const b = data[p + 2];
-      const skinLike = r > 92 && r > g * 1.12 && g > b * 0.92;
-      if (!skinLike && !maskNearRef(data, p, ref, tol * 1.5)) return false;
+    const r = data[p];
+    const g = data[p + 1];
+    const b = data[p + 2];
+    let best = Infinity;
+    for (let k = 0; k < ref.length; k++) {
+      const c = ref[k];
+      const dr = r - c[0];
+      const dg = g - c[1];
+      const db = b - c[2];
+      const d2 = dr * dr + dg * dg + db * db;
+      if (d2 < best) best = d2;
     }
-    if (grad[i] > edgeLimit) return false;
-    if (mode === 'luma') return true;
-    return maskNearRef(data, p, ref, tol);
+    dist[i] = Math.sqrt(best);
+  }
+
+  const near = (p, q) => {
+    const dr = data[p] - data[q];
+    const dg = data[p + 1] - data[q + 1];
+    const db = data[p + 2] - data[q + 2];
+    return Math.sqrt(dr * dr + dg * dg + db * db);
   };
 
-  // Breadth-first growth with an explicit stack (no recursion, no memory blowup).
+  const run = (hi) => {
+    const buf = new Uint8Array(w * h);
+    const stack = new Int32Array(w * h);
+    let sp = 0;
+    seedPx.forEach((p) => {
+      const i = p.y * w + p.x;
+      if (!buf[i]) { buf[i] = 255; stack[sp++] = i; }
+    });
+    while (sp > 0) {
+      const i = stack[--sp];
+      const x = i % w;
+      const y = (i - x) / w;
+      const p = i * 4;
+      for (let k = 0; k < 4; k++) {
+        const j = k === 0 ? (x > 0 ? i - 1 : -1)
+          : k === 1 ? (x < w - 1 ? i + 1 : -1)
+            : k === 2 ? (y > 0 ? i - w : -1)
+              : (y < h - 1 ? i + w : -1);
+        if (j < 0 || buf[j]) continue;
+        const nx = j % w;
+        const ny = (j - nx) / w;
+        const q = j * 4;
+
+        // hard walls first
+        if (grad[j] > edgeLimit) continue;
+        if (mode === 'sky' && ny > skyTop) continue;
+        if (mode === 'luma') {
+          if (Math.abs(luma[j] - refLuma) > hi) continue;
+          buf[j] = 255; stack[sp++] = j;
+          continue;
+        }
+        if (mode === 'skin') {
+          const r = data[q];
+          const g = data[q + 1];
+          const b = data[q + 2];
+          const skinLike = r > 92 && r > g * 1.12 && g > b * 0.92;
+          const close = dist[j] <= hi;
+          const local = dist[j] <= hi * 4 && near(p, q) <= localTol;
+          if (!skinLike && !close && !local) continue;
+          buf[j] = 255; stack[sp++] = j;
+          continue;
+        }
+
+        const close = dist[j] <= hi;
+        // follow the surface: far from the click, but continuous with its parent
+        const local = dist[j] <= hi * 4 && near(p, q) <= localTol;
+        if (!close && !local) continue;
+        buf[j] = 255;
+        stack[sp++] = j;
+      }
+    }
+    return maskFillHoles(buf, w, h);
+  };
+
+  let buf = run(base);
+  const frac = maskCoverage(buf);
+  // Nothing matched, or the whole frame did: one corrective pass at a sane
+  // limit is far better than telling the editor to go hunting through sliders.
+  if (o.autoTune !== false) {
+    if (frac < 0.004) buf = run(base * 1.8);
+    else if (frac > 0.9) buf = run(base * 0.5);
+  }
+  out.set(buf);
+  return out;
+}
+
+// Any unselected pocket the border cannot reach is a hole inside the subject
+// (a logo, a shadow, a highlight) and belongs to the matte.
+function maskFillHoles(buf, w, h) {
+  const seen = new Uint8Array(w * h);
   const stack = new Int32Array(w * h);
   let sp = 0;
-  seedPx.forEach((p) => {
-    const i = p.y * w + p.x;
-    if (!out[i]) { out[i] = 255; stack[sp++] = i; }
-  });
+  const push = (i) => { if (!seen[i] && buf[i] < 110) { seen[i] = 1; stack[sp++] = i; } };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
   while (sp > 0) {
     const i = stack[--sp];
     const x = i % w;
-    const y = (i - x) / w;
-    const neighbours = [
-      x > 0 ? i - 1 : -1,
-      x < w - 1 ? i + 1 : -1,
-      y > 0 ? i - w : -1,
-      y < h - 1 ? i + w : -1
-    ];
-    for (let k = 0; k < 4; k++) {
-      const j = neighbours[k];
-      if (j < 0 || out[j]) continue;
-      const nx = j % w;
-      const ny = (j - nx) / w;
-      if (!accept(nx, ny)) continue;
-      out[j] = 255;
-      stack[sp++] = j;
-    }
+    if (x > 0) push(i - 1);
+    if (x < w - 1) push(i + 1);
+    if (i >= w) push(i - w);
+    if (i < w * (h - 1)) push(i + w);
   }
-  return out;
+  const filled = Uint8Array.from(buf);
+  for (let i = 0, n = w * h; i < n; i++) {
+    if (!seen[i] && filled[i] < 110) filled[i] = 255;
+  }
+  return filled;
+}
+
+// Points sampled from inside an existing matte: that is what lets a hand-drawn
+// matte be tracked instead of tracking demanding a magic-select click. A box
+// matte is a rectangle, so its corners can sit on the background — pixels are
+// used (when available) to keep the seeds on the subject's own colour, and
+// points near the centre win, which is where the subject actually is.
+function maskSeedsFromBuffer(buf, count, pixels) {
+  const want = Math.max(1, Math.min(16, count || 8));
+  const pts = [];
+  if (!buf || !buf.length) return pts;
+
+  // candidate inside-points, spaced out, so a matte over a whole frame still
+  // produces a handful rather than thousands
+  const step = Math.max(2, Math.floor(Math.sqrt(buf.length) / 40));
+  const cand = [];
+  let cx = 0;
+  let cy = 0;
+  let n = 0;
+  for (let i = 0; i < buf.length; i += step) {
+    if (buf[i] <= 110) continue;
+    const x = i % MASK_W;
+    const y = (i - x) / MASK_W;
+    // interior only: a point on the matte's rim is half background, and one
+    // background seed is enough to flood the whole room
+    if (x < 2 || y < 2 || x > MASK_W - 3 || y > MASK_H - 3) continue;
+    if (buf[i - 1] <= 110 || buf[i + 1] <= 110 || buf[i - MASK_W] <= 110 || buf[i + MASK_W] <= 110) continue;
+    if (buf[i - 2] <= 110 || buf[i + 2] <= 110 || buf[i - 2 * MASK_W] <= 110 || buf[i + 2 * MASK_W] <= 110) continue;
+    cand.push(i);
+    cx += x;
+    cy += y;
+    n++;
+  }
+  if (!cand.length) return pts;
+  cx /= n;
+  cy /= n;
+
+  let keep = cand;
+  if (pixels && pixels.length >= buf.length * 4) {
+    // median colour of everything inside the matte: with a subject filling most
+    // of it, that is the subject's colour, and the background corners drop out
+    const rs = [];
+    const gs = [];
+    const bs = [];
+    cand.forEach((i) => {
+      const p = i * 4;
+      rs.push(pixels[p]);
+      gs.push(pixels[p + 1]);
+      bs.push(pixels[p + 2]);
+    });
+    const mid = (arr) => arr.sort((a, b) => a - b)[arr.length >> 1];
+    const mr = mid(rs);
+    const mg = mid(gs);
+    const mb = mid(bs);
+    const tol = 62;
+    const filtered = cand.filter((i) => {
+      const p = i * 4;
+      const dr = pixels[p] - mr;
+      const dg = pixels[p + 1] - mg;
+      const db = pixels[p + 2] - mb;
+      return Math.sqrt(dr * dr + dg * dg + db * db) <= tol;
+    });
+    if (filtered.length >= 2) keep = filtered;
+  }
+
+  // centre-first, so a torso seed does not land on a shoulder edge
+  keep = keep.slice().sort((a, b) => {
+    const ax = (a % MASK_W) - cx;
+    const ay = ((a - (a % MASK_W)) / MASK_W) - cy;
+    const bx = (b % MASK_W) - cx;
+    const by = ((b - (b % MASK_W)) / MASK_W) - cy;
+    return (ax * ax + ay * ay) - (bx * bx + by * by);
+  });
+
+  for (let k = 0; k < keep.length && pts.length < want; k++) {
+    const i = keep[k];
+    const x = (i % MASK_W) / (MASK_W - 1);
+    const y = Math.floor(i / MASK_W) / (MASK_H - 1);
+    if (pts.some((p) => Math.abs(p.x - x) < 0.07 && Math.abs(p.y - y) < 0.07)) continue;
+    pts.push({ x, y });
+  }
+  return pts;
 }
 
 function maskMorph(buf, w, h, radius) {
@@ -5664,8 +5830,43 @@ function maskApplyStrokes(buf) {
   return buf;
 }
 
-// Samples the same procedural plate the monitor draws, at mask resolution.
-function maskSamplePlate(timeSec) {
+// Ask a <video> for a specific moment and wait for it, with a hard timeout so a
+// codec that refuses to seek can never hang the panel.
+function maskSeekVideo(vid, timeSec) {
+  return new Promise((resolve) => {
+    if (!vid || !videoHasSource(vid)) { resolve(false); return; }
+    const dur = Number(vid.duration);
+    const target = Number.isFinite(dur) && dur > 0.05
+      ? Math.max(0, Math.min(timeSec, dur - 0.02))
+      : 0;
+    if (vid.readyState >= 2 && Math.abs(Number(vid.currentTime) - target) < 0.03) {
+      resolve(true);
+      return;
+    }
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      vid.removeEventListener('seeked', done);
+      resolve(vid.readyState >= 2);
+    };
+    vid.addEventListener('seeked', done, { once: true });
+    try { vid.currentTime = target; } catch (_e) { done(); }
+    setTimeout(done, 260);
+  });
+}
+
+// Samples the frame the mask should follow. This used to draw the procedural
+// demo plate no matter what was loaded, so a click on your own footage solved
+// against a picture that was not on screen — the matte landed somewhere else.
+async function maskSampleFrame(timeSec) {
+  const t = Math.max(0, Number(timeSec) || 0);
+  const vid = document.getElementById('customVideoElement');
+  if (state.scene === 'custom_video' && vid && videoHasSource(vid)) {
+    // Seeking is only safe while paused; during playback the decoded frame is
+    // already the one under the playhead.
+    if (vid.paused) await maskSeekVideo(vid, t);
+  }
   if (!maskSampleCanvas) {
     maskSampleCanvas = document.createElement('canvas');
     maskSampleCanvas.width = MASK_W;
@@ -5675,8 +5876,11 @@ function maskSamplePlate(timeSec) {
   if (!sctx) return null;
   sctx.setTransform(1, 0, 0, 1, 0, 0);
   sctx.clearRect(0, 0, MASK_W, MASK_H);
+  // sample in exactly the geometry the monitor draws, pillarbox slot included,
+  // so a matte traced here lands on the same pixels the editor clicked
+  plateSlotActive = true;
   try {
-    drawCinematicPlate(sctx, MASK_W, MASK_H, timeSec, 0);
+    drawCinematicPlate(sctx, MASK_W, MASK_H, t, 0);
   } catch (_e) {
     return null;
   }
@@ -5687,18 +5891,34 @@ function maskSamplePlate(timeSec) {
   }
 }
 
-function maskSolve(opts) {
+let maskSolveToken = 0;
+
+async function maskSolve(opts) {
   const m = ensureMaskState();
   const o = opts || {};
-  if (!m.seeds.length && !m.strokes.length) {
-    m.soft = null;
+  if (!m.seeds.length) {
+    // No click to solve from: keep a hand-drawn matte and rebuild it from the
+    // brush work instead of wiping it.
+    if (!m.raw) m.raw = new Uint8Array(MASK_W * MASK_H);
     maskRebuild();
     return;
   }
-  const img = maskSamplePlate(o.timeSec === undefined ? state.playheadSec : o.timeSec);
+  if (state.scene === 'empty') {
+    // there is no frame to read: solving would sample the demo plate and hand
+    // back a matte of a picture that is not on screen
+    maskSetStatus('Load a clip or a photo first — Magic Select reads the frame in the Preview.');
+    showToast('Load footage first, then click your subject', 'warn');
+    return;
+  }
+  const token = ++maskSolveToken;
+  const sec = o.timeSec === undefined ? state.playheadSec : o.timeSec;
+  maskSetStatus('Reading the frame…');
+  m.solving = true;
+  const img = await maskSampleFrame(sec);
+  if (token !== maskSolveToken) return;          // a newer click already won
+  m.solving = false;
   if (!img || !img.data) {
-    m.status = 'Preview not ready yet — press Play once, then click your subject.';
-    maskSyncUI();
+    maskSetStatus('Could not read this frame — press Play once, pause, then click again.');
     return;
   }
   m.raw = maskSolveFromPixels(img.data, MASK_W, MASK_H, m.seeds, {
@@ -5706,6 +5926,26 @@ function maskSolve(opts) {
     sensitivity: o.sensitivity === undefined ? m.sensitivity : o.sensitivity
   });
   maskRebuild();
+  if (o.announce) maskAnnounceMatte();
+}
+
+// Says what actually happened, in the terms an editor uses, because "nothing
+// matched" and "everything matched" need opposite fixes.
+function maskAnnounceMatte() {
+  const m = ensureMaskState();
+  const pct = (m.coverage * 100);
+  if (!m.soft || pct <= 0.05) {
+    maskSetStatus('Nothing matched there. Click a flatter, more distinct part of the subject, or raise Select sensitivity.');
+    return;
+  }
+  if (pct > 92) {
+    maskSetStatus('That covered ' + pct.toFixed(0) + '% of the frame — lower Select sensitivity, or click a more distinct part.');
+    return;
+  }
+  maskSetStatus(
+    'Matte built — ' + pct.toFixed(1) + '% of frame, '
+    + m.polygon.length + ' outline points. Click again to add, or use － Subtract to clean it up.'
+  );
 }
 
 function maskRebuild() {
@@ -5765,8 +6005,44 @@ function drawMaskOverlay(ctx, w, h, t) {
   const m = state.mask;
   if (!m || !m.soft || !m.showOnMonitor || m.view === 'off') return;
   const alphaCanvas = maskColoredCanvas('#ffffff', null);
+  const trackedPoly = maskPolygonAt(state.playheadSec);
 
   ctx.save();
+
+  // A tracked frame has an outline but no pixels of its own, so draw the wash
+  // from that outline: otherwise the picture clearly follows the subject while
+  // the red shape sits still, which reads as "tracking did nothing".
+  if (trackedPoly && trackedPoly.length > 2 && m.view !== 'matte') {
+    const tracePath = () => {
+      ctx.beginPath();
+      trackedPoly.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x * w, p.y * h);
+        else ctx.lineTo(p.x * w, p.y * h);
+      });
+      ctx.closePath();
+    };
+    ctx.fillStyle = m.view === 'outline' ? 'rgba(3,5,12,0.28)' : 'rgba(3,5,12,0.58)';
+    ctx.beginPath();
+    ctx.rect(0, 0, w, h);
+    trackedPoly.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(p.x * w, p.y * h);
+      else ctx.lineTo(p.x * w, p.y * h);
+    });
+    ctx.closePath();
+    if (typeof ctx.fill === 'function') ctx.fill('evenodd');
+    if (m.view === 'overlay') {
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = '#ef4444';
+      tracePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    drawMaskOutline(ctx, w, h, trackedPoly, t);
+    ctx.restore();
+    return;
+  }
+
   if (m.view === 'matte') {
     ctx.fillStyle = '#04060b';
     ctx.fillRect(0, 0, w, h);
@@ -5801,36 +6077,40 @@ function drawMaskOverlay(ctx, w, h, t) {
   }
 
   // dashed outline of the matte (tracked frame if one is near the playhead)
-  const poly = maskPolygonAt(state.playheadSec) || m.polygon;
-  if (poly && poly.length > 2 && m.view !== 'matte') {
-    const dash = state.motion ? ((t || 0) * 26) % 14 : 0;
-    ctx.strokeStyle = 'rgba(248, 113, 113, 0.95)';
-    ctx.lineWidth = 1.6;
-    if (ctx.setLineDash) ctx.setLineDash([6, 5]);
-    if (ctx.lineDashOffset !== undefined) ctx.lineDashOffset = -dash;
-    ctx.beginPath();
-    poly.forEach((p, i) => {
-      const x = p.x * w;
-      const y = p.y * h;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.closePath();
-    ctx.stroke();
-    if (ctx.setLineDash) ctx.setLineDash([]);
-    if (ctx.lineDashOffset !== undefined) ctx.lineDashOffset = 0;
-
-    ctx.fillStyle = 'rgba(9, 10, 15, 0.82)';
-    ctx.fillRect(10, h - 26, 132, 18);
-    ctx.fillStyle = '#fca5a5';
-    ctx.font = '700 10px monospace';
-    ctx.fillText(
-      'MASK ' + (m.coverage * 100).toFixed(1) + '% · ' + (m.tracked.length ? m.tracked.length + ' tracked' : '1 frame'),
-      16,
-      h - 13
-    );
-  }
+  drawMaskOutline(ctx, w, h, maskPolygonAt(state.playheadSec) || m.polygon, t);
   ctx.restore();
+}
+
+// the dashed selection line plus the little read-out chip
+function drawMaskOutline(ctx, w, h, poly, t) {
+  const m = state.mask;
+  if (!m || !poly || poly.length < 3 || m.view === 'matte') return;
+  const dash = state.motion ? ((t || 0) * 26) % 14 : 0;
+  ctx.strokeStyle = 'rgba(248, 113, 113, 0.95)';
+  ctx.lineWidth = 1.6;
+  if (ctx.setLineDash) ctx.setLineDash([6, 5]);
+  if (ctx.lineDashOffset !== undefined) ctx.lineDashOffset = -dash;
+  ctx.beginPath();
+  poly.forEach((p, i) => {
+    const x = p.x * w;
+    const y = p.y * h;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.stroke();
+  if (ctx.setLineDash) ctx.setLineDash([]);
+  if (ctx.lineDashOffset !== undefined) ctx.lineDashOffset = 0;
+
+  ctx.fillStyle = 'rgba(9, 10, 15, 0.82)';
+  ctx.fillRect(10, h - 26, 132, 18);
+  ctx.fillStyle = '#fca5a5';
+  ctx.font = '700 10px monospace';
+  ctx.fillText(
+    'MASK ' + (m.coverage * 100).toFixed(1) + '% · ' + (m.tracked.length ? m.tracked.length + ' tracked' : '1 frame'),
+    16,
+    h - 13
+  );
 }
 
 function maskPolygonAt(sec) {
@@ -5925,7 +6205,7 @@ function maskSetMode(mode) {
   document.querySelectorAll('#maskModeGroup .mask-mode').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-mask-mode') === mode);
   });
-  if (m.raw) maskSolve();
+  if (m.seeds.length) maskSolve();
 }
 
 function maskAddSeed(x, y, opts) {
@@ -5933,23 +6213,38 @@ function maskAddSeed(x, y, opts) {
   const o = opts || {};
   if (!o.keep) m.seeds = [];
   m.seeds.push({ x: maskClamp01(x), y: maskClamp01(y) });
-  maskSolve();
-  if (m.soft) {
-    maskSetStatus(
-      'Matte built — ' + (m.coverage * 100).toFixed(1) + '% of frame. Click again to add, or use － Subtract to clean it up.'
-    );
-  } else {
-    maskSetStatus('Nothing matched there — try clicking a brighter part of the subject, or raise sensitivity.');
+  // a click always shows something: if the matte overlay was switched off, put
+  // it back, otherwise the click looks like it did nothing
+  if (m.view === 'off') {
+    m.view = 'overlay';
+    const sel = document.getElementById('maskViewSelect');
+    if (sel) sel.value = 'overlay';
   }
+  m.showOnMonitor = true;
+  maskSolve({ announce: true });
+}
+
+// Where the picture actually sits inside the element. The monitor canvas is
+// drawn with `object-fit: contain`, so the element box is not the frame: on a
+// stage that is not exactly 16:9 there are bars, and clicking without removing
+// them put every matte a little off the subject.
+function maskContentRect(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const cw = rect.width || 1;
+  const ch = rect.height || 1;
+  const iw = canvas.width || 16;
+  const ih = canvas.height || 9;
+  const scale = Math.min(cw / iw, ch / ih);
+  const dw = iw * scale;
+  const dh = ih * scale;
+  return { left: rect.left + (cw - dw) / 2, top: rect.top + (ch - dh) / 2, width: dw, height: dh };
 }
 
 function maskPointFromEvent(e, canvas) {
-  const rect = canvas.getBoundingClientRect();
-  const cw = rect.width || canvas.width || 1;
-  const ch = rect.height || canvas.height || 1;
+  const rect = maskContentRect(canvas);
   return {
-    x: maskClamp01((e.clientX - rect.left) / cw),
-    y: maskClamp01((e.clientY - rect.top) / ch)
+    x: maskClamp01((e.clientX - rect.left) / (rect.width || 1)),
+    y: maskClamp01((e.clientY - rect.top) / (rect.height || 1))
   };
 }
 
@@ -6031,51 +6326,128 @@ function maskClear() {
   showToast('Matte cleared');
 }
 
-// Frame tracking: re-solves the same seed on later plates and records the
-// outline per frame, so the exported Lua can keyframe the matte.
-function maskTrackFrames(direction) {
+// Frame tracking. It used to demand magic-select seeds, which is why a matte
+// you painted by hand answered "click your subject first"; it also re-solved
+// against the same demo plate on every frame. Now it starts from any matte
+// (click, box or brush), seeks the real frame, and re-seeds from the previous
+// frame's result so the outline follows the subject instead of sitting still.
+function maskHasMatte() {
   const m = ensureMaskState();
-  if (!m.soft || !m.seeds.length) {
-    showToast('Click your subject first, then track', 'warn');
+  return !!(m.soft && m.coverage > 0.0005);
+}
+
+async function maskTrackFrames(direction) {
+  const m = ensureMaskState();
+  if (m.tracking) return;
+  if (!maskHasMatte()) {
+    showToast('Build a matte first — click the subject, drag a box, or paint with ＋ Add', 'warn');
+    maskSetStatus('Nothing to track yet: make a matte first.');
     return;
+  }
+  if (state.scene === 'custom_image') {
+    // a still has no later frames to follow
+    maskKeyframeMatte();
+    maskSetStatus('This is a still photo, so there is one frame. Matte keyframed — switch to a clip to track.');
+    return;
+  }
+  const total = Math.max(0, Number(state.totalDurSec) || 0);
+  if (!total) {
+    showToast('Load a clip first — tracking needs frames to follow', 'warn');
+    return;
+  }
+
+  const dir = direction < 0 ? -1 : 1;
+  if (dir < 0 && Number(state.playheadSec) <= 0.05) {
+    maskSetStatus('Nothing before the playhead — press ▶ or scrub a few seconds forward, then Track back.');
+    showToast('Move the playhead forward first, then Track back', 'warn');
+    return;
+  }
+  // tracking reads exact frames, so the clip cannot be rolling while it works
+  if (state.isPlaying) {
+    state.isPlaying = false;
+    state.motion = false;
+    applyMotionState(true);
+    const playingVid = document.getElementById('customVideoElement');
+    if (playingVid && videoHasSource(playingVid)) playingVid.pause();
   }
   const fps = 24;
   const stride = 2 / fps;
   const startSec = state.playheadSec;
-  const dir = direction < 0 ? -1 : 1;
+  // a magic-select click starts the follow; a painted matte is turned into
+  // seeds on the frame itself, inside the loop
+  let seeds = m.seeds.slice();
+
+  m.tracking = true;
+  m.trackCancel = false;
+  const buttons = ['maskTrackFwdBtn', 'maskTrackBackBtn', 'maskApplyBtn'];
+  buttons.forEach((id) => { const b = document.getElementById(id); if (b) b.disabled = true; });
+
+  const limit = 60;
   let added = 0;
-  for (let i = 1; i <= 10; i++) {
-    const sec = startSec + dir * i * stride;
-    if (sec < 0 || sec > state.totalDurSec) break;
-    const img = maskSamplePlate(sec);
-    if (!img || !img.data) break;
-    const buf = maskSolveFromPixels(img.data, MASK_W, MASK_H, m.seeds, {
-      mode: m.mode,
-      sensitivity: m.sensitivity
-    });
-    const poly = maskTracePolygon(buf, MASK_W, MASK_H, 32);
-    if (poly.length < 3) break;
-    // gentle drift so the tracked outline follows a moving subject instead of
-    // sitting perfectly still on frame 1
-    const drift = dir * i * 0.0016;
-    const drifted = poly.map((p) => ({
-      x: maskClamp01(p.x + drift * Math.sin(i * 0.9)),
-      y: maskClamp01(p.y + drift * 0.6 * Math.cos(i * 0.7))
-    }));
-    m.tracked.push({
-      sec: +sec.toFixed(3),
-      polygon: drifted,
-      coverage: +maskCoverage(buf).toFixed(3)
-    });
-    added++;
+  // sanity rails for the follow: a matte that suddenly swallows most of the
+  // frame, or jumps across it, means the subject left the shot or the shot cut
+  const polyCentroid = (p) => {
+    let x = 0;
+    let y = 0;
+    p.forEach((q) => { x += q.x; y += q.y; });
+    return { x: x / p.length, y: y / p.length };
+  };
+  let prevCov = m.coverage;
+  let prevAt = m.polygon.length > 2 ? polyCentroid(m.polygon) : null;
+  try {
+    for (let i = 0; i <= limit; i++) {
+      if (m.trackCancel) break;
+      const sec = startSec + dir * i * stride;
+      if (sec < -0.001 || sec > total + 0.001) break;
+      maskSetStatus('Tracking ' + (dir > 0 ? 'forward' : 'back') + ' — frame ' + i + ' of ' + limit + '…');
+      const img = await maskSampleFrame(sec);
+      if (!img || !img.data) break;
+      if (!seeds.length) {
+        // painted matte, no click: read the seeds off this frame's pixels, so a
+        // box corner sitting on the background cannot start the flood
+        seeds = maskSeedsFromBuffer(m.soft, 10, img.data);
+        if (!seeds.length) break;
+      }
+      const buf = maskSolveFromPixels(img.data, MASK_W, MASK_H, seeds, {
+        mode: m.mode,
+        sensitivity: m.sensitivity,
+        autoTune: false
+      });
+      const cov = maskCoverage(buf);
+      const poly = maskTracePolygon(buf, MASK_W, MASK_H, 32);
+      if (poly.length < 3 || cov < 0.0008) break;          // nothing there
+      if (cov > 0.72) break;                               // flood ran into the room
+      const at = polyCentroid(poly);
+      if (prevAt) {
+        const jump = Math.hypot(at.x - prevAt.x, at.y - prevAt.y);
+        if (jump > 0.34) break;                            // the shape teleported
+      }
+      if (prevCov > 0.02 && cov > prevCov * 2.6) break;    // the matte ballooned
+      prevCov = cov;
+      prevAt = at;
+      m.tracked = m.tracked.filter((f) => Math.abs(f.sec - sec) > 0.001);
+      m.tracked.push({ sec: +sec.toFixed(3), polygon: poly, coverage: +cov.toFixed(3) });
+      seeds = maskSeedsFromBuffer(buf, 8, img.data);
+      added++;
+    }
+  } finally {
+    m.tracking = false;
+    const vid = document.getElementById('customVideoElement');
+    if (vid && videoHasSource(vid) && vid.paused) await maskSeekVideo(vid, startSec);
+    buttons.forEach((id) => { const b = document.getElementById(id); if (b) b.disabled = false; });
+    m.tracked.sort((a, b) => a.sec - b.sec);
+    m.tracked = m.tracked.slice(-120);
+    maskSyncUI();
   }
-  m.tracked.sort((a, b) => a.sec - b.sec);
-  m.tracked = m.tracked.slice(-24);
-  maskSyncUI();
-  maskSetStatus(added
-    ? `Tracked ${added} frames ${dir > 0 ? 'forward' : 'back'} — ${m.tracked.length} frames carry the matte.`
-    : 'Nothing new to track from here.');
-  if (added) showToast(`Matte tracked ${added} frames ${dir > 0 ? 'forward' : 'back'}`, 'ok');
+
+  if (added) {
+    maskSetStatus('Tracked ' + added + ' frame' + (added === 1 ? '' : 's')
+      + ' ' + (dir > 0 ? 'forward' : 'back') + ' — ' + m.tracked.length
+      + ' frames carry the matte. Press ＋ Keyframe anywhere you want a fixed shape.');
+    showToast('Matte tracked ' + added + ' frames ' + (dir > 0 ? 'forward' : 'back'), 'ok');
+  } else {
+    maskSetStatus('Could not follow the subject from this frame — try Track back, or add a stroke where the matte is thin.');
+  }
 }
 
 function maskKeyframeMatte() {
@@ -7716,6 +8088,28 @@ async function probeBridge(announce) {
 function initWireStrip() {
   const btn = document.getElementById('wireTestBtn');
   if (btn) btn.addEventListener('click', () => probeBridge(true));
+}
+
+// Test seam. tools/dom/mask.mjs sets window.__PULSE_TEST__ before the page
+// loads so it can drive the masker with synthetic frames; a normal visit never
+// sees this object.
+if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
+  window.PulseTest = {
+    state,
+    maskSolveFromPixels,
+    maskSeedsFromBuffer,
+    maskFillHoles,
+    maskTracePolygon,
+    maskCoverage,
+    maskSampleFrame,
+    maskTrackFrames,
+    maskSolve,
+    maskRebuild,
+    maskHasMatte,
+    maskAddSeed,
+    maskPointFromEvent,
+    ensureMaskState
+  };
 }
 
 function startBridgeStatusPoll() {
