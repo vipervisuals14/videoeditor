@@ -132,30 +132,51 @@ export function boot({ html = path.join(PUB, 'index.html'), beforeScripts = null
 
 export function makeCheck() {
   const results = [];
-  const check = (label, fn, why) => {
-    let ok = false;
-    let detail = '';
-    try {
-      const out = typeof fn === 'function' ? fn() : fn;
-      if (Array.isArray(out)) { ok = !!out[0]; detail = out[1] || ''; }
-      else ok = !!out;
-    } catch (err) {
-      ok = false;
-      detail = (err && err.message) || String(err);
-    }
+  const pending = [];
+  const report = (label, ok, detail, why) => {
     results.push({ label, ok, detail: detail || why || '' });
-    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${!ok && detail ? `\n        - ${detail}` : ''}`);
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${!ok && (detail || why) ? `\n        - ${detail || why}` : ''}`);
     return ok;
   };
-  check.summary = (name) => {
-    const failed = results.filter((r) => !r.ok);
-    console.log('');
-    if (failed.length) {
-      console.log(`${failed.length}/${results.length} ${name} checks FAILED`);
-      process.exitCode = 1;
-    } else {
-      console.log(`all ${results.length} ${name} checks passed`);
+  const read = (out) => {
+    if (Array.isArray(out)) return { ok: !!out[0], detail: out[1] || '' };
+    return { ok: !!out, detail: '' };
+  };
+  // A check may return a promise (anything that awaits the real code). Without
+  // this branch a promise is simply truthy and every async check passes, which
+  // is the same silent-lie bug that once hid 28 dial-less effects.
+  const check = (label, fn, why) => {
+    let out;
+    try {
+      out = typeof fn === 'function' ? fn() : fn;
+    } catch (err) {
+      return report(label, false, (err && err.message) || String(err), why);
     }
+    if (out && typeof out.then === 'function') {
+      const p = out.then(
+        (value) => { const r = read(value); return report(label, r.ok, r.detail, why); },
+        (err) => report(label, false, (err && err.message) || String(err), why)
+      );
+      pending.push(p);
+      return p;
+    }
+    const r = read(out);
+    return report(label, r.ok, r.detail, why);
+  };
+  check.summary = (name) => {
+    const finish = () => {
+      const failed = results.filter((r) => !r.ok);
+      console.log('');
+      if (failed.length) {
+        console.log(`${failed.length}/${results.length} ${name} checks FAILED`);
+        process.exitCode = 1;
+      } else {
+        console.log(`all ${results.length} ${name} checks passed`);
+      }
+    };
+    if (pending.length) return Promise.all(pending).then(finish);
+    finish();
+    return undefined;
   };
   return check;
 }

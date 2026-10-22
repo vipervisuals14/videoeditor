@@ -486,18 +486,29 @@ Octave errors are handled: a 96 BPM track whose hi-hats autocorrelate twice as f
 **96**, not 192. The detected tempo is written into the panel's shared beat clock, so the beat
 pulse on every effect follows your actual song instead of the old fixed 142.
 
-### The words themselves
+### The words themselves — Whisper runs in the page
 
-Detection measures *where* words are. It does not invent *what* they were — that needs a speech
-model, and this page deliberately ships none: no 50 MB download, no upload, no API key. In
-practice you already have the words:
+After the pauses are measured, the panel **transcribes the speech itself**. It is OpenAI Whisper
+(tiny, int8 ONNX) running through ONNX Runtime Web **inside the browser, against weights that ship
+with this site** (`vendor/asr/`). Nothing is uploaded, there is no API key, no account and no
+third-party call: turn the wifi off after the page loads and it still works.
 
-| Your situation | What to do |
+- ~41 MB of weights, cached by the browser after the first run, so the second visit is instant.
+- Roughly **3× faster than real time** on CPU (measured: 11 s of speech in 3.3 s), so a 60-second
+  talking head takes about 20 seconds.
+- Everything is transcribed up to **5 minutes** per pass, then it stops and says so.
+- Word-level timestamps: each word is placed where it was said, then grouped into the phrases the
+  voice-activity detector found, so a caption starts when the sentence starts — not when a
+  30-second decode window happened to begin.
+
+| Your situation | What happens |
 |---|---|
-| Music video | paste the song lyrics, one line per phrase → `◉ Detect from clip` |
-| Talking head, you wrote the script | paste the script → `◉ Detect from clip` (lines land on the phrase starts) |
-| Talking head, no script | press `◉ Detect from clip` and get one empty block per spoken phrase, already timed. Click a block, type over it. The timing stays. |
-| You already have a transcript (phone captions, CapCut, a client .srt) | `Load .srt / .txt` → `◉ Detect from clip` to retime it to this clip |
+| Talking head, no script | `◉ Detect from clip` → captions appear with the words already typed in |
+| Music video | paste the lyrics first; your wording wins over the machine's, and the transcription is used to place them |
+| You already have a transcript (.srt) | `Load .srt / .txt`, then `Re-sync to grid` — no transcription needed |
+| The model cannot load (old browser, no SIMD) | the blocks stay timed, the panel says why, and you can still type or paste |
+
+Any word can be corrected by clicking it in the block list; the measured timing stays.
 
 Pressing Detect with words already in the box **turns the captions on** and parks the playhead on
 the first one, so you can see the result immediately instead of wondering whether anything
@@ -532,6 +543,17 @@ for text. Two switches drive the same state — **`Lyrics on monitor: OFF / ON`*
 `02 • Lyrics`, and **`Lyrics: OFF`** in the viewer bar. The viewer badge reads
 `LYRC: off` rather than naming a style that is not drawing. Saved preferences from before this
 change are ignored once (they all said "on"), so the new default actually takes effect.
+
+## Sound: the clip is audible
+
+The stage's `<video>` element used to be muted everywhere, and the Web-Audio capture path left it
+routed through a zero-gain sink, so a clip was silent for good after one scan. Now:
+
+- **`Sound: ON`** in the viewer bar (on by default) — the clip you load plays its own audio, which
+  is the audio both detection and transcription listen to.
+- Clicking it mutes the monitor for scrubbing in a quiet room; detection still hears the clip.
+- The capture path silences the monitor only while it is listening, then hands the sound straight
+  back.
 
 ## The pause button pauses the video
 
@@ -575,7 +597,8 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 | 4K render bay (import metadata, tiling, memory guard, ZIP, native snippet) | `node /tmp/domtest/render.js` | pass |
 | **Pixel suite** (real 2D canvas: lyrics, depth, transport, every effect) | `node /tmp/domtest/visual.js` | pass |
 | **Live-depth worker** (protocol, transferable buffer, map range) | `node /tmp/domtest/liveworker.js` | pass |
-| Effect layers · Depth · Mask · Parameters (32) · Stack & shell (48) · **Lyrics auto-detect (36)** | `node tools/dom/{stack,params,depth,mask,lyrics}.mjs` | pass |
+| Effect layers · Depth · Mask · Parameters (32) · Stack & shell (48) · **Lyrics auto-detect (53)** | `node tools/dom/{stack,params,depth,mask,lyrics}.mjs` | pass |
+| **Speech engine, real weights, known recording** | `node tools/asr_check.mjs` | 5/5 |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified

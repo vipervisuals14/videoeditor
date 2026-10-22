@@ -299,6 +299,12 @@ check('typing over a block keeps its measured timing', () => {
 });
 
 check('clicking a block time moves the playhead there', () => {
+  P.state.cues = [
+    { index: 1, text: 'one', startSec: 1.0, endSec: 2.0, timed: true, words: [] },
+    { index: 2, text: 'two', startSec: 3.0, endSec: 4.0, timed: true, words: [] },
+    { index: 3, text: 'three', startSec: 5.0, endSec: 6.0, timed: true, words: [] }
+  ];
+  P.renderCueList();
   const cue = P.state.cues[2];
   const btn = [...document.querySelectorAll('#captionCuesList .cue-time')][2];
   btn.click();
@@ -456,6 +462,138 @@ check('a music video turns its subtitles on as well', () => {
   box.dispatchEvent(new window.Event('input', { bubbles: true }));
   P.lyricAnalyzeAudio({ samples: musicClip(120, 12), sampleRate: SR, durationSec: 12, source: 'test' });
   return [P.state.showLyricsOverlay === true && P.state.cues.length === 2, `overlay=${P.state.showLyricsOverlay} cues=${P.state.cues.length}`];
+});
+
+// ---------------------------------------------------------------------------
+// 5. transcription — the tab has to type the words, not just find the pauses
+//    The model itself cannot run in jsdom (it needs ONNX + WASM), so the engine
+//    is stubbed with the shape asr.js really returns. The real model is verified
+//    by tools/asr_check.mjs against a known recording.
+// ---------------------------------------------------------------------------
+function wordsFor(text, startSec, perWord) {
+  const w = text.split(' ');
+  let t = startSec;
+  return w.map((word) => {
+    const dur = perWord || 0.28;
+    const item = { text: word, startSec: +t.toFixed(2), endSec: +(t + dur).toFixed(2) };
+    t += dur + 0.04;
+    return item;
+  });
+}
+
+function stubAsr(words, opts) {
+  const o = opts || {};
+  window.AsrLab = {
+    version: 'test',
+    state: () => (o.fail ? 'failed' : 'ready'),
+    onState: () => {},
+    load: () => (o.fail ? Promise.reject(new Error(o.fail)) : Promise.resolve({})),
+    transcribe: () => (o.fail
+      ? Promise.reject(new Error(o.fail))
+      : Promise.resolve({ text: words.map((w) => w.text).join(' '), words, tookMs: 1234, durationSec: 14, truncated: false })),
+    // the real grouping logic, so this stub can never disagree with asr.js
+    wordsIntoSegments: (ws, segs) => REAL_ASR.wordsIntoSegments(ws, segs)
+  };
+}
+
+const REAL_ASR = window.AsrLab;   // the module loaded from asr.js, unmocked
+
+check('the speech engine ships with the page', () => {
+  return [!!REAL_ASR && typeof REAL_ASR.transcribe === 'function' && typeof REAL_ASR.load === 'function',
+    REAL_ASR ? `v${REAL_ASR.version} model=${REAL_ASR.model}` : 'missing'];
+});
+
+await check('with no whisper runtime present it fails loudly, not silently', async () => {
+  const saved = window.transformers;
+  delete window.transformers;
+  let message = '';
+  try { await REAL_ASR.load(); } catch (err) { message = err.message; }
+  window.transformers = saved;
+  REAL_ASR.reset();
+  return [/speech engine script did not load/.test(message), message || 'no error raised'];
+});
+
+await check('the tab types the words itself when a talking head is detected', async () => {
+  stubAsr(wordsFor('hello everyone today I want to show you three things', 0.5));
+  P.setLyricsOverlay(false);
+  const box = $('#lyricsRawInput');
+  box.value = '';
+  box.dispatchEvent(new window.Event('input', { bubbles: true }));
+  const audio = { samples: talkingClip(TALK_SPANS, 14), sampleRate: SR, durationSec: 14, source: 'test' };
+  const analysis = P.lyricAnalyzeAudio(audio);
+  await P.lyricTranscribe(audio, analysis);
+  const texts = P.state.cues.map((c) => c.text);
+  const anyText = texts.join(' ');
+  const painted = [];
+  P.state.playheadSec = P.state.cues[1].startSec + 0.1;
+  P.drawLyrcStudioTypography(fakeCtx(painted), 1280, 720, P.state.playheadSec, 0.2);
+  return [P.state.cues.length > 1 && /everyone/.test(anyText) && P.state.showLyricsOverlay && painted.length > 0,
+    `${P.state.cues.length} captions: "${anyText.slice(0, 48)}" painted=${painted.slice(0, 3).join(' ')}`];
+});
+
+check('each transcribed caption carries its own word timings', () => {
+  const cue = P.state.cues.find((c) => c.words && c.words.length > 1);
+  if (!cue) return [false, 'no cue with words'];
+  const inRange = cue.words.every((w) => w.startSec >= cue.startSec - 0.01 && w.startSec <= cue.endSec + 0.01);
+  return [inRange && cue.transcribed === true, `${cue.words.length} words inside ${cue.startSec}-${cue.endSec}s`];
+});
+
+await check('words the user typed win over the machine transcription', async () => {
+  stubAsr(wordsFor('this is what the machine heard', 0.5));
+  const box = $('#lyricsRawInput');
+  box.value = 'my own words here';
+  box.dispatchEvent(new window.Event('input', { bubbles: true }));
+  const audio = { samples: talkingClip(TALK_SPANS, 14), sampleRate: SR, durationSec: 14, source: 'test' };
+  const analysis = P.lyricAnalyzeAudio(audio);
+  await P.lyricTranscribe(audio, analysis);
+  const texts = P.state.cues.map((c) => c.text).join(' ');
+  return [/my own words here/.test(texts) && !/machine heard/.test(texts), texts.slice(0, 40)];
+});
+
+await check('a model that cannot load says why and keeps the timed blocks', async () => {
+  stubAsr([], { fail: 'the model file is missing' });
+  const box = $('#lyricsRawInput');
+  box.value = '';
+  box.dispatchEvent(new window.Event('input', { bubbles: true }));
+  const audio = { samples: talkingClip(TALK_SPANS, 14), sampleRate: SR, durationSec: 14, source: 'test' };
+  const analysis = P.lyricAnalyzeAudio(audio);
+  const blocks = document.querySelectorAll('#captionCuesList .cue-item').length;
+  await P.lyricTranscribe(audio, analysis);
+  const status = document.getElementById('lyrcDetectStatus');
+  return [blocks > 0 && /missing/.test(status.textContent), `${blocks} blocks, status="${status.textContent.slice(0, 50)}"`];
+});
+
+await check('re-syncing does not wipe the transcribed text', async () => {
+  stubAsr(wordsFor('first sentence here second one follows', 0.5));
+  const box = $('#lyricsRawInput');
+  box.value = '';
+  box.dispatchEvent(new window.Event('input', { bubbles: true }));
+  const audio = { samples: talkingClip(TALK_SPANS, 14), sampleRate: SR, durationSec: 14, source: 'test' };
+  const analysis = P.lyricAnalyzeAudio(audio);
+  await P.lyricTranscribe(audio, analysis);
+  const before = P.state.cues.map((c) => c.text).join('|');
+  $('#autoSyncLyricsBtn').click();
+  const after = P.state.cues.map((c) => c.text).join('|');
+  return [before.length > 0 && after === before, `before="${before.slice(0, 30)}" after="${after.slice(0, 30)}"`];
+});
+
+// ---------------------------------------------------------------------------
+// 6. sound — the clip has to be audible
+// ---------------------------------------------------------------------------
+check('the stage is not muted when a clip is loaded', () => {
+  const vid = document.getElementById('customVideoElement');
+  const btn = document.getElementById('stageAudioBtn');
+  return [vid.muted === false && P.state.stageSound === true && !!btn, `muted=${vid.muted} label=${btn ? btn.textContent : 'missing'}`];
+});
+
+check('the Sound button mutes and unmutes the element', () => {
+  const vid = document.getElementById('customVideoElement');
+  const btn = document.getElementById('stageAudioBtn');
+  btn.click();
+  const off = vid.muted === true && P.state.stageSound === false && /OFF/.test(btn.textContent);
+  btn.click();
+  const on = vid.muted === false && P.state.stageSound === true && /ON/.test(btn.textContent);
+  return [off && on, `off=${off} on=${on}`];
 });
 
 check.summary('lyrics auto-detect');

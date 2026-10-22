@@ -18,7 +18,11 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'dist-web');
 
-const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'depth.js', 'audio-lab.js', 'depth-live-worker.js', 'depth-ai-worker.js', 'render.js', 'lua-export.js'];
+const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'depth.js', 'audio-lab.js', 'asr.js', 'depth-live-worker.js', 'depth-ai-worker.js', 'render.js', 'lua-export.js'];
+
+// The speech model (Whisper tiny, int8) and its runtime. 52 MB, shipped with the
+// site so the transcription never leaves the machine and needs no API key.
+const ASR_DIR = 'vendor/asr';
 
 // The AI depth model + ONNX Runtime, copied verbatim. They are large (40 MB) and
 // deliberately not part of PUBLIC_FILES: only the depth tab ever asks for them,
@@ -37,7 +41,7 @@ const VENDOR_FILES = [
 function rewriteHtml(html, stamp) {
   // The cache-buster matters: a browser holding yesterday's app.js shows a bug
   // that was fixed, and there is no way to tell from the page.
-  const assets = '(styles\\.css|app\\.js|touchdesigner\\.js|depth\\.js|audio-lab\\.js|render\\.js|lua-export\\.js)';
+  const assets = '(styles\\.css|app\\.js|touchdesigner\\.js|depth\\.js|audio-lab\\.js|asr\\.js|render\\.js|lua-export\\.js)';
   return html
     .replace(new RegExp('(href|src)="\\/?' + assets + '(\\?v=[^"]*)?"', 'g'), '$1="$2?v=' + stamp + '"')
     .replace(/\/download\/bridge\.lua/g, 'VFXKit_ResolveFree_Bridge.lua')
@@ -60,6 +64,9 @@ async function main() {
     if (file === 'index.html') continue;
     await cp(path.join(ROOT, 'public', file), path.join(OUT, file));
   }
+
+  // vendored speech model + runtime (whole folder: weights, tokenizer, wasm)
+  await cp(path.join(ROOT, 'public', ASR_DIR), path.join(OUT, ASR_DIR), { recursive: true });
 
   // vendored AI runtime + model
   await mkdir(path.join(OUT, VENDOR_DIR), { recursive: true });
