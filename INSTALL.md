@@ -287,6 +287,32 @@ it by hand.
 
 ---
 
+## Using your own photos and clips
+
+**Your own photo** (a still frame, artwork, a photo you want to grade):
+
+1. Click **`🖼 Load Image`** in the row above the panel, next to `📂 Load Video`.
+2. Pick your file (PNG, JPEG, WebP, AVIF, TIFF or BMP). It appears on the **Live Preview** at once.
+3. Or skip the button: **drag the file from Finder straight onto the preview picture**.
+4. The button then shows your file's name, and everything in the panel works on that photo —
+   effects, depth of field, Magic Mask, Effect Layers, and `07 • 4K Render` for a full-size export.
+
+To go back to the built-in camera plates, click **`Anamorphic Night`**, **`Studio Spotlight`** or
+**`Editorial Brand`**.
+
+**Your own video:** `📂 Load Video`, or drag the clip onto the preview. `Pause` stops it.
+
+**Making a vertical (9:16) version of a wide photo:**
+
+1. Click **`9:16: OFF`** in the viewer bar so it reads **`9:16: ON`**. The photo moves into a
+   vertical slot with dark side bars — nothing is squashed.
+2. If the subject is cut off, click **`Framing: Centre`** to cycle Centre → Left → Right. That
+   chooses which part of the photo the vertical frame keeps.
+3. The panel already picks a left-third crop the first time you switch to 9:16, because that is
+   where a subject usually is.
+
+Your images never leave your Mac — the page reads the file locally in the browser.
+
 ## The transport bar (play, pause, scrub)
 
 Under the Live Preview: **`Pause`**, **`Test Film Snip / Transient`**, and the scrubber with the

@@ -750,7 +750,7 @@ const INITIAL_MEDIA_POOL = [
 // APPLICATION STATE
 // ============================================================================
 const state = {
-  scene: 'music_video', // 'music_video' | 'lyric_canvas' | 'talking_head' | 'custom_video'
+  scene: 'music_video', // 'music_video' | 'lyric_canvas' | 'talking_head' | 'custom_video' | 'custom_image'
   activeTab: 'vfx',
   selectedVfxCat: 'ALL',
   vfxSearch: '',
@@ -761,6 +761,7 @@ const state = {
   mixStylized: 45,
   splitCompare: false,
   vertical916: false,
+  platePanX: 0,           // 9:16 framing: -1 left, 0 centre, 1 right
   showLyricsOverlay: false,   // clean picture by default — opt in from 02 • LYRC
   motion: true,
   frozenTime: 1.9,
@@ -847,6 +848,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bootDone = true;
   initTabs();
   initSceneSwitcher();
+  initMonitorDropZone();
   initVfxTab();
   initKeyframeEditor();
   startCardThumbnailLoop();
@@ -1394,11 +1396,21 @@ function initSceneSwitcher() {
       document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.scene = btn.dataset.scene;
+      // switching to a procedural plate means the loaded still is no longer up
+      resetImageLabel();
       // a new plate means the old depth map describes a picture that is gone
       if (state.depth) depthRescan({ timeSec: state.playheadSec });
       showToast(`Camera Plate switched to: ${btn.textContent.trim()}`);
     });
   });
+
+  const imageInput = document.getElementById('customImageInput');
+  if (imageInput) {
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) loadImageAsPlate(file);
+    });
+  }
 
   // Custom Local Video Upload for Live Shader Testing
   const videoInput = document.getElementById('customVideoInput');
@@ -1410,12 +1422,132 @@ function initSceneSwitcher() {
       const url = URL.createObjectURL(file);
       videoEl.src = url;
       if (state.motion && state.isPlaying) videoEl.play().catch(() => {});
+      const trackAspect = () => {
+        if (videoEl.videoWidth && videoEl.videoHeight) {
+          lastPlateAspect = videoEl.videoWidth / videoEl.videoHeight;
+          state.platePanUserSet = false;
+        }
+      };
+      videoEl.addEventListener('loadedmetadata', trackAspect, { once: true });
+      trackAspect();
       state.scene = 'custom_video';
       if (state.depth) setTimeout(() => depthRescan(), 260);
       document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
       showToast(`Loaded custom video "${file.name}" into real-time optical shader pipeline`);
     });
   }
+}
+
+function resetImageLabel() {
+  const label = document.getElementById('customImageLabelText');
+  if (label) label.textContent = '🖼 Load Image';
+  const lbl = document.getElementById('customImageLabel');
+  if (lbl) lbl.classList.remove('is-loaded');
+}
+
+// Load an image file and make it the plate. Used by the Load Image button, by
+// dropping a file on the monitor, and by an image dropped into 07 - 4K Render,
+// so every route ends up with the same state.
+function loadImageAsPlate(file) {
+  if (!file) return Promise.resolve(null);
+  if (!/^image\//.test(file.type) && !/\.(png|jpe?g|webp|tiff?|bmp|avif)$/i.test(file.name)) {
+    showToast('That is not an image file', 'warn');
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const width = img.naturalWidth || img.width || 0;
+      const height = img.naturalHeight || img.height || 0;
+      if (!width || !height) {
+        URL.revokeObjectURL(url);
+        showToast('Could not read that image', 'error');
+        resolve(null);
+        return;
+      }
+      customImageEl = img;
+      customImageInfo = { name: file.name, width, height, bytes: file.size || 0 };
+      lastPlateAspect = width / height;
+      state.platePanUserSet = false;
+      state.scene = 'custom_image';
+      // the still is now the source, so 4K export works at its native size
+      rbAdoptSource({ name: file.name, kind: 'image', width, height });
+      if (state.motion) {
+        const vid = document.getElementById('customVideoElement');
+        if (vid) { try { vid.pause(); } catch (_e) { /* ignore */ } }
+      }
+      document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
+      const label = document.getElementById('customImageLabelText');
+      if (label) {
+        const short = file.name.length > 22 ? file.name.slice(0, 19) + '…' : file.name;
+        label.textContent = '🖼 ' + short;
+      }
+      const lbl = document.getElementById('customImageLabel');
+      if (lbl) lbl.classList.add('is-loaded');
+      showToast(
+        `${file.name} loaded as the plate — ${width} × ${height}`
+          + (RENDER_ENGINE.is4K(width, height) ? ' · 4K' : ''),
+        'ok'
+      );
+      if (state.depth) depthRescan({ timeSec: state.playheadSec });
+      resolve({ width, height, name: file.name });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      showToast('Could not open that image', 'error');
+      resolve(null);
+    };
+    img.src = url;
+  });
+}
+
+// Drop an image or a video straight onto the monitor. Kept separate from the
+// 4K tab's drop zone so the monitor behaves like the viewer it looks like.
+function initMonitorDropZone() {
+  const stage = document.getElementById('canvasStage');
+  if (!stage) return;
+  let depth = 0;
+  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  stage.addEventListener('dragenter', (e) => { stop(e); depth++; stage.classList.add('is-drop-target'); });
+  stage.addEventListener('dragover', (e) => { stop(e); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; });
+  stage.addEventListener('dragleave', (e) => {
+    stop(e);
+    depth = Math.max(0, depth - 1);
+    if (!depth) stage.classList.remove('is-drop-target');
+  });
+  stage.addEventListener('drop', (e) => {
+    stop(e);
+    depth = 0;
+    stage.classList.remove('is-drop-target');
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!file) return;
+    if (/^image\//.test(file.type) || /\.(png|jpe?g|webp|tiff?|bmp|avif)$/i.test(file.name)) {
+      loadImageAsPlate(file);
+    } else if (/^video\//.test(file.type) || /\.(mp4|mov|webm|m4v|mkv)$/i.test(file.name)) {
+      const videoInput = document.getElementById('customVideoInput');
+      // feed the existing video path through the same code by setting the file
+      if (videoInput && window.DataTransfer) {
+        try {
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          videoInput.files = dt.files;
+          videoInput.dispatchEvent(new Event('change', { bubbles: true }));
+          return;
+        } catch (_e) { /* fall through */ }
+      }
+      const vid = document.getElementById('customVideoElement');
+      if (vid) {
+        vid.src = URL.createObjectURL(file);
+        if (state.motion && state.isPlaying) vid.play().catch(() => {});
+        state.scene = 'custom_video';
+        if (state.depth) setTimeout(() => depthRescan(), 260);
+        showToast(`${file.name} loaded as the plate`);
+      }
+    } else {
+      showToast('Drop an image or a video', 'warn');
+    }
+  });
 }
 
 // ============================================================================
@@ -3298,7 +3430,20 @@ function rbImportFile(file) {
       const img = new Image();
       img.onload = () => {
         rbAdoptSource({ name: file.name, kind: 'image', width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
-        rbLogLine(`Image ready at ${img.naturalWidth} × ${img.naturalHeight}.`);
+        // make it the actual plate, so what you export is what you see
+        customImageEl = img;
+        customImageInfo = { name: file.name, width: img.naturalWidth, height: img.naturalHeight, bytes: file.size || 0 };
+        state.scene = 'custom_image';
+        document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
+        const labelText = document.getElementById('customImageLabelText');
+        if (labelText) {
+          const short = file.name.length > 22 ? file.name.slice(0, 19) + '…' : file.name;
+          labelText.textContent = '🖼 ' + short;
+        }
+        const lbl = document.getElementById('customImageLabel');
+        if (lbl) lbl.classList.add('is-loaded');
+        if (state.depth) depthRescan({ timeSec: state.playheadSec });
+        rbLogLine(`Image ready at ${img.naturalWidth} × ${img.naturalHeight} — now the plate on the monitor.`);
         showToast(`${file.name} imported at ${img.naturalWidth} × ${img.naturalHeight}`, 'ok');
         resolve(state.rbSource);
       };
@@ -3324,6 +3469,8 @@ function rbImportFile(file) {
       const height = videoEl.videoHeight || 0;
       const duration = videoEl.duration || 0;
       rbAdoptSource({ name: file.name, kind: 'video', width, height, duration });
+      lastPlateAspect = height ? width / height : 0;
+      state.platePanUserSet = false;
       state.scene = 'custom_video';
       document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
       rbLogLine(`Clip ready: ${width} × ${height}, ${duration.toFixed(2)}s${RENDER_ENGINE.is4K(width, height) ? ' (4K)' : ''}.`);
@@ -5428,7 +5575,22 @@ function initMonitorAndTimeline() {
   aspectBtn.addEventListener('click', () => {
     state.vertical916 = !state.vertical916;
     aspectBtn.textContent = state.vertical916 ? '9:16: ON' : '9:16: OFF';
+    if (state.vertical916) autoFrameForSlot();
+    syncFramingButton();
   });
+
+  const framingBtn = document.getElementById('framingBtn');
+  if (framingBtn) {
+    framingBtn.addEventListener('click', () => {
+      const order = [0, -1, 1];
+      const next = (order.indexOf(Math.round(state.platePanX || 0)) + 1) % order.length;
+      state.platePanX = order[next];
+      state.platePanUserSet = true;
+      syncFramingButton();
+      showToast(`Framing: ${['Right', 'Centre', 'Left'][next] || 'Centre'}`);
+    });
+  }
+  syncFramingButton();
 
   const compareBtn = document.getElementById('compareSplitBtn');
   compareBtn.addEventListener('click', () => {
@@ -5636,6 +5798,31 @@ function setLyricsOverlay(on, persist) {
   applyLyricsState(persist !== false);
 }
 
+// When the 9:16 slot first appears, choose a crop instead of blindly centring.
+// A 16:9 still loses ~70% of its width in a 9:16 slot, and subjects usually sit
+// off-centre (rule of thirds), so centring alone silently cuts people out.
+function autoFrameForSlot() {
+  if (!state.vertical916) return;
+  if (state.platePanUserSet) return;
+  const aspect = lastPlateAspect;
+  if (!aspect || aspect <= 9 / 16 + 0.02) return;   // already portrait: nothing to decide
+  state.platePanX = -0.5;   // bias toward the left third, the common framing
+}
+
+// The framing button only means something once the 9:16 slot crops the plate.
+const FRAMING_LABELS = { '-1': 'Left', 0: 'Centre', 1: 'Right' };
+
+function syncFramingButton() {
+  const btn = document.getElementById('framingBtn');
+  if (!btn) return;
+  const key = String(Math.round(state.platePanX || 0));
+  btn.textContent = `Framing: ${FRAMING_LABELS[key] || 'Centre'}`;
+  btn.classList.toggle('is-off', !state.vertical916);
+  btn.title = state.vertical916
+    ? 'Which part of the picture the 9:16 crop keeps — click to move it'
+    : 'Turn 9:16 on first; framing only applies to the vertical crop';
+}
+
 function applyLyricsState(persist) {
   const btn = document.getElementById('toggleLyricsOverlayBtn');
   if (btn) {
@@ -5666,6 +5853,9 @@ function applyLyricsState(persist) {
 function drawMonitorFrame(t) {
   const canvas = document.getElementById('livePreviewCanvas');
   if (!canvas) return;
+  // the 9:16 slot only exists on the monitor — an export canvas is already the
+  // exact shape that was asked for, so it must never be letterboxed
+  plateSlotActive = true;
   const ctx = canvas.getContext('2d');
   const w = canvas.width;
   const h = canvas.height;
@@ -5798,13 +5988,74 @@ function drawMonitorFrame(t) {
   }
 
   ctx.restore();
+  plateSlotActive = false;
+}
+// The still image the user loaded, plus its real size. Kept outside `state` so
+// nothing tries to serialise an Image object into prefs.
+let customImageEl = null;
+let customImageInfo = null;
+let lastPlateAspect = 0;   // width / height of whatever is on the monitor
+
+// Where the picture should land inside the canvas. In 9:16 mode on a landscape
+// monitor the plate is drawn into the vertical slot rather than the whole frame,
+// so the black side bars never cut a portrait photo in half.
+let plateSlotActive = false;
+
+function plateTargetRect(w, h) {
+  if (plateSlotActive && state.vertical916 && w > h) {
+    const vw = Math.round((h * 9) / 16);
+    return { x: Math.round((w - vw) / 2), y: 0, w: vw, h: h };
+  }
+  return { x: 0, y: 0, w: w, h: h };
+}
+
+// Draw an image filling the target rect without ever stretching it: scale to
+// cover, then centre-crop the overflow. Same maths the browser uses for
+// `object-fit: cover`, so a 16:9 still on a 16:9 monitor lands 1:1.
+function drawImageCover(ctx, img, rect) {
+  const iw = img.naturalWidth || img.width || 0;
+  const ih = img.naturalHeight || img.height || 0;
+  if (!iw || !ih) return false;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rect.x, rect.y, rect.w, rect.h);
+  ctx.clip();
+  const scale = Math.max(rect.w / iw, rect.h / ih);
+  const dw = iw * scale;
+  const dh = ih * scale;
+  // Framing control: 0 = centred, -1 = show the left edge, +1 the right edge.
+  // Without this a 16:9 still cropped into 9:16 is centred by default, which
+  // can push the subject out of frame entirely.
+  const px = Math.max(-1, Math.min(1, Number(state.platePanX) || 0));
+  const dx = rect.x + (rect.w - dw) * ((px + 1) / 2);
+  const dy = rect.y + (rect.h - dh) / 2;
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
+  return true;
 }
 
 function drawCinematicPlate(ctx, w, h, t, onBeatPulse) {
   const videoEl = document.getElementById('customVideoElement');
   if (state.scene === 'custom_video' && videoEl && videoEl.readyState >= 2) {
-    ctx.drawImage(videoEl, 0, 0, w, h);
+    // cover-crop, never stretch: a 16:9 clip in the 9:16 slot keeps its shape
+    drawImageCover(ctx, videoEl, plateTargetRect(w, h));
     return;
+  }
+
+  // A loaded still image is a first-class plate: it feeds the monitor, the
+  // depth map, the Magic Mask sampler and the 4K exporter through this one path.
+  if (state.scene === 'custom_image' && customImageEl) {
+    if (drawImageCover(ctx, customImageEl, plateTargetRect(w, h))) {
+      // a still can't move, but film grain and the beat pulse still should
+      if (typeof onBeatPulse === 'number' && onBeatPulse > 0.02) {
+        ctx.save();
+        ctx.globalAlpha = onBeatPulse * 0.04;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.restore();
+      }
+      return;
+    }
   }
 
   const hueShift = (state.clipShuffleSeed - 1) * 28;

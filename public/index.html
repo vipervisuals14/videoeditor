@@ -24,7 +24,7 @@
     </div>
 
     <!-- SCENE / FOOTAGE MODE SWITCHER FOR LIVE VIEWER -->
-    <div class="scene-switcher" title="Switch camera plate or load your own MP4/MOV video clip">
+    <div class="scene-switcher" title="Switch camera plate, or load your own MP4/MOV video clip or a still image">
       <span class="scene-label">Camera Plate:</span>
       <button class="scene-btn active" data-scene="music_video">Anamorphic Night</button>
       <button class="scene-btn" data-scene="lyric_canvas">Studio Spotlight</button>
@@ -32,6 +32,10 @@
       <label class="scene-upload-btn" title="Load a local .mp4 / .mov / .webm file into the live shader monitor">
         <span>📂 Load Video</span>
         <input type="file" id="customVideoInput" accept="video/*" hidden />
+      </label>
+      <label class="scene-upload-btn" id="customImageLabel" title="Load a still image (PNG, JPEG, WebP, TIFF, AVIF) as the camera plate — you can also drag one straight onto the monitor">
+        <span id="customImageLabelText">🖼 Load Image</span>
+        <input type="file" id="customImageInput" accept="image/*" hidden />
       </label>
     </div>
 
@@ -830,12 +834,13 @@
             <button class="btn-mini" id="toggleMotionBtn" title="Freeze every animation: shaders, beat pulses, lyric motion and card previews">Motion: ON</button>
             <button class="btn-mini" id="toggleLyricsOverlayBtn" title="Show or hide LYRC typography overlay on monitor">Lyrics: ON</button>
             <button class="btn-mini" id="aspectRatioBtn" title="Switch between 16:9 Widescreen and 9:16 Reels/TikTok vertical frame">9:16: OFF</button>
+            <button class="btn-mini is-off" id="framingBtn" title="Which part of the picture the 9:16 crop keeps — click to move it">Framing: Centre</button>
             <button class="btn-mini" id="compareSplitBtn" title="Before / After Split Wipe Comparison">Split Wipe: OFF</button>
           </div>
         </div>
 
         <!-- HTML5 REAL-TIME OPTICAL SHADER & LYRIC RENDERING CANVAS -->
-        <div class="canvas-stage" id="canvasStage">
+        <div class="canvas-stage" id="canvasStage" title="Drop an image or a video straight onto the monitor to use it as the plate">
           <canvas id="livePreviewCanvas" width="640" height="360" title="Magic Mask: click your subject to build a matte"></canvas>
           <video id="customVideoElement" loop muted playsinline hidden></video>
         </div>

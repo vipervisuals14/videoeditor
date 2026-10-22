@@ -318,6 +318,35 @@ the main thread every 260 ms — lower detail, still live.
 result), **depth overlay**, the raw **depth map**, or **split compare**. Effects still run with
 the preview off.
 
+## Bring your own images
+
+The monitor accepts a **still image** as the plate, not just video. Three ways in:
+
+| Where | What to do |
+|---|---|
+| Top bar | **`🖼 Load Image`** next to `📂 Load Video` |
+| The monitor itself | **drag a file onto the preview** — image or video, it works out which |
+| `07 • 4K Render` | drop the image on the import box; it becomes the plate *and* the export source |
+
+Accepted: PNG, JPEG, WebP, AVIF, TIFF, BMP. The chip in the top bar then shows the file name,
+and the panel reports the image's **real pixel size** (a 3840×2160 still is reported as 4K).
+
+Once an image is loaded it behaves like footage everywhere: the optical shader grades it, the
+depth map is estimated **from that image**, Magic Mask samples it, Effect Layers stack on it,
+and the 4K exporter renders stills and PNG sequences from it at any size. Nothing is uploaded —
+the file is read locally with `createObjectURL`.
+
+**It is never stretched.** Images and video are scaled to *cover* the frame and centre-cropped,
+the same way `object-fit: cover` works, so aspect ratio is preserved and the 16:9 default lands
+a 16:9 still 1:1.
+
+**9:16 framing.** Turning `9:16: ON` puts the plate into a vertical slot with the side bars left
+dark instead of cutting a portrait photo to a thin slice. Because a 16:9 still loses about 70% of
+its width in that slot, switching to 9:16 with a wide plate **auto-picks a subject-friendly crop**
+(left third) rather than blindly centring — and **`Framing: Centre / Left / Right`** in the viewer
+bar moves the crop where you want it. Your manual choice is remembered; a portrait image is never
+re-framed because it already fits.
+
 ## Lyrics are opt-in
 
 The monitor used to start with LYRC typography already burned onto the picture, and a saved

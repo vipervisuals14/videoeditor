@@ -11,6 +11,7 @@ DaVinci Resolve.
 | Feature | Desktop build (bridge) | **Web build** |
 | --- | --- | --- |
 | 72 live effect cards + shaders | yes | **yes** — identical code, runs in your browser |
+| Your own photos as the plate (upload or drag-and-drop) | yes | **yes** — read locally, never uploaded |
 | Magic Mask, Depth Map, Effect Layers | yes | **yes** — depth runs live in a background worker |
 | 4K import + 4K still / PNG-sequence export | yes | **yes** — rendered in your browser, nothing uploaded |
 | Native 4K final render (ProRes/DNxHR) | yes, one click | **yes, one paste** — sets your project to 3840×2160 and Resolve renders |
