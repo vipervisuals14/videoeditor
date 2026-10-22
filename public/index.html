@@ -115,82 +115,76 @@
         <span class="window-fps">24.00 fps • Native Fusion Nodes</span>
       </div>
 
-      <!-- 4 MAIN WORKFLOW TABS -->
+      <!-- FIVE WORKFLOW TABS (mask+depth live under Subject, silences+media
+           pool live under Editing) -->
       <nav class="main-tabs" role="tablist">
-        <button class="main-tab active" data-tab="vfx">
+        <button class="main-tab active" data-group="vfx">
           <div class="tab-text">
-            <span class="tab-name">01 • TouchDesigner & VFX</span>
-            <span class="tab-meta">50 FX + Keyframes</span>
+            <span class="tab-name">01 • Effects</span>
+            <span class="tab-meta">72 looks · keyframes</span>
           </div>
         </button>
-        <button class="main-tab" data-tab="captions">
+        <button class="main-tab" data-group="captions">
           <div class="tab-text">
-            <span class="tab-name">02 • LYRC Typography</span>
-            <span class="tab-meta">20 LYRC Styles</span>
+            <span class="tab-name">02 • Lyrics</span>
+            <span class="tab-meta">20 styles</span>
           </div>
         </button>
-        <button class="main-tab" data-tab="silences">
+        <button class="main-tab" data-group="subject">
           <div class="tab-text">
-            <span class="tab-name">03 • Cut Silences</span>
-            <span class="tab-meta">Dead Air & 2-Cam</span>
+            <span class="tab-name">03 • Subject</span>
+            <span class="tab-meta">Mask · Depth</span>
           </div>
         </button>
-        <button class="main-tab" data-tab="mediapool">
+        <button class="main-tab" data-group="editing">
           <div class="tab-text">
-            <span class="tab-name">04 • Media Pool AI</span>
-            <span class="tab-meta">Auto-Cut Timeline</span>
+            <span class="tab-name">04 • Editing</span>
+            <span class="tab-meta">Silences · Media Pool</span>
           </div>
         </button>
-        <button class="main-tab" data-tab="mask">
+        <button class="main-tab" data-group="render">
           <div class="tab-text">
-            <span class="tab-name">05 • Magic Mask</span>
-            <span class="tab-meta">Click-to-Matte + Track</span>
-          </div>
-        </button>
-        <button class="main-tab" data-tab="depth">
-          <div class="tab-text">
-            <span class="tab-name">06 • Depth Map</span>
-            <span class="tab-meta">11 Depth Effects</span>
-          </div>
-        </button>
-        <button class="main-tab" data-tab="render">
-          <div class="tab-text">
-            <span class="tab-name">07 • 4K Render</span>
-            <span class="tab-meta">Import · Export</span>
+            <span class="tab-name">05 • Render</span>
+            <span class="tab-meta">4K in · out</span>
           </div>
         </button>
       </nav>
 
+      <!-- Segmented control for tabs that hold two panels -->
+      <div class="pane-switcher hidden" id="paneSwitcher" role="tablist"></div>
+
       <!-- ================================================================== -->
-      <!-- TAB 1: TOUCHDESIGNER TOPs, OPTICAL VFX, TRANSITIONS & KEYFRAMES    -->
+      <!-- TAB 1: EFFECTS — the grid first, the rest on demand                 -->
       <!-- ================================================================== -->
       <div class="tab-pane active" id="tab-vfx">
-        <!-- AI LOOK DIRECTOR BAR -->
-        <div class="ai-prompt-card" data-module="look" data-label="Look Director">
-          <div class="ai-prompt-header">
-            <span class="ai-sparkle">LOOK DIRECTOR & TIMELINE PASS</span>
-            <span class="ai-hint">Describe the TouchDesigner / optical look — builds a keyframed multi-node pass across your timeline</span>
-          </div>
-          <div class="ai-prompt-input-row">
-            <input
-              type="text"
-              id="vfxPromptInput"
-              class="prompt-input"
-              placeholder="Describe a look — e.g. TouchDesigner UV displace, 360 shutter smear, 500T halation…"
-            />
-            <button class="btn-primary" id="runAiVfxBtn">Build Timeline Pass</button>
-          </div>
-          <div class="quick-vibe-pills">
-            <span class="pill-label">Reference Looks:</span>
-            <button class="vibe-pill" data-prompt="TouchDesigner Simplex UV Displace TOP, Blob-Track CV telemetry, Feedback Slope loop, Liquid UV Melt transition">TouchDesigner / Generative TOPs</button>
-            <button class="vibe-pill" data-prompt="360 shutter step-print smear, 2-frame film snip cuts, 500T halation bloom, split-diopter refraction">AWGE / 16mm Shutter Drag</button>
-            <button class="vibe-pill" data-prompt="bleach bypass silver retention, damped sub-bass lens thump, crash-zoom barrel snap, threshold ink print">Division Paris / Silver Brutalist</button>
-            <button class="vibe-pill" data-prompt="anamorphic edge chromatic fringing, 500T halation, weighted shoulder-rig float, kodak 2383 print curve">A24 / Anamorphic 35mm</button>
-          </div>
+        <!-- Shown until an effect is picked; the editor itself stays hidden -->
+        <div class="kf-placeholder" id="kfPlaceholder">
+          <span>◆</span>
+          <span><strong>Pick an effect below</strong> to open its intensity curve and keyframes.</span>
         </div>
 
+        <!-- 8 CATEGORY SUB-TABS (INCLUDING TOUCHDESIGNER TOPs & TRANSITIONS) -->
+        <div class="vfx-subtabs-bar" data-module="presets" data-label="Effect Browser">
+          <div class="vfx-subtabs" id="vfxCategoryTabs">
+            <button class="vfx-subtab active" data-cat="ALL">All (72)</button>
+            <button class="vfx-subtab" data-cat="TouchDesigner TOPs">TouchDesigner TOPs (12)</button>
+            <button class="vfx-subtab" data-cat="Data & Print TOPs">Data & Print TOPs (8)</button>
+            <button class="vfx-subtab" data-cat="Glitch & Bitmap TOPs">Glitch & Bitmap TOPs (8)</button>
+            <button class="vfx-subtab" data-cat="Transitions & Morphs">Transitions & Morphs (8)</button>
+            <button class="vfx-subtab" data-cat="Optical & Glass">Optical & Glass</button>
+            <button class="vfx-subtab" data-cat="Shutter & Time">Shutter & Time</button>
+            <button class="vfx-subtab" data-cat="Film Lab & Grade">Film Lab & Grade</button>
+            <button class="vfx-subtab" data-cat="Camera Weight">Camera Weight</button>
+            <button class="vfx-subtab" data-cat="Depth & Subject">Depth & Subject</button>
+          </div>
+          <input type="search" id="vfxSearchInput" class="vfx-search" placeholder="Filter TouchDesigner / Optical / Transitions..." />
+        </div>
+
+        <!-- LIVE MINI-CANVAS PRESET CARDS GRID (EACH WITH ITS OWN INTENSITY SLIDER + KEYFRAME BUTTON) -->
+        <div class="vfx-grid" id="vfxPresetGrid" data-module="presets"></div>
+
         <!-- INTERACTIVE KEYFRAME & INTENSITY CURVE INSPECTOR (FOR ALL EFFECTS & TRANSITIONS) -->
-        <div class="keyframe-inspector-card" id="keyframeEditorBox" data-module="keyframes" data-label="Keyframe Editor">
+        <div class="keyframe-inspector-card hidden" id="keyframeEditorBox" data-module="keyframes" data-label="Keyframe Editor">
           <div class="kf-header-row">
             <div class="kf-title-group">
               <span class="kf-diamond-icon">◆</span>
@@ -257,25 +251,35 @@
           </div>
         </div>
 
-        <!-- 8 CATEGORY SUB-TABS (INCLUDING TOUCHDESIGNER TOPs & TRANSITIONS) -->
-        <div class="vfx-subtabs-bar" data-module="presets" data-label="Effect Browser">
-          <div class="vfx-subtabs" id="vfxCategoryTabs">
-            <button class="vfx-subtab active" data-cat="ALL">All (72)</button>
-            <button class="vfx-subtab" data-cat="TouchDesigner TOPs">TouchDesigner TOPs (12)</button>
-            <button class="vfx-subtab" data-cat="Data & Print TOPs">Data & Print TOPs (8)</button>
-            <button class="vfx-subtab" data-cat="Glitch & Bitmap TOPs">Glitch & Bitmap TOPs (8)</button>
-            <button class="vfx-subtab" data-cat="Transitions & Morphs">Transitions & Morphs (8)</button>
-            <button class="vfx-subtab" data-cat="Optical & Glass">Optical & Glass</button>
-            <button class="vfx-subtab" data-cat="Shutter & Time">Shutter & Time</button>
-            <button class="vfx-subtab" data-cat="Film Lab & Grade">Film Lab & Grade</button>
-            <button class="vfx-subtab" data-cat="Camera Weight">Camera Weight</button>
-            <button class="vfx-subtab" data-cat="Depth & Subject">Depth & Subject</button>
+        <!-- ADVANCED TOOLS: collapsed until asked for -->
+        <button class="advanced-toggle" id="advancedToolsBtn" aria-expanded="false">
+          <span>More tools — Look Director (type a look) · Effect Layers (stack looks)</span>
+          <span class="adv-caret">▾</span>
+        </button>
+        <div class="advanced-tools hidden" id="advancedTools">
+        <!-- AI LOOK DIRECTOR BAR -->
+        <div class="ai-prompt-card" data-module="look" data-label="Look Director">
+          <div class="ai-prompt-header">
+            <span class="ai-sparkle">LOOK DIRECTOR & TIMELINE PASS</span>
+            <span class="ai-hint">Describe the TouchDesigner / optical look — builds a keyframed multi-node pass across your timeline</span>
           </div>
-          <input type="search" id="vfxSearchInput" class="vfx-search" placeholder="Filter TouchDesigner / Optical / Transitions..." />
+          <div class="ai-prompt-input-row">
+            <input
+              type="text"
+              id="vfxPromptInput"
+              class="prompt-input"
+              placeholder="Describe a look — e.g. TouchDesigner UV displace, 360 shutter smear, 500T halation…"
+            />
+            <button class="btn-primary" id="runAiVfxBtn">Build Timeline Pass</button>
+          </div>
+          <div class="quick-vibe-pills">
+            <span class="pill-label">Reference Looks:</span>
+            <button class="vibe-pill" data-prompt="TouchDesigner Simplex UV Displace TOP, Blob-Track CV telemetry, Feedback Slope loop, Liquid UV Melt transition">TouchDesigner / Generative TOPs</button>
+            <button class="vibe-pill" data-prompt="360 shutter step-print smear, 2-frame film snip cuts, 500T halation bloom, split-diopter refraction">AWGE / 16mm Shutter Drag</button>
+            <button class="vibe-pill" data-prompt="bleach bypass silver retention, damped sub-bass lens thump, crash-zoom barrel snap, threshold ink print">Division Paris / Silver Brutalist</button>
+            <button class="vibe-pill" data-prompt="anamorphic edge chromatic fringing, 500T halation, weighted shoulder-rig float, kodak 2383 print curve">A24 / Anamorphic 35mm</button>
+          </div>
         </div>
-
-        <!-- LIVE MINI-CANVAS PRESET CARDS GRID (EACH WITH ITS OWN INTENSITY SLIDER + KEYFRAME BUTTON) -->
-        <div class="vfx-grid" id="vfxPresetGrid" data-module="presets"></div>
 
         <!-- EFFECT LAYER STACK: layer any looks, in order, with opacity + blend -->
         <div class="layer-panel" data-module="layers" data-label="Effect Layers">
@@ -291,6 +295,7 @@
             </div>
           </div>
           <div class="layer-rack" id="layerRack"></div>
+        </div>
         </div>
       </div>
 

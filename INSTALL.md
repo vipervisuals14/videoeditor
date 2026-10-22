@@ -186,7 +186,7 @@ Two things to check, in this order:
 
 1. In Resolve, on the **Edit page**, put a clip on **V1**.
 2. Move the **playhead over that clip** (the bridge applies to the clip under the playhead).
-3. In the panel, stay on **`01 • TouchDesigner & VFX`**.
+3. In the panel, stay on **`01 • Effects`**.
 4. Click a card — try **"Band-Split Slice Cabinet"** or **"Copperplate Engrave Hatch"**.
    The big preview shows the effect live on your footage.
 5. Drag the **intensity slider** on that card (0–200%) and watch both the preview and the
@@ -217,9 +217,24 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 
 ---
 
-## Part 9 — The seven tabs
+## Part 9 — The five tabs
 
-**`02 • LYRC Typography`** — 20 kinetic lyric styles (Bold / Layered / Minimal / Talking).
+The panel is five tabs, not seven. Two of them hold a second panel behind a small switcher at the
+top of the tab:
+
+| Tab | Holds |
+| --- | --- |
+| **01 • Effects** | the 72 effect cards (Look Director + Effect Layers sit under **More tools**) |
+| **02 • Lyrics** | the 20 LYRC styles and your lyric blocks |
+| **03 • Subject** | **Magic Mask** · **Depth Map** (switch between them) |
+| **04 • Editing** | **Cut Silences** · **Media Pool AI** (switch between them) |
+| **05 • Render** | 4K import and export |
+
+In **01 • Effects** the keyframe editor stays out of the way until you click a card. Clicking a card
+**previews** it on the monitor and does not touch your timeline; only the card's **+ Apply** button
+sends the effect to Resolve and writes a clip onto the V3 lane.
+
+**`02 • Lyrics`** — 20 kinetic lyric styles (Bold / Layered / Minimal / Talking).
 
 - **Lyrics start switched off.** Your footage plays clean until you turn them on, so a new clip
   never arrives with text burned onto it. There is a switch at the top of this tab —
@@ -231,18 +246,18 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
   3-key opacity animation, merged over your footage, plus yellow lyric markers.
 - `Song Hook` and `Brand Script` load example text if you want to see it working first.
 
-**`03 • Cut Silences`** — for talking-head videos and vlogs.
+**`04 • Editing ▸ Cut Silences`** — for talking-head videos and vlogs.
 
 - **`Cut Silences in Resolve`** rebuilds the timeline from the loud parts only.
 - The 1.08× jump-cut punch-in and J-cut overlap are applied to the kept segments.
 
-**`04 • Media Pool AI`** — auto editing.
+**`04 • Editing ▸ Media Pool AI`** — auto editing.
 
 - **`Scan Resolve Media Pool`** reads the bins and clips in your open project.
 - **`Auto-Cut Timeline Now`** assembles a new timeline: beat-synced for music videos, or a
   rough vlog cut for talking heads.
 
-**`06 • Depth Map`** — depth of field and 10 more depth-driven looks.
+**`03 • Subject ▸ Depth Map`** — depth of field and 10 more depth-driven looks.
 
 - **Pick an engine first.** Two cards sit at the top of the tab:
   - **🧠 AI depth** (default) — runs **Depth Anything V2** in your browser. This is the real thing:
@@ -275,7 +290,7 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
   and send one or all with **`Send Active Stack to Resolve`**.
 - **`⬇ Depth .PNG`** saves the map at 1920×1080 (white = near).
 
-**`05 • Magic Mask`** — cut a person or object out of the shot, like Resolve's Magic Mask.
+**`03 • Subject ▸ Magic Mask`** — cut a person or object out of the shot, like Resolve's Magic Mask.
 
 That tool is Studio-only (it is one of the things the $295 unlocks), so this tab builds the same
 matte here and hands Resolve a real Fusion graph.
@@ -312,7 +327,7 @@ no footage, no demo clip and no music-video stand-in. Nothing appears until you 
 2. Pick your file (PNG, JPEG, WebP, AVIF, TIFF or BMP). It appears on the **Live Preview** at once.
 3. Or skip the button: **drag the file from Finder straight onto the preview picture**.
 4. The button then shows your file's name, and everything in the panel works on that photo —
-   effects, depth of field, Magic Mask, Effect Layers, and `07 • 4K Render` for a full-size export.
+   effects, depth of field, Magic Mask, Effect Layers, and `05 • Render` for a full-size export.
 
 To clear the preview and start over, click **`Clear`**. There are no built-in plates to go back to.
 
@@ -346,7 +361,7 @@ timecode beside it.
 
 ## Layering effects (stacking looks)
 
-1. Click any effect card in **`01 • TouchDesigner & VFX`** so it is highlighted.
+1. Click any effect card in **`01 • Effects`** so it is highlighted.
 2. Scroll to **Effect Layers** under the card grid and press **`＋ Add Current Effect`**.
 3. Repeat with other cards. Each row in the rack is one layer.
 4. Use the **Blend** menu (Screen, Multiply, Overlay…) and the two sliders —
@@ -359,7 +374,7 @@ timecode beside it.
 
 ## 4K import & export
 
-1. Open **`07 • 4K Render`**.
+1. Open **`05 • Render`**.
 2. Drag a clip or image onto the dashed box (or press **`⬆ Import footage`**). The panel shows its
    real resolution and whether it is 4K.
 3. Pick a size (4K UHD is already selected), frame rate and format.

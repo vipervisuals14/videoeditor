@@ -1350,26 +1350,83 @@ function initModules() {
 // ============================================================================
 // MAIN TABS & COMPACT DOCK SWITCHER
 // ============================================================================
-function initTabs() {
-  document.querySelectorAll('.main-tab').forEach((btn) => {
+// Five tabs, but the panels underneath are unchanged: Subject holds Magic Mask
+// and Depth Map, Editing holds Cut Silences and Media Pool AI. state.activeTab
+// always names the PANEL (mask/depth/silences/...) so every existing feature
+// check keeps working; state.activeGroup names what the nav highlights.
+const TAB_GROUPS = {
+  vfx: { panes: ['vfx'] },
+  captions: { panes: ['captions'] },
+  subject: { panes: ['mask', 'depth'] },
+  editing: { panes: ['silences', 'mediapool'] },
+  render: { panes: ['render'] }
+};
+const PANE_LABELS = {
+  vfx: 'Effects', captions: 'Lyrics', mask: 'Magic Mask', depth: 'Depth Map',
+  silences: 'Cut Silences', mediapool: 'Media Pool AI', render: 'Render'
+};
+
+function activatePane(pane) {
+  document.querySelectorAll('.tab-pane').forEach((p) => p.classList.remove('active'));
+  const el = document.getElementById(`tab-${pane}`);
+  if (!el) return false;
+  el.classList.add('active');
+  state.activeTab = pane;
+
+  if (pane === 'silences') drawSilenceWaveform();
+  if (pane === 'mask') maskSyncUI();
+  if (pane === 'depth') {
+    depthSyncUI();
+    depthRenderAiStamp();
+    // opening the tab is the moment to bring the model up
+    const dd = ensureDepthState();
+    if (dd.engine !== 'fast' && dd.source === 'estimate' && !dd.aiBusy) depthAiRun();
+  }
+  if (pane === 'render') { rbSyncSourceUI(); rbSyncMemory(); }
+  return true;
+}
+
+function activateGroup(group) {
+  const def = TAB_GROUPS[group];
+  if (!def) return;
+  state.activeGroup = group;
+  const remembered = state.paneByGroup[group];
+  const pane = remembered && def.panes.includes(remembered) ? remembered : def.panes[0];
+  activatePane(pane);
+  renderPaneSwitcher(group);
+}
+
+function renderPaneSwitcher(group) {
+  const bar = document.getElementById('paneSwitcher');
+  if (!bar) return;
+  const def = TAB_GROUPS[group];
+  const panes = def ? def.panes : [];
+  if (panes.length < 2) {
+    bar.classList.add('hidden');
+    bar.innerHTML = '';
+    return;
+  }
+  bar.classList.remove('hidden');
+  bar.innerHTML = panes.map((p) => `
+    <button class="pane-pill ${state.activeTab === p ? 'active' : ''}" data-pane="${p}" role="tab">
+      ${PANE_LABELS[p] || p}
+    </button>
+  `).join('');
+  bar.querySelectorAll('.pane-pill').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.main-tab').forEach((b) => b.classList.remove('active'));
-      document.querySelectorAll('.tab-pane').forEach((p) => p.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = btn.dataset.tab;
-      state.activeTab = tab;
-      document.getElementById(`tab-${tab}`).classList.add('active');
-      if (tab === 'silences') drawSilenceWaveform();
-      if (tab === 'mask') maskSyncUI();
-      if (tab === 'depth') {
-        depthSyncUI();
-        depthRenderAiStamp();
-        // opening the tab is the moment to bring the model up
-        const dd = ensureDepthState();
-        if (dd.engine !== 'fast' && dd.source === 'estimate' && !dd.aiBusy) depthAiRun();
-      }
-      if (tab === 'render') { rbSyncSourceUI(); rbSyncMemory(); }
+      state.paneByGroup[group] = btn.dataset.pane;
+      activatePane(btn.dataset.pane);
+      renderPaneSwitcher(group);
     });
+  });
+}
+
+function initTabs() {
+  state.activeGroup = 'vfx';
+  state.paneByGroup = { vfx: 'vfx', captions: 'captions', subject: 'mask', editing: 'silences', render: 'render' };
+
+  document.querySelectorAll('.main-tab').forEach((btn) => {
+    btn.addEventListener('click', () => activateGroup(btn.dataset.group));
   });
 
   const compactBtn = document.getElementById('toggleCompactBtn');
@@ -1654,8 +1711,27 @@ function initMonitorDropZone() {
 // ============================================================================
 // TAB 1: OPTICAL, SHUTTER & FILM LAB VFX
 // ============================================================================
+// The keyframe editor is a reward for picking something, not a permanent block
+// at the top of the tab.
+function revealKeyframeEditor() {
+  const box = document.getElementById('keyframeEditorBox');
+  const hint = document.getElementById('kfPlaceholder');
+  if (box) box.classList.remove('hidden');
+  if (hint) hint.classList.add('hidden');
+}
+
 function initVfxTab() {
   renderVfxGrid();
+
+  const advBtn = document.getElementById('advancedToolsBtn');
+  const advBody = document.getElementById('advancedTools');
+  if (advBtn && advBody) {
+    advBtn.addEventListener('click', () => {
+      const open = advBody.classList.toggle('hidden') === false;
+      advBtn.classList.toggle('is-open', open);
+      advBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  }
 
   document.querySelectorAll('.vfx-subtab').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -1771,6 +1847,34 @@ function renderVfxGrid() {
   });
 
   // Per-card keyframe button — stamps a keyframe at the playhead
+  // + Apply is the only thing that sends a graph to Resolve and writes a clip
+  // onto the V3 lane.
+  grid.querySelectorAll('[data-apply]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const preset = VFX_PRESETS.find((x) => x.id === btn.dataset.apply);
+      if (!preset) return;
+      state.activePreset = preset;
+      state.presetPicked = true;
+      state.hitFlashBurst = 0.85;
+      revealKeyframeEditor();
+      document.getElementById('activeFxPill').textContent = `Applied: ${preset.name}`;
+      renderVfxGrid();
+      syncKeyframeInspector();
+
+      const span = Math.max(1, state.totalDurSec || 1);
+      const playheadPct = Math.min(84, Math.max(0, Math.round((state.playheadSec / span) * 100)));
+      state.timelineTracks.v3.push({
+        left: playheadPct,
+        width: 15,
+        label: preset.name,
+        presetId: preset.id
+      });
+      renderTimelineTracks();
+      applyPresetToResolve(preset);
+    });
+  });
+
   grid.querySelectorAll('.card-kf-btn').forEach((btn) => {
     const id = btn.dataset.kf;
     btn.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -1779,6 +1883,8 @@ function renderVfxGrid() {
       const preset = VFX_PRESETS.find((x) => x.id === id);
       if (!preset) return;
       state.activePreset = preset;
+      state.presetPicked = true;
+      revealKeyframeEditor();
       const current = effectiveIntensity(id, state.playheadSec);
       addKeyframe(id, state.playheadSec, current);
       document.getElementById('activeFxPill').textContent = `Preview: ${preset.name}`;
@@ -1798,25 +1904,18 @@ function renderVfxGrid() {
       }
     });
 
+    // Clicking a card PREVIEWS it. Nothing is applied and nothing lands on the
+    // timeline until the card's own + Apply is pressed.
     card.addEventListener('click', (e) => {
       if (!preset) return;
       if (e.target.closest('.vfx-card-slider-row')) return;
+      if (e.target.closest('[data-apply]')) return;
       state.activePreset = preset;
-      state.hitFlashBurst = 0.85;
-      document.getElementById('activeFxPill').textContent = `Preview: ${preset.name}`;
+      state.presetPicked = true;
+      revealKeyframeEditor();
+      document.getElementById('activeFxPill').textContent = `Previewing: ${preset.name}`;
       renderVfxGrid();
       syncKeyframeInspector();
-
-      const playheadPct = Math.min(84, Math.max(0, Math.round((state.playheadSec / state.totalDurSec) * 100)));
-      state.timelineTracks.v3.push({
-        left: playheadPct,
-        width: 15,
-        label: preset.name,
-        presetId: preset.id
-      });
-      renderTimelineTracks();
-
-      applyPresetToResolve(preset);
       e.stopPropagation();
     });
   });
@@ -2297,6 +2396,7 @@ function runAiVfxAssistant(promptText) {
 
   state.timelineTracks.v3 = newVfxClips;
   state.activePreset = VFX_PRESETS.find((p) => p.id === chosenPool[0]) || VFX_PRESETS[0];
+  state.presetPicked = true;   // an explicit "build pass" request counts as picking
   state.hitFlashBurst = 0.9;
   document.getElementById('activeFxPill').textContent = `Optical Pass: ${state.activePreset.name}`;
   renderTimelineTracks();
@@ -3350,7 +3450,12 @@ function composeExportFrame(ctx, w, h, t) {
   ctx.translate(-w / 2, -h / 2);
 
   drawCinematicPlate(ctx, w, h, renderTime, onBeatPulse);
-  drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
+  // No effect picked yet: the plate goes up untouched. Skipping the call (rather
+  // than passing an unknown type) matters — the shader's finishing pass would
+  // otherwise overwrite the frame with black.
+  if (state.presetPicked) {
+    drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
+  }
   applyDepthStackTiled(ctx, w, h, t, preset);
   renderEffectLayers(ctx, w, h, renderTime, onBeatPulse, grainAmount);
   ctx.restore();
@@ -6382,7 +6487,7 @@ function drawMonitorFrame(t) {
     ctx.fillText('RAW LOG', 20, 25);
     ctx.fillStyle = '#fecdd3';
     ctx.fillText('GRADED FX', w - 84, 25);
-  } else {
+  } else if (state.presetPicked) {
     drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
   }
 
@@ -6447,8 +6552,11 @@ function plateTargetRect(w, h) {
 // cover, then centre-crop the overflow. Same maths the browser uses for
 // `object-fit: cover`, so a 16:9 still on a 16:9 monitor lands 1:1.
 function drawImageCover(ctx, img, rect) {
-  const iw = img.naturalWidth || img.width || 0;
-  const ih = img.naturalHeight || img.height || 0;
+  // <video> reports its pixels through videoWidth/videoHeight, not width (which
+  // is just the attribute and is usually 0). Without this a loaded clip drew
+  // nothing at all — a black monitor with the transport happily running.
+  const iw = img.naturalWidth || img.videoWidth || img.width || 0;
+  const ih = img.naturalHeight || img.videoHeight || img.height || 0;
   if (!iw || !ih) return false;
   ctx.save();
   ctx.beginPath();

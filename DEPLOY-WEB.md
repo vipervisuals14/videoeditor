@@ -40,7 +40,7 @@ To update it later, drag a new zip onto the same site's **Deploys** tab — same
 | 4K import + 4K still / PNG-sequence export | yes | **yes** — rendered in your browser, nothing uploaded |
 | Native 4K final render (ProRes/DNxHR) | yes, one click | **yes, one paste** — sets your project to 3840×2160 and Resolve renders |
 | Intensity sliders 0–200% + keyframe curve editor | yes | **yes** |
-| 20 LYRC lyric styles, variation, 9:16 / 16:9 | yes | **yes** — lyrics start **off**, switch them on in `02 • LYRC` |
+| 20 LYRC lyric styles, variation, 9:16 / 16:9 | yes | **yes** — lyrics start **off**, switch them on in `02 • Lyrics` |
 | Cut Silences / Media Pool auto-editor UI | yes | **yes** (the panel's own timeline preview) |
 | **Applying to your Resolve timeline** | one click, via the local bridge | **one paste** into `Workspace ▸ Console` |
 | Reading your real bins/clips | automatic | not possible from a browser (paste **Scan** Lua is read-only, see below) |
@@ -124,7 +124,7 @@ routing, no rewrites needed.
    console input → **⌘V** → **Return**.
 7. The clip gets the Fusion comp, node graph, keyframes and a marker.
 
-For lyrics: `02 • LYRC Typography` → **Place on Resolve Timeline** → same paste. One paste
+For lyrics: `02 • Lyrics` → **Place on Resolve Timeline** → same paste. One paste
 builds *all* the TextPlus cards for every cue.
 
 Tip: **Download .lua** in that dialog saves the snippet as a file, which you can drop into
@@ -136,7 +136,7 @@ run from `Workspace ▸ Scripts` later without touching the console.
 ## What the web build cannot do
 
 - **No automatic Media Pool reading.** A browser cannot inspect your project. The
-  `04 • Media Pool AI` tab still plans a cut and generates the auto-assembly Lua, and Resolve
+  `04 • Editing ▸ Media Pool AI` tab still plans a cut and generates the auto-assembly Lua, and Resolve
   reads its own Media Pool when that Lua runs.
 - **No automatic silence detection of your audio file.** The Cut Silences tab works from the
   waveform you see in the panel; the generated Lua cuts the timeline to those segments.

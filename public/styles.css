@@ -3238,3 +3238,69 @@ body.mask-brush #livePreviewCanvas.mask-drawing { cursor: cell; }
   line-height: 1.5;
   color: #6b7789;
 }
+
+/* Segmented control for the two tabs that hold two panels each */
+.pane-switcher {
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px 0;
+  flex-wrap: wrap;
+}
+.pane-switcher.hidden { display: none; }
+.pane-pill {
+  appearance: none;
+  border: 1px solid var(--border-subtle, #1e2330);
+  background: #0b0e15;
+  color: #8b93a7;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.pane-pill:hover { color: #d7dce8; border-color: #2c3444; }
+.pane-pill.active {
+  color: #06121c;
+  background: #7dd3fc;
+  border-color: #7dd3fc;
+}
+
+/* "More tools" disclosure in the Effects tab */
+.advanced-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  width: 100%;
+  background: #0a0d14;
+  border: 1px dashed #222a38;
+  border-radius: 10px;
+  color: #9aa6ba;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+}
+.advanced-toggle:hover { border-color: #33405a; color: #cfd7e5; }
+.advanced-toggle .adv-caret { transition: transform 0.15s ease; }
+.advanced-toggle.is-open .adv-caret { transform: rotate(180deg); }
+.advanced-tools { margin-top: 10px; }
+.advanced-tools.hidden { display: none; }
+
+/* Keyframe editor only appears once an effect has been picked */
+.kf-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px dashed #222a38;
+  border-radius: 10px;
+  color: #6f7c90;
+  font-size: 12.5px;
+  background: #080b11;
+}
+.kf-placeholder.hidden { display: none; }
+.kf-placeholder strong { color: #9fb0c8; font-weight: 600; }
+#keyframeEditorBox.hidden { display: none; }

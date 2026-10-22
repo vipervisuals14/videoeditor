@@ -12,6 +12,10 @@ Inspired by **StayCreative's VFX Kit 2.0**, **AutoSubs v3.10+**, and **davinci-r
 
 ## The stage starts empty — on purpose
 
+Five tabs: **Effects · Lyrics · Subject (Mask · Depth) · Editing (Silences · Media Pool) · Render**.
+Inside Effects, the keyframe editor appears only after you pick a card, and the Look Director and
+Effect Layers live behind a **More tools** toggle.
+
 The preview sits at the **top of the page** and holds nothing until you load something.
 There are no stock clips, no generated stand-in plates and no demo footage in the build;
 the app opens on a dark frame that says **"Nothing loaded yet"**.
@@ -20,7 +24,7 @@ the app opens on a dark frame that says **"Nothing loaded yet"**.
 | --- | --- |
 | Footage | blank until you press **Load footage** / **Load photo**, or drop a file on the frame |
 | Playback | never starts by itself. **Play / Pause** is the only thing that moves the picture |
-| Lyrics | off at boot. Turn them on in `02 • LYRC` or with the **Lyrics: OFF** button |
+| Lyrics | off at boot. Turn them on in `02 • Lyrics` or with the **Lyrics: OFF** button |
 | Timeline | empty. Clips appear only after you apply an effect |
 | Cut Silences | no analysis, no cuts and no timeline changes until you press **Detect silence** |
 
@@ -267,7 +271,7 @@ bridge did not answer.
 
 ## True 4K import and export (in the browser)
 
-The hosted build is the product, so 4K has to work with nothing installed. `07 • 4K Render`:
+The hosted build is the product, so 4K has to work with nothing installed. `05 • Render`:
 
 | Path | What it produces | Where it runs |
 |---|---|---|
@@ -318,7 +322,7 @@ the browser's own compositing, so what you see is what the graph builds.
 
 ## Depth map — a real model, not a guess
 
-`06 • Depth Map` drives 11 effects from a depth map, so the map decides whether the result looks
+`03 • Subject ▸ Depth Map` drives 11 effects from a depth map, so the map decides whether the result looks
 like a lens or like a smudge. There are now two engines, and the tab says which one produced the
 map you are looking at.
 
@@ -400,7 +404,7 @@ Against the fp32 Python reference on a real photograph, the browser path correla
 The monitor used to start with LYRC typography already burned onto the picture, and a saved
 preference kept it that way. Now the overlay starts **off**: footage plays clean until you ask
 for text. Two switches drive the same state — **`Lyrics on monitor: OFF / ON`** at the top of
-`02 • LYRC Typography`, and **`Lyrics: OFF`** in the viewer bar. The viewer badge reads
+`02 • Lyrics`, and **`Lyrics: OFF`** in the viewer bar. The viewer badge reads
 `LYRC: off` rather than naming a style that is not drawing. Saved preferences from before this
 change are ignored once (they all said "on"), so the new default actually takes effect.
 
@@ -413,7 +417,7 @@ the playhead position; dragging the scrubber seeks the video and refreshes the d
 
 ## Magic Mask (Resolve Free has no Magic Mask — so the panel builds one)
 
-`05 • Magic Mask` reproduces the Studio-only click-to-matte workflow and ships the result as
+`03 • Subject ▸ Magic Mask` reproduces the Studio-only click-to-matte workflow and ships the result as
 native Fusion nodes:
 
 | Step in the panel | What Resolve receives |
