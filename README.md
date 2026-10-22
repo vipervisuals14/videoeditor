@@ -494,6 +494,11 @@ with this site** (`vendor/asr/`). Nothing is uploaded, there is no API key, no a
 third-party call: turn the wifi off after the page loads and it still works.
 
 - ~41 MB of weights, cached by the browser after the first run, so the second visit is instant.
+- The runtime is an **ES module** (`vendor/asr/transformers.min.js`), imported by an inline
+  `<script type="module">` in `index.html` which hands it to `asr.js` through
+  `window.transformers` + a `pulse-asr-lib-ready` event. `asr.js` waits for that event, so a
+  click that lands before the module is parsed still works. Verified end to end by
+  `tools/asr_browser_check.mjs`, which runs the shipped bundle, wasm and weights.
 - Roughly **3× faster than real time** on CPU (measured: 11 s of speech in 3.3 s), so a 60-second
   talking head takes about 20 seconds.
 - Everything is transcribed up to **5 minutes** per pass, then it stops and says so.
@@ -543,6 +548,23 @@ for text. Two switches drive the same state — **`Lyrics on monitor: OFF / ON`*
 `02 • Lyrics`, and **`Lyrics: OFF`** in the viewer bar. The viewer badge reads
 `LYRC: off` rather than naming a style that is not drawing. Saved preferences from before this
 change are ignored once (they all said "on"), so the new default actually takes effect.
+
+## The panel does not scroll sideways
+
+A 4-up style grid used `repeat(4, 1fr)`, whose minimum is `auto`: a long style name made the grid
+wider than the 370 px rail. `overflow-y: auto` makes `overflow-x` compute to `auto` as well, so the
+whole left panel became a horizontally scrolled surface — content clipped on the left, the wheel
+scrolling the wrong axis, and focusing the first caption dragging it further sideways and leaving
+it there. Fixed at the root rather than with a patch:
+
+- every one of the 15 `repeat(n, 1fr)` grids is `minmax(0, 1fr)`, so a child can never force the
+  track wider than its container;
+- the style gallery reflows with `auto-fill minmax(88px, 1fr)` instead of clipping;
+- `.tab-pane.active` is `overflow-x: hidden`, and its children are `min-width: 0`;
+- `focus({ preventScroll: true })` for the auto-focused caption block.
+
+Guarded by two checks that read the stylesheet: no pane may scroll horizontally, and no
+`repeat(n, 1fr)` grid may exist.
 
 ## Sound: the clip is audible
 
@@ -599,6 +621,7 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 | **Live-depth worker** (protocol, transferable buffer, map range) | `node /tmp/domtest/liveworker.js` | pass |
 | Effect layers · Depth · Mask · Parameters (32) · Stack & shell (48) · **Lyrics auto-detect (53)** | `node tools/dom/{stack,params,depth,mask,lyrics}.mjs` | pass |
 | **Speech engine, real weights, known recording** | `node tools/asr_check.mjs` | 5/5 |
+| **Speech engine, the browser's own code path** (ES module + ort-web wasm + relative paths) | `node tools/asr_browser_check.mjs` | 8/8 |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified

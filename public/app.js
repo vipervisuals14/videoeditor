@@ -5165,11 +5165,17 @@ function rbSyncMemory() {
 }
 
 function rbImportFile(file) {
+  // the render bay is another door a clip can come in through; the caption tab
+  // decodes this file, so it has to know about it
   if (!file) return;
   const kind = /^image\//.test(file.type) || /\.(png|jpe?g|webp|tiff?|bmp|avif)$/i.test(file.name)
     ? 'image' : 'video';
   rbSyncMemory();
   rbLogLine(`Importing ${file.name} (${RENDER_ENGINE.formatBytes(file.size)}) …`);
+  if (kind === 'video') {
+    state.plateFile = file;      // the caption tab decodes this same file
+    state.lyricAnalysis = null;
+  }
 
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
