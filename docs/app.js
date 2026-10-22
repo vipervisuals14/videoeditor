@@ -497,6 +497,254 @@ const VFX_PRESETS = [
     desc: 'The lens racks between soft and sharp on a cycle you set: how deep the defocus goes, how often it racks, how long it holds sharp.',
     effectType: 'ed_focus_pull',
     accent: '#cbd5e1'
+  },
+
+  // ------------------------------------------------------------------
+  // THIRD SET — lens faults, print chemistry, long exposure, reframing.
+  // ------------------------------------------------------------------
+  {
+    id: 'opt_veiling_glare',
+    name: 'Veiling Glare',
+    category: 'Optical & Glass',
+    spec: 'Window Wash',
+    node: 'Glow + Level (Lift)',
+    desc: 'Light that never forms an image: a bright window throws a flat wash across the frame and lifts the blacks with it.',
+    effectType: 'opt_veiling_glare',
+    accent: '#fef3c7'
+  },
+  {
+    id: 'opt_lens_bulge',
+    name: 'Lens Barrel Bulge',
+    category: 'Optical & Glass',
+    spec: 'Wide Open',
+    node: 'LensDistort + Vignette',
+    desc: 'Wide-end glass bending the frame: the middle magnifies, the edges stay put, the corners fall off and fringe as they turn.',
+    effectType: 'opt_lens_distort',
+    accent: '#67e8f9'
+  },
+  {
+    id: 'lab_negative',
+    name: 'Camera Negative',
+    category: 'Film Lab & Grade',
+    spec: 'ECN-2',
+    node: 'Invert + ColorCorrect',
+    desc: 'The frame as an unprinted negative — inverted, with the orange base mask and print density sitting where they really sit.',
+    effectType: 'lab_negative',
+    accent: '#fb923c'
+  },
+  {
+    id: 'lab_technicolor',
+    name: 'Three-Strip Technicolor',
+    category: 'Film Lab & Grade',
+    spec: '3 Dye Layers',
+    node: 'ColorCorrect + ChannelBooleans',
+    desc: 'Separated dye layers, deep contrast and a warm bias, because the red strip always ran hot. Not a saturation slider.',
+    effectType: 'lab_technicolor',
+    accent: '#f43f5e'
+  },
+  {
+    id: 'lab_print_screen',
+    name: 'Print Halftone Screen',
+    category: 'Film Lab & Grade',
+    spec: 'Angled Screen',
+    node: 'Halftone + Merge (Multiply)',
+    desc: 'A halftone dot screen laid over the picture at a real press angle — dot pitch, screen angle, dot gain and ink strength on four dials.',
+    effectType: 'lab_print_screen',
+    accent: '#a3a3a3'
+  },
+  {
+    id: 'time_long_exposure',
+    name: 'Long Exposure',
+    category: 'Shutter & Time',
+    spec: 'Accumulated',
+    node: 'Feedback + Merge (Add)',
+    desc: 'True accumulation: every frame is added to a buffer that fades, so movement paints a trail instead of leaving one ghost.',
+    effectType: 'time_light_trail',
+    accent: '#fde047'
+  },
+  {
+    id: 'time_freeze_hold',
+    name: 'Freeze and Push',
+    category: 'Shutter & Time',
+    spec: 'Hold Frame',
+    node: 'FreezeFrame + Transform',
+    desc: 'The frame holds for a set number of frames with a slow push into it, then releases. Editorial punctuation, no jitter.',
+    effectType: 'time_freeze_push',
+    accent: '#e2e8f0'
+  },
+  {
+    id: 'cam_truck_left',
+    name: 'Dolly Truck',
+    category: 'Camera Weight',
+    spec: 'Lateral Move',
+    node: 'Transform + EaseCurve',
+    desc: 'A lateral dolly move, not a pan: the frame slides sideways while the lens keeps pointing the same way.',
+    effectType: 'cam_truck',
+    accent: '#38bdf8'
+  },
+  {
+    id: 'cam_dutch_roll',
+    name: 'Dutch Roll Pulse',
+    category: 'Camera Weight',
+    spec: 'Beat Locked',
+    node: 'Transform (Rotate) + EaseCurve',
+    desc: 'A dutch roll that snaps in on the beat and settles back — attack and settle are separate controls, so it never wobbles.',
+    effectType: 'cam_roll_pulse',
+    accent: '#fbbf24'
+  },
+  {
+    id: 'depth_field_falloff',
+    name: 'Depth of Field',
+    category: 'Depth & Subject',
+    spec: 'Focus Zone',
+    node: 'DepthMap + Defocus',
+    desc: 'A real defocus band: the frame is blurred, then masked back in around the focus zone. Focus size, blur and falloff are separate.',
+    effectType: 'depth_dof',
+    accent: '#c4b5fd'
+  },
+  {
+    id: 'depth_split_grade',
+    name: 'Background Split Grade',
+    category: 'Depth & Subject',
+    spec: 'Subject Isolated',
+    node: 'DepthMap + ColorCorrect',
+    desc: 'The subject keeps its own grade while the background is pushed to a hue you choose. Zone size, hue and push strength are all on dials.',
+    effectType: 'depth_grade_split',
+    accent: '#f0abfc'
+  },
+  {
+    id: 'ed_punch_in_reframe',
+    name: 'Punch-In Reframe',
+    category: 'Editorial Polish',
+    spec: 'Reframe',
+    node: 'Transform + Crop',
+    desc: 'Punch into the shot and pan within it, the way an editor reframes instead of re-cutting. Zoom and both pan axes on their own dials.',
+    effectType: 'ed_punch_in',
+    accent: '#94a3b8'
+  },
+
+  // ------------------------------------------------------------------
+  // FOURTH SET — the last twelve, all on the same rule: named dials.
+  // ------------------------------------------------------------------
+  {
+    id: 'opt_bokeh_rings',
+    name: 'Bokeh Rings',
+    category: 'Optical & Glass',
+    spec: 'Wide Open',
+    node: 'Bokeh + Glow',
+    desc: 'Out-of-focus highlights are rings with a bright rim, not soft blobs. Size, count, colour and rim glow all move independently.',
+    effectType: 'opt_bokeh_ring',
+    accent: '#fcd34d'
+  },
+  {
+    id: 'opt_ghost_reflection',
+    name: 'Internal Ghost',
+    category: 'Optical & Glass',
+    spec: 'Element Bounce',
+    node: 'Transform (Mirror) + Screen',
+    desc: 'The second reflection a big front element throws back down the barrel: offset, scaled, sometimes mirrored, always faint.',
+    effectType: 'opt_ghost_double',
+    accent: '#bae6fd'
+  },
+  {
+    id: 'lab_sabattier',
+    name: 'Solarised Print',
+    category: 'Film Lab & Grade',
+    spec: 'Sabattier',
+    node: 'Invert + ColorCurves',
+    desc: 'The image turns over partway up the curve, so the brightest areas invert first and a halo forms along the boundary.',
+    effectType: 'lab_solarise',
+    accent: '#e879f9'
+  },
+  {
+    id: 'lab_cyanotype',
+    name: 'Cyanotype Print',
+    category: 'Film Lab & Grade',
+    spec: 'Iron Blue',
+    node: 'ChannelMixer + Merge',
+    desc: 'Iron-blue print chemistry on warm paper — density, paper warmth and print contrast, not a blue colour filter.',
+    effectType: 'lab_cyanotype',
+    accent: '#1d4ed8'
+  },
+  {
+    id: 'time_strobe',
+    name: 'Strobe Shutter',
+    category: 'Shutter & Time',
+    spec: 'Chopped Light',
+    node: 'TimeStretcher + Merge',
+    desc: 'The shutter opens and closes at a rate you set, with afterglow so the last lit frame survives instead of snapping to black.',
+    effectType: 'time_strobe',
+    accent: '#fef08a'
+  },
+  {
+    id: 'time_slit_scan',
+    name: 'Slit Scan Curtain',
+    category: 'Shutter & Time',
+    spec: 'Column Time',
+    node: 'SlitScan + Cache',
+    desc: 'Each column is sampled from a different moment, so movement stretches into a temporal curtain. Slice width and spread are yours.',
+    effectType: 'time_slit',
+    accent: '#f59e0b'
+  },
+  {
+    id: 'cam_vertigo_zoom',
+    name: 'Dolly Zoom',
+    category: 'Camera Weight',
+    spec: 'Vertigo',
+    node: 'Transform + LensDistort',
+    desc: 'The vertigo move: the lens pulls while the frame widens, so the subject holds its size and the walls stretch instead.',
+    effectType: 'cam_vertigo',
+    accent: '#22d3ee'
+  },
+  {
+    id: 'cam_push_drift_slow',
+    name: 'Slow Push Drift',
+    category: 'Camera Weight',
+    spec: 'Perpetual Push',
+    node: 'Transform + EaseCurve',
+    desc: 'A slow push that never quite stops, with a drift on the other axis so it reads as a camera move and not a zoom button.',
+    effectType: 'cam_push_drift',
+    accent: '#a5b4fc'
+  },
+  {
+    id: 'depth_parallax_push',
+    name: 'Parallax Push',
+    category: 'Depth & Subject',
+    spec: 'Subject Held',
+    node: 'DepthMap + Transform',
+    desc: 'The background moves and the subject does not — that gap is what reads as depth. Zone size and feather keep the seam soft.',
+    effectType: 'depth_push_pull',
+    accent: '#f472b6'
+  },
+  {
+    id: 'depth_shadow_fall',
+    name: 'Shadow Falloff',
+    category: 'Depth & Subject',
+    spec: 'Distance Shade',
+    node: 'DepthMap + Merge (Multiply)',
+    desc: 'The background sinks into shadow while the subject stays lit. Density, clear zone and shadow colour are one dial each.',
+    effectType: 'depth_shadow_fall',
+    accent: '#818cf8'
+  },
+  {
+    id: 'ed_frame_guides',
+    name: 'Viewfinder Guides',
+    category: 'Editorial Polish',
+    spec: 'Guides + Ticks',
+    node: 'Text (Overlay) + Merge',
+    desc: 'Thin guide lines, a centre cross and corner ticks, the way a viewfinder overlays them. Inset, weight, opacity and marks separate.',
+    effectType: 'ed_frame_guides',
+    accent: '#e5e7eb'
+  },
+  {
+    id: 'ed_square_crop',
+    name: 'Square Crop Matte',
+    category: 'Editorial Polish',
+    spec: '1:1 Feed',
+    node: 'Crop + Fade',
+    desc: 'The opposite of a letterbox: square framing with the sides matted off, feathered at the edge — what a 1:1 feed really looks like.',
+    effectType: 'ed_square_matte',
+    accent: '#cbd5e1'
   }
 ];
 
@@ -3942,6 +4190,30 @@ function composeExportFrame(ctx, w, h, t) {
     const settleDrift = fxv('settle', 40) / 100;
     scale = 1.01 + Math.pow(onBeatPulse, 1 + (1 - ease) * 3) * 0.18 * punch * intensity;
     dy = Math.sin(t * 0.35) * 2.5 * settleDrift * intensity * scaleFactor;
+  } else if (effectType === 'cam_truck') {
+    const dist = fxv('distance', 45) / 100;
+    const rate = Math.max(0.1, fxv('rate', 8) / 10);
+    dx = Math.sin(t * rate) * w * 0.05 * dist * intensity;
+    scale = Math.max(1, fxv('zoom', 108) / 100);
+  } else if (effectType === 'cam_roll_pulse') {
+    const amt = fxv('roll', 45) / 100;
+    const attack = fxv('attack', 20) / 100;
+    const settleP = fxv('settle', 55) / 100;
+    const env = Math.pow(onBeatPulse, 1 + attack * 3) * (1 - settleP * 0.6);
+    rot = env * amt * 0.09 * intensity;
+    scale = 1.02;
+  } else if (effectType === 'ed_punch_in') {
+    const zoomP = Math.max(1, fxv('zoom', 118) / 100);
+    scale = 1 + (zoomP - 1) * Math.min(1, intensity);
+    dx = (fxv('panX', 0) / 100) * w * 0.25;
+    dy = (fxv('panY', 0) / 100) * h * 0.25;
+  } else if (effectType === 'cam_push_drift') {
+    const pushP = fxv('push', 45) / 100;
+    const rateP = Math.max(0.1, fxv('rate', 6) / 10);
+    const driftP = fxv('drift', 30) / 100;
+    const cycle = 0.5 - 0.5 * Math.cos(t * rateP);
+    scale = 1 + pushP * 0.12 * cycle * intensity;
+    dx = Math.sin(t * rateP * 0.5) * w * 0.02 * driftP * intensity;
   }
 
   ctx.save();
@@ -8394,6 +8666,37 @@ function drawMonitorFrame(t) {
     const hit = Math.pow(onBeatPulse, 1 + (1 - ease) * 3) * 0.18 * punch * intensity;
     scale = 1.01 + hit;
     dy = Math.sin(t * 0.35) * 2.5 * settleDrift * intensity;
+  } else if (effectType === 'cam_truck') {
+    // A truck is a lateral move on a dolly, not a pan: the frame slides
+    // sideways while the lens keeps pointing the same way.
+    const dist = fxv('distance', 45) / 100;
+    const rate = Math.max(0.1, fxv('rate', 8) / 10);
+    dx = Math.sin(t * rate) * w * 0.05 * dist * intensity;
+    scale = Math.max(1, fxv('zoom', 108) / 100);
+  } else if (effectType === 'cam_roll_pulse') {
+    // Dutch roll that snaps in on the beat and settles back.
+    const amt = fxv('roll', 45) / 100;
+    const attack = fxv('attack', 20) / 100;
+    const settleP = fxv('settle', 55) / 100;
+    const env = Math.pow(onBeatPulse, 1 + attack * 3) * (1 - settleP * 0.6);
+    rot = env * amt * 0.09 * intensity;
+    scale = 1.02;
+  } else if (effectType === 'ed_punch_in') {
+    // Editorial punch-in: a straight scale about the frame centre plus a pan,
+    // which is what an editor does instead of re-cutting the shot.
+    const zoomP = Math.max(1, fxv('zoom', 118) / 100);
+    scale = 1 + (zoomP - 1) * Math.min(1, intensity);
+    dx = (fxv('panX', 0) / 100) * w * 0.25;
+    dy = (fxv('panY', 0) / 100) * h * 0.25;
+  } else if (effectType === 'cam_push_drift') {
+    // A slow push that never quite stops, with a drift on the other axis so it
+    // does not look like a zoom button.
+    const pushP = fxv('push', 45) / 100;
+    const rateP = Math.max(0.1, fxv('rate', 6) / 10);
+    const driftP = fxv('drift', 30) / 100;
+    const cycle = 0.5 - 0.5 * Math.cos(t * rateP);
+    scale = 1 + pushP * 0.12 * cycle * intensity;
+    dx = Math.sin(t * rateP * 0.5) * w * 0.02 * driftP * intensity;
   }
 
   ctx.save();
@@ -8863,6 +9166,146 @@ const FX_PARAM_DEFS = {
     { k: 'width', label: 'Rim width', min: 1, max: 24, def: 6, unit: 'px' },
     { k: 'glow', label: 'Rim glow', min: 0, max: 100, def: 55, unit: '%' },
     { k: 'tint', label: 'Rim colour', min: 0, max: 100, def: 45, unit: '' }
+  ],
+
+  // ---- optical, third set
+  opt_veiling_glare: [
+    { k: 'threshold', label: 'Glare threshold', min: 20, max: 100, def: 60, unit: '%' },
+    { k: 'spread', label: 'Glare spread', min: 20, max: 100, def: 60, unit: '%' },
+    { k: 'lift', label: 'Black lift', min: 0, max: 100, def: 30, unit: '%' },
+    { k: 'warmth', label: 'Glare colour', min: 0, max: 100, def: 45, unit: '' }
+  ],
+  opt_lens_distort: [
+    { k: 'barrel', label: 'Barrel amount', min: 0, max: 60, def: 18, unit: '' },
+    { k: 'edge', label: 'Corner falloff', min: 0, max: 100, def: 35, unit: '%' },
+    { k: 'chroma', label: 'Edge colour', min: 0, max: 100, def: 20, unit: '%' }
+  ],
+
+  // ---- film lab, third set
+  lab_negative: [
+    { k: 'mask', label: 'Orange mask', min: 0, max: 100, def: 65, unit: '%' },
+    { k: 'contrast', label: 'Contrast', min: 0, max: 100, def: 40, unit: '%' },
+    { k: 'density', label: 'Density', min: 0, max: 100, def: 30, unit: '%' }
+  ],
+  lab_technicolor: [
+    { k: 'saturation', label: 'Dye saturation', min: 0, max: 100, def: 75, unit: '%' },
+    { k: 'warmth', label: 'Warm bias', min: -100, max: 100, def: 35, unit: '' },
+    { k: 'contrast', label: 'Contrast', min: 0, max: 100, def: 45, unit: '%' },
+    { k: 'threeStrip', label: 'Three-strip split', min: 0, max: 100, def: 55, unit: '%' }
+  ],
+  lab_print_screen: [
+    { k: 'cell', label: 'Dot pitch', min: 3, max: 24, def: 7, unit: 'px' },
+    { k: 'angle', label: 'Screen angle', min: 0, max: 90, def: 45, unit: '°' },
+    { k: 'gain', label: 'Dot gain', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'ink', label: 'Ink strength', min: 0, max: 100, def: 45, unit: '%' }
+  ],
+
+  // ---- shutter / time, third set
+  time_light_trail: [
+    { k: 'duration', label: 'Trail length', min: 1, max: 24, def: 10, unit: 'fr' },
+    { k: 'decay', label: 'Trail decay', min: 0, max: 100, def: 45, unit: '%' },
+    { k: 'gain', label: 'Exposure gain', min: 0, max: 100, def: 55, unit: '%' }
+  ],
+  time_freeze_push: [
+    { k: 'hold', label: 'Hold frames', min: 2, max: 48, def: 12, unit: 'fr' },
+    { k: 'push', label: 'Push in', min: 100, max: 125, def: 106, unit: '%' },
+    { k: 'blend', label: 'Blend to live', min: 0, max: 100, def: 20, unit: '%' }
+  ],
+
+  // ---- camera, third set
+  cam_truck: [
+    { k: 'distance', label: 'Truck distance', min: 0, max: 100, def: 45, unit: '%' },
+    { k: 'rate', label: 'Truck rate', min: 1, max: 30, def: 8, unit: '' },
+    { k: 'zoom', label: 'Cover zoom', min: 100, max: 118, def: 108, unit: '%' }
+  ],
+  cam_roll_pulse: [
+    { k: 'roll', label: 'Roll amount', min: 0, max: 100, def: 45, unit: '%' },
+    { k: 'attack', label: 'Attack', min: 0, max: 100, def: 20, unit: '%' },
+    { k: 'settle', label: 'Settle', min: 0, max: 100, def: 55, unit: '%' }
+  ],
+
+  // ---- depth, third set
+  depth_dof: [
+    { k: 'focus', label: 'Focus zone', min: 5, max: 70, def: 28, unit: '%' },
+    { k: 'blur', label: 'Defocus blur', min: 0, max: 16, def: 6, unit: 'px' },
+    { k: 'falloff', label: 'Falloff band', min: 0, max: 60, def: 22, unit: '%' }
+  ],
+  depth_grade_split: [
+    { k: 'centre', label: 'Subject zone', min: 10, max: 60, def: 30, unit: '%' },
+    { k: 'background', label: 'Background push', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'tint', label: 'Background hue', min: 0, max: 360, def: 205, unit: '°' }
+  ],
+
+  // ---- editorial, third set
+  ed_punch_in: [
+    { k: 'zoom', label: 'Punch-in zoom', min: 100, max: 145, def: 118, unit: '%' },
+    { k: 'panX', label: 'Pan across', min: -30, max: 30, def: 0, unit: '%' },
+    { k: 'panY', label: 'Pan up / down', min: -30, max: 30, def: 0, unit: '%' }
+  ],
+
+  // ---- fourth set
+  opt_bokeh_ring: [
+    { k: 'size', label: 'Bokeh size', min: 4, max: 40, def: 16, unit: '%' },
+    { k: 'count', label: 'Bokeh count', min: 3, max: 14, def: 7, unit: '' },
+    { k: 'warmth', label: 'Bokeh colour', min: 0, max: 100, def: 50, unit: '' },
+    { k: 'glow', label: 'Ring glow', min: 0, max: 100, def: 45, unit: '%' }
+  ],
+  opt_ghost_double: [
+    { k: 'offset', label: 'Ghost offset', min: 0, max: 40, def: 14, unit: '%' },
+    { k: 'scale', label: 'Ghost scale', min: 80, max: 130, def: 104, unit: '%' },
+    { k: 'opacity', label: 'Ghost opacity', min: 0, max: 100, def: 40, unit: '%' },
+    { k: 'flip', label: 'Mirror ghost', min: 0, max: 100, def: 50, unit: '' }
+  ],
+  lab_solarise: [
+    { k: 'amount', label: 'Solarise amount', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'pivot', label: 'Pivot', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'tone', label: 'Tone shift', min: -100, max: 100, def: 20, unit: '' }
+  ],
+  lab_cyanotype: [
+    { k: 'density', label: 'Cyan density', min: 0, max: 100, def: 65, unit: '%' },
+    { k: 'paper', label: 'Paper warmth', min: 0, max: 100, def: 35, unit: '' },
+    { k: 'contrast', label: 'Print contrast', min: 0, max: 100, def: 45, unit: '%' }
+  ],
+  time_strobe: [
+    { k: 'rate', label: 'Strobe rate', min: 1, max: 24, def: 8, unit: 'Hz' },
+    { k: 'duty', label: 'Open shutter', min: 5, max: 80, def: 40, unit: '%' },
+    { k: 'trail', label: 'Afterglow', min: 0, max: 100, def: 30, unit: '%' }
+  ],
+  time_slit: [
+    { k: 'slit', label: 'Slice width', min: 2, max: 48, def: 12, unit: 'px' },
+    { k: 'spread', label: 'Frame spread', min: 1, max: 24, def: 10, unit: 'fr' },
+    { k: 'drift', label: 'Drift', min: -100, max: 100, def: 0, unit: '%' }
+  ],
+  cam_vertigo: [
+    { k: 'amount', label: 'Dolly-zoom amount', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'rate', label: 'Zoom rate', min: 1, max: 20, def: 5, unit: '' },
+    { k: 'edge', label: 'Edge stretch', min: 0, max: 100, def: 45, unit: '%' }
+  ],
+  cam_push_drift: [
+    { k: 'push', label: 'Push in', min: 0, max: 100, def: 45, unit: '%' },
+    { k: 'rate', label: 'Push rate', min: 1, max: 30, def: 6, unit: '' },
+    { k: 'drift', label: 'Drift', min: 0, max: 100, def: 30, unit: '%' }
+  ],
+  depth_push_pull: [
+    { k: 'push', label: 'Background push', min: 0, max: 30, def: 12, unit: '%' },
+    { k: 'zone', label: 'Subject zone', min: 10, max: 60, def: 28, unit: '%' },
+    { k: 'feather', label: 'Zone feather', min: 0, max: 60, def: 20, unit: '%' }
+  ],
+  depth_shadow_fall: [
+    { k: 'density', label: 'Shadow density', min: 0, max: 100, def: 45, unit: '%' },
+    { k: 'zone', label: 'Clear zone', min: 5, max: 60, def: 25, unit: '%' },
+    { k: 'tint', label: 'Shadow colour', min: 0, max: 100, def: 40, unit: '' }
+  ],
+  ed_frame_guides: [
+    { k: 'inset', label: 'Guide inset', min: 2, max: 20, def: 8, unit: '%' },
+    { k: 'weight', label: 'Line weight', min: 0.5, max: 4, def: 1.2, unit: 'px' },
+    { k: 'opacity', label: 'Guide opacity', min: 0, max: 100, def: 55, unit: '%' },
+    { k: 'marks', label: 'Corner marks', min: 0, max: 100, def: 40, unit: '%' }
+  ],
+  ed_square_matte: [
+    { k: 'ratio', label: 'Square ratio', min: 100, max: 200, def: 100, unit: '%' },
+    { k: 'feather', label: 'Edge feather', min: 0, max: 100, def: 20, unit: '%' },
+    { k: 'shade', label: 'Matte density', min: 0, max: 100, def: 100, unit: '%' }
   ]
 };
 
@@ -9578,7 +10021,634 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
     }
   }
 
+  // =====================================================================
+  // THIRD SET — lens faults, print chemistry and long exposure.
+  // =====================================================================
+
+  // VEILING GLARE — light that never forms an image: a bright window throws
+  // a flat wash over the whole frame and lifts the blacks with it.
+  if (effectType === 'opt_veiling_glare') {
+    const thr = pick('threshold', 60) / 100;
+    const spread = pick('spread', 60) / 100;
+    const lift = pick('lift', 30) / 100;
+    const warm = pick('warmth', 45) / 100;
+    const radius = Math.max(w, h) * (0.25 + spread * 0.6);
+    ctx.save();
+    const g = ctx.createRadialGradient(w * 0.5, h * 0.42, radius * 0.05, w * 0.5, h * 0.42, radius);
+    g.addColorStop(0, `rgba(${Math.round(255)}, ${Math.round(245 - warm * 35)}, ${Math.round(230 - warm * 70)}, ${0.34 * thr * intensity})`);
+    g.addColorStop(0.55, `rgba(255, 250, 244, ${0.12 * thr * intensity})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    // the lift is what makes it read as flare rather than a glow sticker
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = `rgba(${Math.round(120 + warm * 40)}, ${Math.round(118 + warm * 20)}, ${Math.round(112 - warm * 20)}, ${lift * 0.22 * intensity})`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // LENS DISTORTION — a real bulge: each column samples a narrower slice of
+  // the frame the closer it sits to the centre, so the middle magnifies and
+  // the edges stay. Corners fall off, and the glass fringes as it turns.
+  if (effectType === 'opt_lens_distort') {
+    const k = Math.max(0, pick('barrel', 18)) / 100;
+    const edge = pick('edge', 35) / 100;
+    const chroma = pick('chroma', 20) / 100;
+    if (k > 0.002) fxStripWarp(ctx, w, h, k);
+    if (chroma > 0.02) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.36, w / 2, h / 2, Math.max(w, h) * 0.7);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(0.72, `rgba(90, 170, 255, ${0.10 * chroma * intensity})`);
+      g.addColorStop(1, `rgba(255, 120, 90, ${0.16 * chroma * intensity})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+    if (edge > 0.02) {
+      ctx.save();
+      const vig = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.42, w / 2, h / 2, Math.max(w, h) * 0.72);
+      vig.addColorStop(0, 'rgba(0,0,0,0)');
+      vig.addColorStop(1, `rgba(4, 6, 8, ${0.5 * edge * intensity})`);
+      ctx.fillStyle = vig;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+  }
+
+  // FILM NEGATIVE — the frame as an unprinted negative, orange base and all.
+  if (effectType === 'lab_negative') {
+    const mask = pick('mask', 65) / 100;
+    const contrast = pick('contrast', 40) / 100;
+    const density = pick('density', 30) / 100;
+    ctx.save();
+    ctx.globalCompositeOperation = 'difference';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    // the orange mask is not a tint, it sits in the base: multiply it in
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = mask * intensity;
+    ctx.fillStyle = 'rgb(232, 158, 92)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = contrast * 0.5 * intensity;
+    ctx.fillStyle = '#0b0d10';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = density * 0.4 * intensity;
+    ctx.fillStyle = '#b9bec4';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // THREE-STRIP TECHNICOLOR — separated dyes, deep contrast, a warm bias
+  // because the red strip always ran hot.
+  if (effectType === 'lab_technicolor') {
+    const sat = pick('saturation', 75) / 100;
+    const warmth = pick('warmth', 35) / 100;
+    const contrast = pick('contrast', 45) / 100;
+    const strip = pick('threeStrip', 55) / 100;
+    ctx.save();
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.globalAlpha = Math.min(1, 0.5 + sat) * intensity;
+    ctx.fillStyle = 'hsl(0, 100%, 50%)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = 1;
+    if (Math.abs(warmth) > 0.02) {
+      ctx.globalCompositeOperation = 'overlay';
+      ctx.globalAlpha = Math.abs(warmth) * 0.4 * intensity;
+      ctx.fillStyle = warmth > 0 ? 'rgb(255, 168, 96)' : 'rgb(96, 176, 255)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalAlpha = 1;
+    }
+    if (strip > 0.02) {
+      // the three dye layers land slightly apart: a separation, not a ghost
+      const off = strip * 3 * (w / 640);
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = strip * 0.16 * intensity;
+      ctx.drawImage(ctx.canvas, -off, 0, w, h);
+      ctx.drawImage(ctx.canvas, off, 0, w, h);
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = contrast * 0.45 * intensity;
+    ctx.fillStyle = '#0c0f12';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // PRINT SCREEN — a halftone dot screen laid over the picture, angled like a
+  // real press. Dot pitch, angle, dot gain and ink strength are all separate.
+  if (effectType === 'lab_print_screen') {
+    const cell = Math.max(3, Math.round(pick('cell', 7)));
+    const angle = (pick('angle', 45) * Math.PI) / 180;
+    const gain = pick('gain', 55) / 100;
+    const ink = pick('ink', 45) / 100;
+    const tile = fxDotTile(cell, gain);
+    if (tile) {
+      const pat = ctx.createPattern(tile, 'repeat');
+      if (pat) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.globalAlpha = Math.min(1, ink * 1.4) * Math.min(1, intensity);
+        ctx.translate(w / 2, h / 2);
+        ctx.rotate(angle);
+        ctx.translate(-w / 2, -h / 2);
+        ctx.fillStyle = pat;
+        ctx.fillRect(-w, -h, w * 3, h * 3);
+        ctx.restore();
+      }
+    }
+  }
+
+  // LONG EXPOSURE — real accumulation: each frame is added to a buffer that
+  // fades, so motion paints a trail instead of leaving one ghost.
+  if (effectType === 'time_light_trail') {
+    const duration = Math.max(1, Math.round(pick('duration', 10)));
+    const decay = pick('decay', 45) / 100;
+    const gain = pick('gain', 55) / 100;
+    const fade = Math.pow(0.02, 1 / Math.max(1, duration * (0.4 + decay * 1.2)));
+    if (!fxTrailCanvas || fxTrailCanvas.width !== w || fxTrailCanvas.height !== h) {
+      fxTrailCanvas = document.createElement('canvas');
+      fxTrailCanvas.width = w;
+      fxTrailCanvas.height = h;
+      fxTrailCtx = fxTrailCanvas.getContext('2d');
+      if (fxTrailCtx) fxTrailCtx.drawImage(ctx.canvas, 0, 0);
+    }
+    if (fxTrailCtx) {
+      // fade what is already there, then add this frame on top of it
+      fxTrailCtx.save();
+      fxTrailCtx.globalCompositeOperation = 'source-over';
+      fxTrailCtx.fillStyle = `rgba(0, 0, 0, ${1 - fade})`;
+      fxTrailCtx.fillRect(0, 0, w, h);
+      fxTrailCtx.globalCompositeOperation = 'lighter';
+      fxTrailCtx.globalAlpha = Math.max(0.15, gain);
+      fxTrailCtx.drawImage(ctx.canvas, 0, 0);
+      fxTrailCtx.restore();
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, intensity);
+      ctx.drawImage(fxTrailCanvas, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  // FREEZE + PUSH — the frame holds for a set number of frames with a slow
+  // push, then releases. Editorial punctuation, no jitter.
+  if (effectType === 'time_freeze_push') {
+    const hold = Math.max(2, Math.round(pick('hold', 12)));
+    const push = Math.max(1, pick('push', 106) / 100);
+    const blend = pick('blend', 20) / 100;
+    fxFreezeTick += 1;
+    if (!fxFreezeCanvas || fxFreezeCanvas.width !== w || fxFreezeCanvas.height !== h || fxFreezeTick > hold) {
+      if (!fxFreezeCanvas) fxFreezeCanvas = document.createElement('canvas');
+      fxFreezeCanvas.width = w;
+      fxFreezeCanvas.height = h;
+      const fctx = fxFreezeCanvas.getContext('2d');
+      if (fctx) fctx.drawImage(ctx.canvas, 0, 0);
+      fxFreezeTick = 0;
+      fxFreezeHeld = 0;
+    }
+    if (fxFreezeCanvas) {
+      fxFreezeHeld = Math.min(hold, fxFreezeHeld + 1);
+      const progress = fxFreezeHeld / hold;
+      const s = 1 + (push - 1) * progress;
+      const dw = w * s;
+      const dh = h * s;
+      ctx.save();
+      ctx.globalAlpha = (1 - blend) * Math.min(1, intensity);
+      ctx.drawImage(fxFreezeCanvas, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      ctx.restore();
+    }
+  }
+
+  // DEPTH OF FIELD — a real defocus band: the frame is blurred, then masked
+  // back in around the focus zone. Focus, blur and falloff are separate.
+  if (effectType === 'depth_dof') {
+    const focus = pick('focus', 28) / 100;
+    const blurPx = pick('blur', 6) * (w / 640);
+    const falloff = pick('falloff', 22) / 100;
+    if (blurPx > 0.2) {
+      if (!fxDofCanvas || fxDofCanvas.width !== w || fxDofCanvas.height !== h) {
+        fxDofCanvas = document.createElement('canvas');
+        fxDofCanvas.width = w;
+        fxDofCanvas.height = h;
+        fxDofCtx = fxDofCanvas.getContext('2d');
+      }
+      if (fxDofCtx) {
+        fxDofCtx.setTransform(1, 0, 0, 1, 0, 0);
+        fxDofCtx.clearRect(0, 0, w, h);
+        fxDofCtx.filter = `blur(${blurPx.toFixed(2)}px)`;
+        fxDofCtx.drawImage(ctx.canvas, 0, 0);
+        fxDofCtx.filter = 'none';
+        // keep the blurred copy only outside the focus zone
+        const inner = Math.min(w, h) * focus;
+        const outer = inner + Math.min(w, h) * (0.05 + falloff);
+        const m = fxDofCtx.createRadialGradient(w / 2, h * 0.5, inner, w / 2, h * 0.5, outer);
+        m.addColorStop(0, 'rgba(0,0,0,0)');
+        m.addColorStop(1, 'rgba(0,0,0,1)');
+        fxDofCtx.globalCompositeOperation = 'destination-in';
+        fxDofCtx.fillStyle = m;
+        fxDofCtx.fillRect(0, 0, w, h);
+        fxDofCtx.globalCompositeOperation = 'source-over';
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, intensity);
+        ctx.drawImage(fxDofCanvas, 0, 0);
+        ctx.restore();
+      }
+    }
+  }
+
+  // SPLIT GRADE BY DEPTH — the background pushed to its own hue, the subject
+  // left alone. Tint strength and hue are one thing; the zone is another.
+  if (effectType === 'depth_grade_split') {
+    const centre = pick('centre', 30) / 100;
+    const push = pick('background', 55) / 100;
+    const hue = pick('tint', 205);
+    if (push > 0.02) {
+      if (!fxGradeCanvas || fxGradeCanvas.width !== w || fxGradeCanvas.height !== h) {
+        fxGradeCanvas = document.createElement('canvas');
+        fxGradeCanvas.width = w;
+        fxGradeCanvas.height = h;
+        fxGradeCtx = fxGradeCanvas.getContext('2d');
+      }
+      if (fxGradeCtx) {
+        fxGradeCtx.setTransform(1, 0, 0, 1, 0, 0);
+        fxGradeCtx.globalCompositeOperation = 'source-over';
+        fxGradeCtx.clearRect(0, 0, w, h);
+        fxGradeCtx.fillStyle = `hsl(${hue}, 70%, 50%)`;
+        fxGradeCtx.fillRect(0, 0, w, h);
+        const inner = Math.min(w, h) * centre;
+        const outer = inner + Math.min(w, h) * 0.3;
+        const m = fxGradeCtx.createRadialGradient(w / 2, h * 0.5, inner, w / 2, h * 0.5, outer);
+        m.addColorStop(0, 'rgba(0,0,0,0)');
+        m.addColorStop(1, 'rgba(0,0,0,1)');
+        fxGradeCtx.globalCompositeOperation = 'destination-in';
+        fxGradeCtx.fillStyle = m;
+        fxGradeCtx.fillRect(0, 0, w, h);
+        fxGradeCtx.globalCompositeOperation = 'source-over';
+        ctx.save();
+        ctx.globalCompositeOperation = 'soft-light';
+        ctx.globalAlpha = push * Math.min(1, intensity);
+        ctx.drawImage(fxGradeCanvas, 0, 0);
+        ctx.restore();
+      }
+    }
+  }
+
+  // =====================================================================
+  // FOURTH SET — bokeh, ghosts, print chemistry, strobe, strobe-free
+  // reframing. Every one of these reads its own rack.
+  // =====================================================================
+
+  // BOKEH — out-of-focus highlights are rings with a bright rim, not soft
+  // blobs. Size, count, colour and rim glow are separate.
+  if (effectType === 'opt_bokeh_ring') {
+    const size = pick('size', 16) / 100;
+    const count = Math.max(1, Math.round(pick('count', 7)));
+    const warm = pick('warmth', 50) / 100;
+    const glow = pick('glow', 45) / 100;
+    let seed = 9127;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < count; i++) {
+      const cx = (0.1 + rnd() * 0.8) * w;
+      const cy = (0.1 + rnd() * 0.8) * h;
+      const rad = Math.min(w, h) * size * (0.5 + rnd() * 0.8);
+      const g = ctx.createRadialGradient(cx, cy, rad * 0.62, cx, cy, rad);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(0.72, `rgba(${Math.round(255)}, ${Math.round(210 - warm * 60)}, ${Math.round(150 + warm * 40)}, ${0.10 * glow * intensity})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+    }
+    ctx.restore();
+  }
+
+  // INTERNAL GHOST — the second reflection a big element throws back down the
+  // barrel: offset, scaled, sometimes mirrored, always faint.
+  if (effectType === 'opt_ghost_double') {
+    const off = (pick('offset', 14) / 100) * w * 0.5;
+    const sc = pick('scale', 104) / 100;
+    const op = pick('opacity', 40) / 100;
+    const flip = pick('flip', 50) / 100;
+    const snap = fxCopyFrame(ctx, w, h);
+    if (snap) {
+      const dw = w * sc;
+      const dh = h * sc;
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = op * 0.55 * Math.min(1, intensity);
+      if (flip > 0.5) {
+        ctx.translate(w, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(snap, (w - dw) / 2 + off, (h - dh) / 2, dw, dh);
+      ctx.restore();
+    }
+  }
+
+  // SOLARISATION — Sabattier: the image turns over partway up the curve, so
+  // the brightest areas invert first and a halo forms at the boundary.
+  if (effectType === 'lab_solarise') {
+    const amount = pick('amount', 55) / 100;
+    const pivot = pick('pivot', 55) / 100;
+    const toneShift = pick('tone', 20) / 100;
+    ctx.save();
+    ctx.globalCompositeOperation = 'difference';
+    ctx.globalAlpha = amount * Math.min(1, intensity);
+    ctx.fillStyle = `rgb(${Math.round(pivot * 255)}, ${Math.round(pivot * 255)}, ${Math.round(pivot * 255)})`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = Math.abs(toneShift) * 0.35 * intensity;
+    ctx.fillStyle = toneShift > 0 ? 'rgb(255, 196, 120)' : 'rgb(110, 170, 255)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // CYANOTYPE — iron-blue print chemistry on warm paper, not a blue filter.
+  if (effectType === 'lab_cyanotype') {
+    const density = pick('density', 65) / 100;
+    const paper = pick('paper', 35) / 100;
+    const contrast = pick('contrast', 45) / 100;
+    ctx.save();
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.fillStyle = 'hsl(0, 0%, 50%)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = density * Math.min(1, intensity);
+    ctx.fillStyle = 'rgb(28, 74, 128)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = paper * 0.5 * intensity;
+    ctx.fillStyle = 'rgb(232, 214, 178)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = contrast * 0.45 * intensity;
+    ctx.fillStyle = '#0a1a2a';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // STROBE — the shutter opens and closes at a rate you set. Afterglow keeps
+  // the last lit frame alive for a moment instead of snapping to black.
+  if (effectType === 'time_strobe') {
+    const rate = Math.max(0.2, pick('rate', 8));
+    const duty = pick('duty', 40) / 100;
+    const trail = pick('trail', 30) / 100;
+    const phase = (t * rate) % 1;
+    if (phase > duty) {
+      const closeAmt = Math.min(1, (phase - duty) / Math.max(0.05, 1 - duty));
+      ctx.save();
+      ctx.fillStyle = `rgba(2, 3, 5, ${closeAmt * (1 - trail * 0.55) * Math.min(1, intensity)})`;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+    if (trail > 0.02 && fxStrobeCanvas) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = trail * 0.25 * Math.min(1, intensity);
+      ctx.drawImage(fxStrobeCanvas, 0, 0);
+      ctx.restore();
+    }
+    if (!fxStrobeCanvas || fxStrobeCanvas.width !== w || fxStrobeCanvas.height !== h) {
+      fxStrobeCanvas = document.createElement('canvas');
+      fxStrobeCanvas.width = w;
+      fxStrobeCanvas.height = h;
+    }
+    if (fxStrobeCanvas) {
+      const sc = fxStrobeCanvas.getContext('2d');
+      if (sc) {
+        sc.globalAlpha = 0.12 + trail * 0.4;
+        sc.globalCompositeOperation = 'source-over';
+        sc.drawImage(ctx.canvas, 0, 0);
+      }
+    }
+  }
+
+  // SLIT SCAN — each column comes from a different moment, so movement
+  // stretches into a curtain. Slice width, frame spread and drift are yours.
+  if (effectType === 'time_slit') {
+    const slit = Math.max(2, Math.round(pick('slit', 12) * (w / 640)));
+    const spread = Math.max(1, Math.round(pick('spread', 10)));
+    const drift = pick('drift', 0) / 100;
+    const history = fxEchoFrames;
+    if (history.length > 2) {
+      ctx.save();
+      for (let x = 0; x < w; x += slit) {
+        const frac = x / w;
+        const idx = Math.min(history.length - 1, Math.max(0, Math.round(frac * Math.min(history.length - 1, spread) + drift * 2)));
+        const past = history[history.length - 1 - idx];
+        if (!past) continue;
+        const sx = (x / w) * past.width;
+        const swSrc = Math.max(1, (slit / w) * past.width);
+        ctx.drawImage(past, sx, 0, swSrc, past.height, x, 0, slit + 0.6, h);
+      }
+      ctx.restore();
+    }
+    fxEchoFrames.push(fxEchoSnapshot(ctx, w, h));
+    while (fxEchoFrames.length > 28) fxEchoFrames.shift();
+  }
+
+  // DOLLY ZOOM — the vertigo move: the lens pulls while the frame widens, so
+  // the subject holds size and the walls stretch. Strip warp, like glass.
+  if (effectType === 'cam_vertigo') {
+    const amt = pick('amount', 55) / 100;
+    const rate = Math.max(0.1, pick('rate', 5) / 10);
+    const edge = pick('edge', 45) / 100;
+    const k = Math.max(0, Math.sin((t * rate) % 1 * Math.PI * 2)) * amt * 0.35 * edge;
+    if (k > 0.002) fxStripWarp(ctx, w, h, k);
+  }
+
+  // PARALLAX PUSH — the background moves, the subject does not. That gap is
+  // what reads as depth; the zone and the feather keep the edge soft.
+  if (effectType === 'depth_push_pull') {
+    const push = Math.max(0, pick('push', 12)) / 100;
+    const zone = pick('zone', 28) / 100;
+    const feather = pick('feather', 20) / 100;
+    if (push > 0.002) {
+      const snap = fxCopyFrame(ctx, w, h);
+      if (snap) {
+        if (!fxPushCanvas || fxPushCanvas.width !== w || fxPushCanvas.height !== h) {
+          fxPushCanvas = document.createElement('canvas');
+          fxPushCanvas.width = w;
+          fxPushCanvas.height = h;
+          fxPushCtx = fxPushCanvas.getContext('2d');
+        }
+        if (fxPushCtx) {
+          fxPushCtx.setTransform(1, 0, 0, 1, 0, 0);
+          fxPushCtx.clearRect(0, 0, w, h);
+          fxPushCtx.drawImage(snap, 0, 0, w, h);
+          const inner = Math.min(w, h) * zone;
+          const outer = inner + Math.min(w, h) * (0.04 + feather);
+          const m = fxPushCtx.createRadialGradient(w / 2, h * 0.5, inner, w / 2, h * 0.5, outer);
+          m.addColorStop(0, 'rgba(0,0,0,0)');
+          m.addColorStop(1, 'rgba(0,0,0,1)');
+          fxPushCtx.globalCompositeOperation = 'destination-in';
+          fxPushCtx.fillStyle = m;
+          fxPushCtx.fillRect(0, 0, w, h);
+          fxPushCtx.globalCompositeOperation = 'source-over';
+          const s2 = 1 + push * Math.min(1, intensity) * 2;
+          const dw = w * s2;
+          const dh = h * s2;
+          ctx.save();
+          ctx.drawImage(fxPushCanvas, (w - dw) / 2, (h - dh) / 2, dw, dh);
+          ctx.restore();
+        }
+      }
+    }
+  }
+
+  // SHADOW FALLOFF — the background sinks into shadow while the subject stays
+  // lit. Density, clear zone and shadow colour are one dial each.
+  if (effectType === 'depth_shadow_fall') {
+    const density = pick('density', 45) / 100;
+    const zone = pick('zone', 25) / 100;
+    const tint = pick('tint', 40) / 100;
+    if (density > 0.02) {
+      const inner = Math.min(w, h) * zone;
+      const outer = inner + Math.min(w, h) * 0.4;
+      const g = ctx.createRadialGradient(w / 2, h * 0.5, inner, w / 2, h * 0.5, outer);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, `rgba(${Math.round(12 + tint * 22)}, ${Math.round(14 + tint * 10)}, ${Math.round(20 + tint * 26)}, ${density * 0.85 * Math.min(1, intensity)})`);
+      ctx.save();
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+  }
+
+  // FRAME GUIDES — thin guide lines and corner ticks, the way a viewfinder
+  // overlays them. Inset, weight, opacity and marks are separate.
+  if (effectType === 'ed_frame_guides') {
+    const inset = pick('inset', 8) / 100;
+    const weight = Math.max(0.5, pick('weight', 1.2)) * (w / 640);
+    const opacity = pick('opacity', 55) / 100;
+    const marks = pick('marks', 40) / 100;
+    const x0 = w * inset;
+    const y0 = h * inset;
+    ctx.save();
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 * opacity * Math.min(1, intensity)})`;
+    ctx.lineWidth = weight;
+    ctx.strokeRect(x0, y0, w - x0 * 2, h - y0 * 2);
+    // centre cross
+    ctx.beginPath();
+    ctx.moveTo(w / 2 - 10 * (w / 640), h / 2);
+    ctx.lineTo(w / 2 + 10 * (w / 640), h / 2);
+    ctx.moveTo(w / 2, h / 2 - 10 * (w / 640));
+    ctx.lineTo(w / 2, h / 2 + 10 * (w / 640));
+    ctx.stroke();
+    if (marks > 0.02) {
+      const len = Math.min(w, h) * 0.06 * marks;
+      ctx.lineWidth = weight * 1.6;
+      const corners = [[x0, y0, 1, 1], [w - x0, y0, -1, 1], [x0, h - y0, 1, -1], [w - x0, h - y0, -1, -1]];
+      corners.forEach(([cx, cy, sx, sy]) => {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy + sy * len);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(cx + sx * len, cy);
+        ctx.stroke();
+      });
+    }
+    ctx.restore();
+  }
+
+  // SQUARE MATTE — the opposite of a letterbox: square framing with the sides
+  // matted off, which is what a feed cropped to 1:1 actually looks like.
+  if (effectType === 'ed_square_matte') {
+    const ratio = Math.max(0.5, pick('ratio', 100) / 100);
+    const feather = pick('feather', 20) / 100;
+    const shade = pick('shade', 100) / 100;
+    const targetW = Math.min(w, h * ratio);
+    const barW = (w - targetW) / 2;
+    if (barW > 0.5) {
+      const fade = Math.max(1, barW * feather);
+      ctx.save();
+      ctx.globalAlpha = shade * Math.min(1, intensity);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, Math.max(0, barW - fade), h);
+      ctx.fillRect(w - Math.max(0, barW - fade), 0, Math.max(0, barW - fade), h);
+      if (fade > 1) {
+        const gl = ctx.createLinearGradient(barW - fade, 0, barW, 0);
+        gl.addColorStop(0, 'rgba(0,0,0,1)');
+        gl.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = gl;
+        ctx.fillRect(barW - fade, 0, fade, h);
+        const gr = ctx.createLinearGradient(w - barW, 0, w - barW + fade, 0);
+        gr.addColorStop(0, 'rgba(0,0,0,0)');
+        gr.addColorStop(1, 'rgba(0,0,0,1)');
+        ctx.fillStyle = gr;
+        ctx.fillRect(w - barW, 0, fade, h);
+      }
+      ctx.restore();
+    }
+  }
+
   fxFinishPass(ctx, w, h, effectType, P, before, grainAmount);
+}
+
+let fxStrobeCanvas = null;
+let fxPushCanvas = null;
+let fxPushCtx = null;
+
+// Column-by-column glass warp shared by the barrel and the dolly zoom: each
+// strip samples a narrower (or wider) slice the closer it sits to the centre.
+function fxStripWarp(ctx, w, h, k) {
+  const snap = fxCopyFrame(ctx, w, h);
+  if (!snap) return;
+  const step = Math.max(2, Math.round(w / 180));
+  ctx.save();
+  for (let x = 0; x < w; x += step) {
+    const nx = ((x + step / 2) / w) * 2 - 1;
+    const f = 1 + k * (1 - nx * nx);
+    const sw = Math.max(1, step / f);
+    const sh = Math.max(1, h / f);
+    const cx = x + step / 2;
+    ctx.drawImage(snap, cx - sw / 2, h / 2 - sh / 2, sw, sh, x, 0, step + 0.6, h);
+  }
+  ctx.restore();
+}
+
+// Buffers for the third set. Kept outside the draw call so a frame can read
+// what the previous frame left behind.
+let fxTrailCanvas = null;
+let fxTrailCtx = null;
+let fxFreezeCanvas = null;
+let fxFreezeTick = 0;
+let fxFreezeHeld = 0;
+let fxDofCanvas = null;
+let fxDofCtx = null;
+let fxGradeCanvas = null;
+let fxGradeCtx = null;
+let fxDotCache = { key: '', canvas: null };
+
+// One halftone tile, regenerated only when the pitch or the dot gain changes.
+function fxDotTile(cell, gain) {
+  const step = Math.max(0.05, Math.round(gain * 20) / 20);
+  const key = `${cell}:${step}`;
+  if (fxDotCache.key === key && fxDotCache.canvas) return fxDotCache.canvas;
+  const size = cell * 2;
+  const tile = document.createElement('canvas');
+  tile.width = size;
+  tile.height = size;
+  const tctx = tile.getContext('2d');
+  if (!tctx) return null;
+  tctx.fillStyle = '#ffffff';
+  tctx.fillRect(0, 0, size, size);
+  tctx.fillStyle = '#000000';
+  const dots = [[cell * 0.5, cell * 0.5], [cell * 1.5, cell * 1.5]];
+  const r = cell * (0.22 + step * 0.5);
+  dots.forEach(([cx, cy]) => {
+    tctx.beginPath();
+    tctx.arc(cx, cy, r, 0, Math.PI * 2);
+    tctx.fill();
+  });
+  fxDotCache = { key, canvas: tile };
+  return tile;
 }
 
 let fxScratch = null;
