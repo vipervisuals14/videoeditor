@@ -27,7 +27,7 @@ const critical = [
   '#tab-vfx .vfx-card .vfx-apply-btn', '#tab-vfx .vfx-card .fx-name',
   '.stack-panel .layer-row', '.vfx-stack-badge', '.install-strip', '.install-steps',
   '.stage-detail .kf-body-grid', '.stage-detail .kf-canvas-wrap',
-  '.monitor-column .timeline-card', '.rail-item.active .rail-label'
+  '.stage-wrap > .timeline-card', '.rail-item.active .rail-label'
 ];
 
 let dead = 0;

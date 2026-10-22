@@ -1440,7 +1440,8 @@ const state = {
     clips: [],
     spanSec: 6,
     selectedId: null,
-    drag: null
+    drag: null,
+    scrubbing: false
   },
 };
 
@@ -1451,36 +1452,60 @@ let offscreenCtx = null;
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
+// One panel failing to start must not take the rest of the page with it. This
+// used to be a straight list of calls: an exception anywhere in it stopped
+// every initialisation after it, so a single broken tab left a dead page.
+const bootFailures = [];
+function safeInit(name, fn) {
+  try {
+    fn();
+  } catch (err) {
+    bootFailures.push({ name, err });
+    if (window.console && console.error) console.error(`[boot] ${name} failed to start`, err);
+  }
+}
+
 let bootDone = false;
 document.addEventListener('DOMContentLoaded', () => {
   if (bootDone) return;
   bootDone = true;
-  initTabs();
-  initSceneSwitcher();
-  initMonitorDropZone();
-  initVfxTab();
-  initKeyframeEditor();
-  startCardThumbnailLoop();
-  initSilenceTab();
-  initCaptionsTab();
-  initMediaPoolTab();
-  initMaskTab();
-  initDepthTab();
-  initLayers();
-  initRenderBay();
-  initMonitorAndTimeline();
-  initTimelineEditing();
-  initModules();
-  initBridgeModal();
-  initConsoleModal();
+
+  // The stage and the timeline come first: they are what everything else is
+  // drawn on top of, and the transport has to work even if a tab does not.
+  safeInit('timeline', initMonitorAndTimeline);
+  safeInit('timeline editing', initTimelineEditing);
+  safeInit('tabs', initTabs);
+  safeInit('scene switcher', initSceneSwitcher);
+  safeInit('drop zone', initMonitorDropZone);
+  safeInit('vfx tab', initVfxTab);
+  safeInit('keyframe editor', initKeyframeEditor);
+  safeInit('card previews', startCardThumbnailLoop);
+  safeInit('silence tab', initSilenceTab);
+  safeInit('captions tab', initCaptionsTab);
+  safeInit('media pool tab', initMediaPoolTab);
+  safeInit('mask tab', initMaskTab);
+  safeInit('depth tab', initDepthTab);
+  safeInit('effect layers', initLayers);
+  safeInit('render bay', initRenderBay);
+  safeInit('modules', initModules);
+  safeInit('bridge modal', initBridgeModal);
+  safeInit('console modal', initConsoleModal);
 
   // Start honest: empty stage, paused transport, lyrics off, blank timeline.
   // Nothing is fabricating footage or edits before the user loads anything.
-  if (state.scene === 'empty') clearStage();
-  renderFxParamRack();
-  applyLyricsState(false);
-  renderTimelineTracks();
-  initBackend().then(() => startBridgeStatusPoll());
+  safeInit('clear stage', () => { if (state.scene === 'empty') clearStage(); });
+  safeInit('effect controls', renderFxParamRack);
+  safeInit('lyrics state', () => applyLyricsState(false));
+  safeInit('timeline paint', renderTimelineTracks);
+  safeInit('backend', () => initBackend().then(() => startBridgeStatusPoll()));
+
+  if (bootFailures.length) {
+    const names = [...new Set(bootFailures.map((f) => f.name))];
+    showToast(`Part of the panel did not start: ${names.join(', ')}. `
+      + 'The rest still works — reload if a control is missing.', 'warn');
+  }
+
+  // the monitor keeps drawing whatever else happened
   requestAnimationFrame(renderLivePreviewLoop);
 });
 
@@ -10195,15 +10220,23 @@ function updateTransportEnabled() {
 
 function tlAddClipFromStage() {
   const t = tlModel();
-  if (!t) return null;
-  const vid = document.getElementById('customVideoElement');
-  if (!vid || state.scene !== 'custom_video' || !videoHasSource(vid)) {
-    showToast('Load a video clip on the stage first', 'warn');
+  if (!t) {
+    showToast('The timeline module did not load — reload the page', 'warn');
     return null;
   }
+  const vid = document.getElementById('customVideoElement');
+  if (!vid || !videoHasSource(vid)) {
+    showToast('No clip on the stage yet — press “Upload clip” in the viewer first', 'warn');
+    const upload = document.getElementById('customVideoInput');
+    if (upload) upload.click();
+    return null;
+  }
+  // A loaded video is enough; the scene flag has been wrong in the past when a
+  // clip arrived by drag-and-drop, and that used to make this button do nothing.
+  if (state.scene !== 'custom_video') state.scene = 'custom_video';
   const srcDur = sourceDuration();
   if (!(srcDur > 0.05)) {
-    showToast('That clip has not finished loading — try again in a moment', 'warn');
+    showToast('That clip is still loading — press ＋ Add clip again in a second', 'warn');
     return null;
   }
   const name = (state.plateFile && state.plateFile.name) || 'Clip';
@@ -10302,6 +10335,7 @@ function renderTimelineSelection() {
   if (!el) return;
   const c = tlSelected();
   const t = tlModel();
+  if (typeof tlUpdateButtons === 'function') tlUpdateButtons();
   if (!c || !t) {
     el.innerHTML = '<span class="tl-selection-hint">Click a clip to select it. '
       + 'Drag its edges to trim, drag the middle to move.</span>';
@@ -10314,6 +10348,24 @@ function renderTimelineSelection() {
     + `<span class="tl-sel-num">starts ${t.formatTime(c.startSec)}</span>`;
 }
 
+function renderTimelineV1(clips, span, width) {
+  const lane = tlLaneEl();
+  const t = tlModel();
+  if (!lane || !t) return;
+  lane.innerHTML = clips.map((c) => {
+    const left = t.timeToX(c.startSec, span, width);
+    const w = Math.max(2, (t.len(c) / span) * width);
+    const sel = c.id === state.tl.selectedId ? ' is-selected' : '';
+    return `<div class="tl-clip v1-item${sel}" data-clipid="${escapeAttr(c.id)}" `
+      + `data-left="${left.toFixed(1)}" data-width="${Math.min(w, width - left).toFixed(1)}" `
+      + `style="left:${left.toFixed(1)}px; width:${Math.min(w, width - left).toFixed(1)}px" `
+      + `title="${escapeAttr(c.name)} — drag the edges to trim, drag the middle to move">`
+      + `<span class="tl-clip-label">${escapeAttr(c.name)}</span></div>`;
+  }).join('');
+  lane.dataset.span = String(span);
+  lane.dataset.width = String(width);
+}
+
 function renderTimelineTracks() {
   const t = tlModel();
   const lane = tlLaneEl();
@@ -10322,20 +10374,7 @@ function renderTimelineTracks() {
   const width = tlLaneWidth(lane);
 
   // ---- the editable track ------------------------------------------------
-  if (lane) {
-    lane.innerHTML = clips.map((c) => {
-      const left = t.timeToX(c.startSec, span, width);
-      const w = Math.max(2, (t.len(c) / span) * width);
-      const sel = c.id === state.tl.selectedId ? ' is-selected' : '';
-      return `<div class="tl-clip v1-item${sel}" data-clipid="${escapeAttr(c.id)}" `
-        + `data-left="${left.toFixed(1)}" data-width="${Math.min(w, width - left).toFixed(1)}" `
-        + `style="left:${left.toFixed(1)}px; width:${Math.min(w, width - left).toFixed(1)}px" `
-        + `title="${escapeAttr(c.name)} — drag the edges to trim, drag the middle to move">`
-        + `<span class="tl-clip-label">${escapeAttr(c.name)}</span></div>`;
-    }).join('');
-    lane.dataset.span = String(span);
-    lane.dataset.width = String(width);
-  }
+  if (lane) renderTimelineV1(clips, span, width);
 
   // ---- the read-only lanes ----------------------------------------------
   const renderLane = (laneId, items, cls) => {
@@ -10353,7 +10392,7 @@ function renderTimelineTracks() {
   const wrap = document.getElementById('timelineTracksContainer');
   if (wrap) wrap.classList.toggle('is-live', !!live);
 
-  if (live) {
+  if (live && !clips.length) {
     const liveClips = live.clips || [];
     const end = liveClips.reduce((m, c) => Math.max(m, c.endFrame || 0), 0) || 1;
     renderLane('laneV1', liveClips.map((c) => ({
@@ -10365,6 +10404,9 @@ function renderTimelineTracks() {
     renderLane('laneSub', [], 'sub-item');
     renderLane('laneV2', [], 'v2-item');
     renderLane('laneA1', [], 'a1-item');
+    // clips on V1 are yours: a connected Resolve timeline must not overwrite
+    // them with a read-only copy, or the edges stop answering the pointer
+    if (clips.length) renderTimelineV1(clips, span, width);
     if (titleEl) {
       titleEl.innerHTML = `<span class="live-tag">LIVE</span> ${live.name || 'Timeline'} · `
         + `${live.project || 'Project'} · ${live.fps || '24'} fps`;
@@ -10377,6 +10419,19 @@ function renderTimelineTracks() {
       .some((k) => Array.isArray(state.timelineTracks[k]) && state.timelineTracks[k].length);
     const emptyNote = document.getElementById('tlEmptyNote');
     if (emptyNote) emptyNote.classList.toggle('hidden', clips.length > 0 || anyEdits);
+    // A clip on the stage is not on the timeline until it is added. Say that,
+    // loudly enough to be found, without ever adding it for them.
+    const vid = document.getElementById('customVideoElement');
+    const waiting = !clips.length && !!vid && videoHasSource(vid);
+    const addBtn = document.getElementById('tlAddClipBtn');
+    if (addBtn) addBtn.classList.toggle('is-cta', waiting);
+    if (emptyNote && waiting) {
+      emptyNote.innerHTML = 'Your clip is on the stage — press <b>＋ Add clip</b> to put it on V1, '
+        + 'then drag its left or right edge to shorten or lengthen it.';
+    } else if (emptyNote && !clips.length && !anyEdits) {
+      emptyNote.innerHTML = 'Nothing on the timeline yet — load a video, then press '
+        + '<b>＋ Add clip</b> to put it on V1 and drag its edges to trim it.';
+    }
 
     if (titleEl) {
       titleEl.textContent = clips.length
@@ -10487,6 +10542,7 @@ function tlDragTo(e) {
   state.tl.clips = result.clips;
   drag.applied += result.applied || 0;
   tlPaintClip(result.clip);
+  tlShowTrimBadge(result.clip);
   renderTimelineSelection();
   return true;
 }
@@ -10512,11 +10568,13 @@ function tlEndDrag() {
   const drag = state.tl && state.tl.drag;
   if (!drag) return false;
   state.tl.drag = null;
+  tlHideTrimBadge();
   document.body.classList.remove('tl-dragging');
   const clip = tlModel().find(tlClips(), drag.id);
   state.totalDurSec = Math.max(tlDuration(), 0) || state.totalDurSec;
   renderTimelineTracks();
   renderTimelineSelection();
+  tlUpdateButtons();
   // show the frame the new cut lands on, so the trim is visible immediately
   if (clip && drag.moved) {
     state.playheadSec = Math.min(clip.startSec, Math.max(0, tlDuration() - 0.01));
@@ -10575,41 +10633,65 @@ function tlScrubTo(e) {
 
 function initTimelineEditing() {
   const lane = tlLaneEl();
+  // Safari, Chrome and Firefox all have PointerEvent; the mouse/touch fallback
+  // is for anything that does not, because a timeline that silently does
+  // nothing is worse than one with an old event name.
+  const hasPointer = typeof window.PointerEvent === 'function';
+  const DOWN = hasPointer ? 'pointerdown' : 'mousedown';
+  const MOVE = hasPointer ? 'pointermove' : 'mousemove';
+  const UP = hasPointer ? 'pointerup' : 'mouseup';
+
+  // ---- grab a clip -------------------------------------------------------
   if (lane) {
-    lane.addEventListener('pointerdown', (e) => {
+    lane.addEventListener(DOWN, (e) => {
       const el = e.target && e.target.closest ? e.target.closest('.tl-clip') : null;
-      if (!el || !el.dataset.clipid) return;
+      if (!el) {
+        // a click on the empty lane clears the selection
+        state.tl.selectedId = null;
+        renderTimelineSelection();
+        tlHighlightSelection();
+        return;
+      }
+      if (!el.dataset.clipid) return;
       if (e.preventDefault) e.preventDefault();
-      state.tl.selectedId = el.dataset.clipid;
-      const mode = tlHitMode(e, el, el.dataset.clipid);
+      if (e.stopPropagation) e.stopPropagation();
+      const mode = tlHitMode(e, el);
       tlBeginDrag(e, el.dataset.clipid, mode, el);
-      renderTimelineTracks();
+      // Select the clip in place. Rebuilding the lane here would delete the
+      // element the pointer is holding — the drag then dies on touch, and it
+      // flickers on every click.
+      tlHighlightSelection();
       renderTimelineSelection();
     });
   }
 
+  // ---- scrub on the ruler -------------------------------------------------
   const ruler = document.getElementById('tlRuler');
   if (ruler) {
-    ruler.addEventListener('pointerdown', (e) => {
+    ruler.addEventListener(DOWN, (e) => {
       if (e.preventDefault) e.preventDefault();
       state.tl.scrubbing = true;
       tlScrubTo(e);
     });
   }
 
-  document.addEventListener('pointermove', (e) => {
+  const onMove = (e) => {
     if (state.tl.drag) { tlDragTo(e); return; }
     if (state.tl.scrubbing) tlScrubTo(e);
-  });
-  document.addEventListener('pointerup', () => {
+  };
+  const onUp = () => {
     if (state.tl.drag) tlEndDrag();
     state.tl.scrubbing = false;
-  });
-  document.addEventListener('pointercancel', () => {
-    if (state.tl.drag) tlEndDrag();
-    state.tl.scrubbing = false;
-  });
+    tlHideTrimBadge();
+  };
+  // window, not document: a fast drag can leave the document over an iframe
+  window.addEventListener(MOVE, onMove, { passive: true });
+  window.addEventListener(UP, onUp);
+  window.addEventListener(hasPointer ? 'pointercancel' : 'blur', onUp);
+  // a drag that ends outside the page still has to end
+  window.addEventListener('blur', onUp);
 
+  // ---- buttons ------------------------------------------------------------
   const addBtn = document.getElementById('tlAddClipBtn');
   if (addBtn) addBtn.addEventListener('click', () => tlAddClipFromStage());
   const splitBtn = document.getElementById('tlSplitBtn');
@@ -10617,6 +10699,14 @@ function initTimelineEditing() {
   const delBtn = document.getElementById('tlDeleteBtn');
   if (delBtn) delBtn.addEventListener('click', () => tlDeleteSelected());
 
+  // the empty note is the invitation: clicking it does what it says
+  const note = document.getElementById('tlEmptyNote');
+  if (note) {
+    note.classList.add('is-actionable');
+    note.addEventListener('click', () => tlAddClipFromStage());
+  }
+
+  // ---- keys ---------------------------------------------------------------
   document.addEventListener('keydown', (e) => {
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -10626,10 +10716,67 @@ function initTimelineEditing() {
     } else if ((e.key === 's' || e.key === 'S') && !e.metaKey && !e.ctrlKey && state.tl.selectedId) {
       e.preventDefault();
       tlSplitAtPlayhead();
+    } else if (e.key === 'Escape' && state.tl.drag) {
+      tlEndDrag();
     }
   });
 
   window.addEventListener('resize', () => renderTimelineTracks());
+  tlUpdateButtons();
+}
+
+/** Selection class without re-rendering: the drag must keep its element. */
+function tlHighlightSelection() {
+  const lane = tlLaneEl();
+  if (!lane || !lane.querySelectorAll) return;
+  lane.querySelectorAll('.tl-clip').forEach((el) => {
+    const on = !!state.tl.selectedId && el.dataset.clipid === state.tl.selectedId;
+    el.classList.toggle('is-selected', on);
+    if (!on) el.classList.remove('is-dragging');
+    if (on && state.tl.drag) el.classList.add('is-dragging');
+  });
+}
+
+/** Split and Delete only light up when they have something to work on. */
+function tlUpdateButtons() {
+  const hasSel = !!tlSelected();
+  const dur = tlDuration();
+  const split = document.getElementById('tlSplitBtn');
+  const del = document.getElementById('tlDeleteBtn');
+  if (split) {
+    const inside = hasSel && state.playheadSec > 0.001 && state.playheadSec < dur - 0.001;
+    split.disabled = !(inside || (!!tlModel() && !!tlModel().clipAt(tlClips(), state.playheadSec)));
+    split.title = 'Cut the clip under the playhead in two (S)';
+  }
+  if (del) {
+    del.disabled = !hasSel;
+    del.title = hasSel ? 'Remove the selected clip (Delete)' : 'Select a clip first';
+  }
+}
+
+/** A small readout that follows the pointer while an edge is being dragged. */
+function tlShowTrimBadge(clip) {
+  const t = tlModel();
+  const lane = tlLaneEl();
+  if (!t || !lane || !lane.parentElement) return;
+  let badge = document.getElementById('tlTrimBadge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.id = 'tlTrimBadge';
+    badge.className = 'tl-trim-badge';
+    lane.parentElement.appendChild(badge);
+  }
+  const laneRect = lane.getBoundingClientRect ? lane.getBoundingClientRect() : { left: 0, top: 0 };
+  const x = t.timeToX(clip.startSec + t.len(clip), tlSpan(), tlLaneWidth(lane));
+  badge.textContent = t.formatLen(t.len(clip));
+  badge.style.left = `${(laneRect.left || 0) - (lane.parentElement.getBoundingClientRect().left || 0) + x}px`;
+  badge.style.top = `${(laneRect.top || 0) - (lane.parentElement.getBoundingClientRect().top || 0) - 2}px`;
+  badge.style.display = 'block';
+}
+
+function tlHideTrimBadge() {
+  const badge = document.getElementById('tlTrimBadge');
+  if (badge) badge.style.display = 'none';
 }
 
 // ============================================================================
@@ -10638,6 +10785,20 @@ function initTimelineEditing() {
 let lastFrameTs = performance.now();
 
 function renderLivePreviewLoop(now) {
+  try {
+    renderLivePreviewFrame(now);
+  } catch (err) {
+    // A throw inside requestAnimationFrame used to stop the loop forever: the
+    // monitor froze and nothing said why. Draw again next frame instead.
+    if (!renderLivePreviewLoop.warned) {
+      renderLivePreviewLoop.warned = true;
+      if (window.console && console.error) console.error('[monitor] frame failed', err);
+    }
+  }
+  requestAnimationFrame(renderLivePreviewLoop);
+}
+
+function renderLivePreviewFrame(now) {
   const dt = Math.min(0.05, (now - lastFrameTs) / 1000);
   lastFrameTs = now;
 
@@ -10683,7 +10844,6 @@ function renderLivePreviewLoop(now) {
 
   depthLiveTick(now);
   drawMonitorFrame(state.motion ? now / 1000 : state.frozenTime);
-  requestAnimationFrame(renderLivePreviewLoop);
 }
 
 function captureFrozenTime(nowSec) {
@@ -14128,7 +14288,10 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     tlScrubTo,
     stageSourceTime,
     tlPlaybackTick,
+    tlHighlightSelection,
+    tlUpdateButtons,
     seekTo,
+    bootFailures,
     renderTimelineTracks,
     renderTimelineSelection,
     // in-app cutter

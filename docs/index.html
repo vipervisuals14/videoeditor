@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine</title>
-  <link rel="stylesheet" href="styles.css?v=mvjihmg4" />
+  <link rel="stylesheet" href="styles.css?v=mvjja2x7" />
 </head>
 <body>
  <div class="app-window">
@@ -189,88 +189,87 @@
 
         </div>
 
-          <aside class="monitor-column" id="monitorColumn">
-    <!-- EDITABLE MULTI-TRACK TIMELINE -->
+          
+        </div>
+
     <div class="timeline-card" data-module="timeline" data-label="Timeline">
-      <div class="timeline-header">
-        <div class="tl-title-group">
-          <strong id="activeTimelineTitle">No timeline opened yet</strong>
-          <span class="tl-duration" id="tlDurationLabel">0:00.0</span>
-        </div>
-        <div class="tl-actions">
-          <button class="btn-mini" id="tlAddClipBtn"
-                  title="Put the clip on the stage onto V1, so you can trim and move it">＋ Add clip</button>
-          <button class="btn-mini" id="tlSplitBtn" title="Cut the selected clip at the playhead (S)">Split</button>
-          <button class="btn-mini" id="tlDeleteBtn" title="Remove the selected clip (Delete)">Delete</button>
-          <button class="btn-mini" id="clearVfxTrackBtn">Clear FX Track</button>
-          <button class="btn-mini accent" id="openLuaDrawerBtn">Resolve 21.1.1 Lua</button>
-        </div>
-      </div>
-
-      <!-- the ruler is the scrub surface; the playhead spans every lane -->
-      <div class="tl-ruler-row">
-        <span class="tl-ruler-gutter">TC</span>
-        <div class="tl-ruler" id="tlRuler" title="Drag to move the playhead"></div>
-      </div>
-
-      <div class="tl-body" id="timelineTracksContainer">
-        <div class="tl-empty-note" id="tlEmptyNote">
-          Nothing on the timeline yet — press <b>＋ Add clip</b> to put the clip from the stage on V1,
-          then drag its edges to shorten or lengthen it.
-        </div>
-        <div class="tl-playhead" id="tlPlayhead"></div>
-
-        <div class="tl-track" data-track="V3">
-          <div class="tl-track-label vfx-label"><span>V3</span> FX</div>
-          <div class="tl-track-lane" id="laneV3"></div>
-        </div>
-
-        <div class="tl-track" data-track="SUB">
-          <div class="tl-track-label sub-label"><span>ST</span> LYRC</div>
-          <div class="tl-track-lane" id="laneSub"></div>
-        </div>
-
-        <div class="tl-track" data-track="V2">
-          <div class="tl-track-label v2-label"><span>V2</span> B-Roll</div>
-          <div class="tl-track-lane" id="laneV2"></div>
-        </div>
-
-        <div class="tl-track" data-track="V1">
-          <div class="tl-track-label v1-label"><span>V1</span> Main</div>
-          <div class="tl-track-lane" id="laneV1"></div>
-        </div>
-
-        <div class="tl-track" data-track="A1">
-          <div class="tl-track-label a1-label"><span>A1</span> Audio</div>
-          <div class="tl-track-lane" id="laneA1"></div>
-        </div>
-      </div>
-
-      <div class="tl-selection" id="tlSelection">
-        <span class="tl-selection-hint">Click a clip to select it. Drag its edges to trim, drag the middle to move.</span>
-      </div>
-
-      <!-- LIVE RESOLVE LUA / BRIDGE LOG DRAWER -->
-      <div class="wire-strip" id="wireStrip" data-module="wire" data-label="Resolve Wire">
-        <span class="wire-pill" id="wireState">Bridge idle</span>
-        <span class="wire-chain" id="wireChain">No graph dispatched yet</span>
-        <span class="wire-pill" id="wireRecipeCount">-- recipes</span>
-        <button class="wire-pill wire-btn" id="wireTestBtn" title="Ask the resident Resolve bridge what it can see right now">Test bridge</button>
-      </div>
-      <div class="lua-drawer" id="luaDrawer" data-module="lua" data-label="Lua Console">
-        <div class="lua-drawer-head">
-          <span>DaVinci Resolve Free 21.1.1 Bridge & Console Snippet</span>
-          <div class="lua-drawer-btns">
-            <button class="btn-mini" id="copyLuaBtn">Copy Lua for Resolve Console</button>
-            <a class="btn-mini" href="VFXKit_ResolveFree_Bridge.lua" download="VFXKit_ResolveFree_Bridge.lua">Download Bridge .lua</a>
+          <div class="timeline-header">
+            <div class="tl-title-group">
+              <strong id="activeTimelineTitle">No timeline opened yet</strong>
+              <span class="tl-duration" id="tlDurationLabel">0:00.0</span>
+            </div>
+            <div class="tl-actions">
+              <button class="btn-mini" id="tlAddClipBtn"
+                      title="Put the clip on the stage onto V1, so you can trim and move it">＋ Add clip</button>
+              <button class="btn-mini" id="tlSplitBtn" title="Cut the selected clip at the playhead (S)">Split</button>
+              <button class="btn-mini" id="tlDeleteBtn" title="Remove the selected clip (Delete)">Delete</button>
+              <button class="btn-mini" id="clearVfxTrackBtn">Clear FX Track</button>
+              <button class="btn-mini accent" id="openLuaDrawerBtn">Resolve 21.1.1 Lua</button>
+            </div>
           </div>
-        </div>
-        <pre class="lua-code-box" id="luaCodeOutput">-- Click any Optical/Film VFX preset, LYRC style, Silence Cut, or Media Pool Auto-Edit button
--- to dispatch directly to DaVinci Resolve Free 21.1.1 via the File-Mailbox Bridge
--- OR copy the generated Lua snippet directly into Workspace > Console > Lua!</pre>
-      </div>
-    </div>
-          </aside>
+
+          <!-- the ruler is the scrub surface; the playhead spans every lane -->
+          <div class="tl-ruler-row">
+            <span class="tl-ruler-gutter">TC</span>
+            <div class="tl-ruler" id="tlRuler" title="Drag to move the playhead"></div>
+          </div>
+
+          <div class="tl-body" id="timelineTracksContainer">
+            <div class="tl-empty-note" id="tlEmptyNote">
+              Nothing on the timeline yet — press <b>＋ Add clip</b> to put the clip from the stage on V1,
+              then drag its edges to shorten or lengthen it.
+            </div>
+            <div class="tl-playhead" id="tlPlayhead"></div>
+
+            <div class="tl-track" data-track="V3">
+              <div class="tl-track-label vfx-label"><span>V3</span> FX</div>
+              <div class="tl-track-lane" id="laneV3"></div>
+            </div>
+
+            <div class="tl-track" data-track="SUB">
+              <div class="tl-track-label sub-label"><span>ST</span> LYRC</div>
+              <div class="tl-track-lane" id="laneSub"></div>
+            </div>
+
+            <div class="tl-track" data-track="V2">
+              <div class="tl-track-label v2-label"><span>V2</span> B-Roll</div>
+              <div class="tl-track-lane" id="laneV2"></div>
+            </div>
+
+            <div class="tl-track" data-track="V1">
+              <div class="tl-track-label v1-label"><span>V1</span> Main</div>
+              <div class="tl-track-lane" id="laneV1"></div>
+            </div>
+
+            <div class="tl-track" data-track="A1">
+              <div class="tl-track-label a1-label"><span>A1</span> Audio</div>
+              <div class="tl-track-lane" id="laneA1"></div>
+            </div>
+          </div>
+
+          <div class="tl-selection" id="tlSelection">
+            <span class="tl-selection-hint">Click a clip to select it. Drag its edges to trim, drag the middle to move.</span>
+          </div>
+
+          <!-- LIVE RESOLVE LUA / BRIDGE LOG DRAWER -->
+          <div class="wire-strip" id="wireStrip" data-module="wire" data-label="Resolve Wire">
+            <span class="wire-pill" id="wireState">Bridge idle</span>
+            <span class="wire-chain" id="wireChain">No graph dispatched yet</span>
+            <span class="wire-pill" id="wireRecipeCount">-- recipes</span>
+            <button class="wire-pill wire-btn" id="wireTestBtn" title="Ask the resident Resolve bridge what it can see right now">Test bridge</button>
+          </div>
+          <div class="lua-drawer" id="luaDrawer" data-module="lua" data-label="Lua Console">
+            <div class="lua-drawer-head">
+              <span>DaVinci Resolve Free 21.1.1 Bridge & Console Snippet</span>
+              <div class="lua-drawer-btns">
+                <button class="btn-mini" id="copyLuaBtn">Copy Lua for Resolve Console</button>
+                <a class="btn-mini" href="VFXKit_ResolveFree_Bridge.lua" download="VFXKit_ResolveFree_Bridge.lua">Download Bridge .lua</a>
+              </div>
+            </div>
+            <pre class="lua-code-box" id="luaCodeOutput">-- Click any Optical/Film VFX preset, LYRC style, Silence Cut, or Media Pool Auto-Edit button
+    -- to dispatch directly to DaVinci Resolve Free 21.1.1 via the File-Mailbox Bridge
+    -- OR copy the generated Lua snippet directly into Workspace > Console > Lua!</pre>
+          </div>
         </div>
 
   </section>
@@ -1279,20 +1278,20 @@
 
  </div>
 
-  <script src="audio-lab.js?v=mvjihmg4"></script>
-  <script src="silence-cut.js?v=mvjihmg4"></script>
-  <script src="timeline.js?v=mvjihmg4"></script>
-  <script src="asr.js?v=mvjihmg4"></script>
+  <script src="audio-lab.js?v=mvjja2x7"></script>
+  <script src="silence-cut.js?v=mvjja2x7"></script>
+  <script src="timeline.js?v=mvjja2x7"></script>
+  <script src="asr.js?v=mvjja2x7"></script>
   <!--
     The speech runtime: a plain IIFE bundle with no module system, so it loads like
     any other script. asr.js reads the window.transformers global it defines, and
     if the tag ever fails it reports the exact HTTP status of the file.
   -->
-  <script src="vendor/asr/transformers.bundle.js?v=mvjihmg4" defer></script>
-  <script src="lua-export.js?v=mvjihmg4"></script>
-  <script src="touchdesigner.js?v=mvjihmg4"></script>
-  <script src="depth.js?v=mvjihmg4"></script>
-  <script src="render.js?v=mvjihmg4"></script>
-  <script src="app.js?v=mvjihmg4"></script>
+  <script src="vendor/asr/transformers.bundle.js?v=mvjja2x7" defer></script>
+  <script src="lua-export.js?v=mvjja2x7"></script>
+  <script src="touchdesigner.js?v=mvjja2x7"></script>
+  <script src="depth.js?v=mvjja2x7"></script>
+  <script src="render.js?v=mvjja2x7"></script>
+  <script src="app.js?v=mvjja2x7"></script>
 </body>
 </html>

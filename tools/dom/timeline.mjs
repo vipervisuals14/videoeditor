@@ -337,7 +337,11 @@ check('nothing lands on the timeline by itself', () => {
   // adding a clip may only be triggered by the button (and the test seam)
   const calls = (src.match(/tlAddClipFromStage\(\)/g) || []).length;
   const bound = /getElementById\('tlAddClipBtn'\)[\s\S]{0,80}addEventListener\('click'[\s\S]{0,60}tlAddClipFromStage/.test(src);
-  return [calls <= 2 && bound, `${calls} calls, button bound=${bound}`];
+  const note = /getElementById\('tlEmptyNote'\)[\s\S]{0,120}addEventListener\('click'[\s\S]{0,60}tlAddClipFromStage/.test(src);
+  // and the boot sequence never seeds the lane on its own
+  const seeded = /DOMContentLoaded[\s\S]{0,900}tlSetClips/.test(src);
+  return [calls <= 3 && bound && note && !seeded,
+    `${calls} calls, add button=${bound}, empty note=${note}, seeded at boot=${seeded}`];
 });
 
 check('a new clip clears an edit that pointed at the old footage', () => {
@@ -364,6 +368,53 @@ check('the drag never leaves a clip selected with stale numbers', () => {
   const shown = /length ([\d.]+)s/.exec(readout);
   const ok = shown && Math.abs(Number(shown[1]) - T.len(c)) < 0.06;
   return [ok, `readout "${readout.replace(/\s+/g, ' ').trim().slice(0, 80)}"`];
+});
+
+check('the timeline is not inside a column that narrow windows hide', () => {
+  const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(PUB, 'styles.css'), 'utf8');
+  const inMonitor = /monitor-column[\s\S]{0,400}timeline-card/.test(html);
+  const hidden = /monitor-column[^{]*\{\s*display:\s*none/.test(css);
+  const ownRow = /stage-wrap > \.timeline-card/.test(css);
+  return [!inMonitor && !hidden && ownRow,
+    `in monitor column=${inMonitor}, a rule hides that column=${hidden}, has its own row=${ownRow}`];
+});
+
+check('a connected Resolve timeline cannot take the editable lane', () => {
+  resetTimeline([T.makeClip({ id: 'a', name: 'A', startSec: 0, srcIn: 0, srcOut: 4, srcDur: 20 })]);
+  P.state.liveTimeline = { name: 'V1', clips: [{ name: 'Resolve clip', startFrame: 0, endFrame: 100 }] };
+  P.renderTimelineTracks();
+  const el = clipEls()[0];
+  const ok = !!el && el.dataset.clipid === 'a';
+  P.state.liveTimeline = null;
+  P.renderTimelineTracks();
+  return [ok, ok ? 'the editable clip is still the one on V1' : 'Resolve overwrote V1'];
+});
+
+check('grabbing a clip keeps the element the pointer is holding', () => {
+  resetTimeline([T.makeClip({ id: 'a', name: 'A', startSec: 0, srcIn: 0, srcOut: 5, srcDur: 20 })]);
+  const el = clipEls()[0];
+  const rect = clipRect(el);
+  el.dispatchEvent(pointer('pointerdown', rect.left + 4, LANE_TOP + 10));
+  const stillThere = clipEls()[0] === el && !!P.state.tl.drag;
+  const selected = el.classList.contains('is-selected');
+  document.dispatchEvent(pointer('pointerup', rect.left + 4, LANE_TOP + 10));
+  return [stillThere && selected, `same node=${stillThere}, selected=${selected}`];
+});
+
+check('a clip waiting on the stage makes the Add button impossible to miss', () => {
+  resetTimeline([]);
+  P.renderTimelineTracks();
+  const btn = document.getElementById('tlAddClipBtn');
+  const note = document.getElementById('tlEmptyNote').textContent;
+  const ok = btn.classList.contains('is-cta') && /press/i.test(note);
+  return [ok, `cta=${btn.classList.contains('is-cta')}, note="${note.replace(/\s+/g, ' ').trim().slice(0, 70)}"`];
+});
+
+check('the empty state is a button, not just a label', () => {
+  const note = document.getElementById('tlEmptyNote');
+  return [note.classList.contains('is-actionable'),
+    `actionable=${note.classList.contains('is-actionable')}`];
 });
 
 check.summary('editable timeline');

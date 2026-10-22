@@ -559,6 +559,12 @@ change are ignored once (they all said "on"), so the new default actually takes 
 
 The timeline is not a picture of an edit; it is the edit.
 
+**Where it is:** its own full-width row directly under the viewer, in the same stretch of
+the page as the preview — not tucked into a side column. It used to sit in the right-hand
+column, which the narrow-window rule hid outright: under 1250 px the timeline did not
+exist. If a clip is waiting on the stage, **＋ Add clip** pulses, and the empty strip says
+what to press.
+
 **Put a clip on it.** Load a video on the stage, then press **+ Add clip** in the
 timeline header. The whole clip lands on **V1**. *Cut Silences* also fills V1 by itself,
 one clip per kept run, so a silenced clip arrives already editable.
@@ -599,7 +605,18 @@ longer on the stage would be a lie.
 The maths lives in `public/timeline.js` (no DOM, no state): `trimIn`, `trimOut`, `move`,
 `splitAt`, `remove`, `snap`, `timeToX`/`xToTime`, `spanFor`, `sourceAt`. Every operation
 returns `{ clips, clip, applied }` — what it *did*, after clamping — which is what the
-readout and the tests assert on. Guarded by **30 checks** in `tools/dom/timeline.mjs`:
+readout and the tests assert on. The lane is drag-driven through `PointerEvent` with a mouse/touch fallback, the grabbed
+element is never rebuilt mid-gesture (that killed the drag on touch and flickered on
+click), and a connected Resolve timeline can no longer overwrite V1 with a read-only copy
+— which used to make the clip edges unresponsive exactly for someone running Resolve.
+
+Boot is isolated per panel (`safeInit`): one tab failing to start no longer aborts every
+initialisation after it, and the preview loop survives a bad frame instead of stopping
+dead. `dist-web/` is booted here as a real page (jsdom plus a static server, the shipped
+files, the real button and the real pointer path) to prove the built bundle — not just the
+source — adds a clip and trims it.
+
+Guarded by **35 checks** in `tools/dom/timeline.mjs`:
 real `PointerEvent` drags on the real lane element (with the lane and clip rects
 measured the way a browser would), the source-bounds clamps, snapping, split/delete,
 playhead sync, and that the element's `currentTime` follows a trim.
@@ -764,7 +781,7 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 | **Speech engine, the browser's own code path** (IIFE bundle + ort-web wasm + relative paths) | `node tools/asr_browser_check.mjs` | 9/9 |
 | **Captions: fonts, size, spacing, placement, all 34 looks** | `node tools/dom/type.mjs` | 35 |
 | **In-app silence cut: plan, preview, and a full render** | `node tools/dom/cut.mjs` | 29 |
-| **Editable timeline: drag to trim, move, split, delete, monitor follows** | `node tools/dom/timeline.mjs` | 30 |
+| **Editable timeline: drag to trim, move, split, delete, monitor follows** | `node tools/dom/timeline.mjs` | 35 |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified
