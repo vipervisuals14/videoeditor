@@ -45,6 +45,7 @@ function rewriteHtml(html, stamp) {
   return html
     .replace(new RegExp('(href|src)="\\/?' + assets + '(\\?v=[^"]*)?"', 'g'), '$1="$2?v=' + stamp + '"')
     .replace(/\/download\/bridge\.lua/g, 'VFXKit_ResolveFree_Bridge.lua')
+    .replace(/'\/vendor\/asr\/transformers\.min\.js'/g, "'vendor/asr/transformers.min.js'")
     .replace(
       '<script src="touchdesigner.js"></script>',
       '<script src="web-config.js"></script>\n  <script src="touchdesigner.js"></script>'

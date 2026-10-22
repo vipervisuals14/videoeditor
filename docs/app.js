@@ -3644,6 +3644,35 @@ function renderCueList() {
   });
 }
 
+// A reel caption that stays up for eleven seconds is not a caption. Anything
+// longer than this is split at the word boundaries the transcription measured.
+const LYRIC_MAX_CUE_SEC = 6;
+
+function splitLongCues(cues) {
+  const out = [];
+  cues.forEach((cue) => {
+    const span = cue.endSec - cue.startSec;
+    if (span <= LYRIC_MAX_CUE_SEC || !cue.words || cue.words.length < 4) {
+      out.push(cue);
+      return;
+    }
+    const parts = Math.ceil(span / LYRIC_MAX_CUE_SEC);
+    const per = Math.ceil(cue.words.length / parts);
+    for (let i = 0; i < cue.words.length; i += per) {
+      const slice = cue.words.slice(i, i + per);
+      if (!slice.length) continue;
+      out.push({
+        ...cue,
+        text: slice.map((w) => w.text).join(' ').replace(/\s+([,.;:!?])/g, '$1'),
+        startSec: +slice[0].startSec.toFixed(2),
+        endSec: +(slice[slice.length - 1].endSec + 0.12).toFixed(2),
+        words: slice
+      });
+    }
+  });
+  return out.map((c, i) => ({ ...c, index: i + 1 }));
+}
+
 function lyricPushTimeline() {
   const cueSpan = Math.max(1, state.totalDurSec || 1);
   state.timelineTracks.sub = state.showLyricsOverlay ? state.cues
@@ -3859,7 +3888,9 @@ function lyricAnalyzeAudio(audio) {
     // next keystroke is the transcript.
     const first = document.querySelector('#captionCuesList .cue-input');
     if (first) {
-      first.focus();
+      // preventScroll: focusing an input inside a scroll container used to drag
+      // the whole panel sideways, which then looked frozen.
+      try { first.focus({ preventScroll: true }); } catch (_e) { first.focus(); }
       if (first.select) first.select();
     }
     const box = document.getElementById('lyricsRawInput');
@@ -3926,8 +3957,17 @@ function segmentsFromAnalysis(analysis) {
 // 30-second window happened to begin.
 async function lyricTranscribe(audio, analysis) {
   const Asr = window.AsrLab;
-  if (!Asr) return null;
-  if (!audio || !audio.samples || !audio.samples.length) return null;
+  // Never fail quietly: an empty caption list with no explanation is the worst
+  // possible outcome, so every early exit says something the user can read.
+  if (!Asr) {
+    lyricSetStatus('The speech engine did not load, so the words cannot be typed. The blocks are still timed — reload the page and press Detect again.', 'bad', 0);
+    showToast('Speech engine did not load');
+    return null;
+  }
+  if (!audio || !audio.samples || !audio.samples.length) {
+    lyricSetStatus('No audio came out of that clip, so there is nothing to transcribe. The blocks are still timed.', 'warn', 0);
+    return null;
+  }
 
   const speech = analysis && analysis.mode !== 'music';
   const setStatus = (msg, kind, pct) => lyricSetStatus(msg, kind, pct);
@@ -3989,7 +4029,7 @@ async function lyricTranscribe(audio, analysis) {
     return result;
   }
 
-  state.cues = cues;
+  state.cues = splitLongCues(cues);
   state.lyricAsr = { text: result.text, words: result.words, tookMs: result.tookMs, ignored: false };
   renderCueList();
   if (!state.showLyricsOverlay) setLyricsOverlay(true);
@@ -12284,6 +12324,7 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     lyricsDetect,
     lyricAnalyzeAudio,
     lyricTranscribe,
+    splitLongCues,
     lyricDescribe,
     syncLyricsToBeatCues,
     setLyricDetectMode,

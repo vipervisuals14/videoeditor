@@ -11,7 +11,9 @@
  *
  *   node tools/dom/lyrics.mjs
  * ==========================================================================*/
-import { boot, makeCheck } from './harness.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { boot, makeCheck, PUB } from './harness.mjs';
 
 const check = makeCheck();
 const { window, document } = boot({ beforeScripts: (w) => { w.__PULSE_TEST__ = true; } });
@@ -510,7 +512,7 @@ await check('with no whisper runtime present it fails loudly, not silently', asy
   try { await REAL_ASR.load(); } catch (err) { message = err.message; }
   window.transformers = saved;
   REAL_ASR.reset();
-  return [/speech engine script did not load/.test(message), message || 'no error raised'];
+  return [/runtime (file )?did not load|speech engine script did not load/.test(message), message || 'no error raised'];
 });
 
 await check('the tab types the words itself when a talking head is detected', async () => {
@@ -594,6 +596,73 @@ check('the Sound button mutes and unmutes the element', () => {
   btn.click();
   const on = vid.muted === false && P.state.stageSound === true && /ON/.test(btn.textContent);
   return [off && on, `off=${off} on=${on}`];
+});
+
+// ---------------------------------------------------------------------------
+// 7. the page's own wiring for the speech runtime
+//    Shipped bug: transformers.min.js is an ES module and was never imported, so
+//    window.transformers never existed and the failure was invisible behind a
+//    sideways-scrolled pane.
+// ---------------------------------------------------------------------------
+check('index.html imports the speech runtime as a module', () => {
+  const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
+  const moduleTag = /<script type="module">[\s\S]*?transformers\.min\.js[\s\S]*?<\/script>/.test(html);
+  const assign = /window\.transformers\s*=/.test(html);
+  const classic = /<script src="\/?vendor\/asr\/transformers\.min\.js"/.test(html);
+  return [moduleTag && assign && !classic,
+    `module=${moduleTag} assigns=${assign} wronglyClassic=${classic}`];
+});
+
+check('the engine waits for that module instead of failing at once', () => {
+  const src = fs.readFileSync(path.join(PUB, 'asr.js'), 'utf8');
+  const waits = /pulse-asr-lib-ready/.test(src) && /waitForLib/.test(src);
+  return [waits, waits ? 'listens for pulse-asr-lib-ready' : 'no wait path'];
+});
+
+check('asr.js is served and referenced by the page', () => {
+  const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
+  return [/<script src="\/?asr\.js/.test(html) && fs.existsSync(path.join(PUB, 'asr.js'))];
+});
+
+await check('a missing speech engine is reported, never silent', async () => {
+  const saved = window.AsrLab;
+  delete window.AsrLab;
+  const audio = { samples: talkingClip(TALK_SPANS, 14), sampleRate: SR, durationSec: 14, source: 'test' };
+  const analysis = P.lyricAnalyzeAudio(audio);
+  const out = await P.lyricTranscribe(audio, analysis);
+  const status = document.getElementById('lyrcDetectStatus');
+  window.AsrLab = saved;
+  return [out === null && status.dataset.kind === 'bad' && /speech engine did not load/i.test(status.textContent),
+    `kind=${status.dataset.kind} "${status.textContent.slice(0, 60)}"`];
+});
+
+// ---------------------------------------------------------------------------
+// 8. the panel must never scroll sideways (the "stuck menus" bug)
+// ---------------------------------------------------------------------------
+check('no pane can scroll horizontally', () => {
+  const css = fs.readFileSync(path.join(PUB, 'styles.css'), 'utf8');
+  const paneRule = /\.tab-pane\.active\s*\{[^}]*overflow-x:\s*hidden/.test(css);
+  return [paneRule, paneRule ? 'overflow-x: hidden on .tab-pane.active' : 'missing'];
+});
+
+check('no grid in the panel can be forced wider than its container', () => {
+  const css = fs.readFileSync(path.join(PUB, 'styles.css'), 'utf8');
+  const bad = [...css.matchAll(/grid-template-columns:\s*repeat\(\d+,\s*1fr\)/g)].length;
+  return [bad === 0, `${bad} grids still using repeat(n, 1fr)`];
+});
+
+check('focusing a block does not scroll the panel', () => {
+  const src = fs.readFileSync(path.join(PUB, 'app.js'), 'utf8');
+  return [/focus\(\{\s*preventScroll:\s*true/.test(src), 'focus({preventScroll:true})'];
+});
+
+check('a long caption is split into readable blocks', () => {
+  const words = [];
+  for (let i = 0; i < 24; i++) words.push({ text: `w${i}`, startSec: i * 0.5, endSec: i * 0.5 + 0.4 });
+  const split = P.splitLongCues([{ index: 1, text: 'long', startSec: 0, endSec: 12, words }]);
+  const longest = Math.max(...split.map((c) => c.endSec - c.startSec));
+  return [split.length >= 2 && longest <= 6.5 && split.every((c) => c.text.length > 0),
+    `${split.length} blocks, longest ${longest.toFixed(1)}s`];
 });
 
 check.summary('lyrics auto-detect');

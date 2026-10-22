@@ -13,7 +13,17 @@
 (function (global) {
   'use strict';
 
-  var BASE = (global.PULSE_ASR_BASE || 'vendor/asr/').replace(/\/?$/, '/');
+  function absoluteBase() {
+    var raw = global.PULSE_ASR_BASE || 'vendor/asr/';
+    raw = raw.replace(/\/?$/, '/');
+    try {
+      if (raw.indexOf('://') >= 0) return raw;
+      var here = (global.document && global.document.baseURI) || (global.location && global.location.href) || '';
+      if (here) return new URL(raw, here).href;
+    } catch (e) { /* fall through to the relative form */ }
+    return raw;
+  }
+  var BASE = absoluteBase();
   var MODEL = 'Xenova/whisper-tiny';
   var loaded = null;          // the pipeline, once it is up
   var loading = null;         // the in-flight promise, so two clicks share one load
@@ -49,7 +59,7 @@
     env.useBrowserCache = !!(global.caches && global.caches.open);
     env.localModelPath = BASE + 'models/';
     if (env.backends && env.backends.onnx && env.backends.onnx.wasm) {
-      env.backends.onnx.wasm.wasmPaths = BASE;
+      env.backends.onnx.wasm.wasmPaths = BASE;   // absolute: ORT resolves these itself
       env.backends.onnx.wasm.numThreads = 1;   // no cross-origin isolation on Pages
       env.backends.onnx.wasm.proxy = false;
     }
@@ -63,17 +73,65 @@
     return null;
   }
 
+  // The runtime is an ES module, so it arrives after the click that needs it.
+  // Wait for it (and for the wasm to be reachable) instead of reporting a
+  // failure the user cannot act on.
+  function waitForLib(timeoutMs) {
+    var direct = getLib();
+    if (direct) return Promise.resolve(direct);
+    return new Promise(function (resolve, reject) {
+      var done = false;
+      var finish = function (lib, err) {
+        if (done) return;
+        done = true;
+        global.removeEventListener('pulse-asr-lib-ready', onReady);
+        if (lib) resolve(lib); else reject(err);
+      };
+      var onReady = function () {
+        var lib = getLib();
+        if (lib) finish(lib);
+      };
+      global.addEventListener('pulse-asr-lib-ready', onReady);
+      var started = Date.now();
+      var tick = function () {
+        var lib = getLib();
+        if (lib) return finish(lib);
+        if (Date.now() - started > timeoutMs) {
+          return finish(null, new Error('the speech runtime file did not load — vendor/asr/transformers.min.js was not reachable (check the site was published with its vendor folder)'));
+        }
+        setTimeout(tick, 120);
+      };
+      tick();
+    });
+  }
+
   function load() {
     if (loaded) return Promise.resolve(loaded);
     if (loading) return loading;
     var lib = getLib();
     if (!lib) {
-      failed = 'the speech engine script did not load';
-      return Promise.reject(new Error(failed));
+      // not there yet: wait for the module, then continue exactly as below
+      report('loading', 0.02, 'Starting the speech engine…');
+      loading = waitForLib(8000).then(function (late) {
+        loading = null;
+        return boot(late);
+      }).catch(function (err) {
+        loading = null;
+        failed = err && err.message ? err.message : 'the speech runtime did not load';
+        report('failed', null, failed);
+        throw new Error(failed);
+      });
+      return loading;
     }
+    return boot(lib);
+  }
+
+  function boot(lib) {
+    if (loaded) return Promise.resolve(loaded);
+    if (loading) return loading;
     configure(lib);
     report('loading', 0.05, 'Loading the speech model (41 MB, cached after the first run)…');
-    loading = lib.pipeline('automatic-speech-recognition', MODEL, {
+    var p = lib.pipeline('automatic-speech-recognition', MODEL, {
       quantized: true,
       progress_callback: function (p) {
         if (!p) return;
@@ -94,7 +152,8 @@
       report('failed', null, failed);
       throw new Error(failed);
     });
-    return loading;
+    loading = p;
+    return p;
   }
 
   // Whisper wants 16 kHz mono floats. AudioLab already resamples; this is the
