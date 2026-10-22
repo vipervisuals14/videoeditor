@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine</title>
-  <link rel="stylesheet" href="styles.css?v=mvjjqpy8" />
+  <link rel="stylesheet" href="styles.css?v=mvjlsxgm" />
 </head>
 <body>
  <div class="app-window">
@@ -93,6 +93,7 @@
         <div class="canvas-stage" id="canvasStage" title="Drop an image or a video straight onto the monitor to use it as the plate">
           <canvas id="livePreviewCanvas" width="640" height="360" title="Magic Mask: click your subject to build a matte"></canvas>
           <video id="customVideoElement" loop playsinline hidden></video>
+          <div class="stage-hint hidden" id="stageHint"></div>
           <div class="empty-stage" id="emptyStage">
             <div class="empty-stage-mark">▣</div>
             <h2>Nothing loaded yet</h2>
@@ -1278,20 +1279,20 @@
 
  </div>
 
-  <script src="audio-lab.js?v=mvjjqpy8"></script>
-  <script src="silence-cut.js?v=mvjjqpy8"></script>
-  <script src="timeline.js?v=mvjjqpy8"></script>
-  <script src="asr.js?v=mvjjqpy8"></script>
+  <script src="audio-lab.js?v=mvjlsxgm"></script>
+  <script src="silence-cut.js?v=mvjlsxgm"></script>
+  <script src="timeline.js?v=mvjlsxgm"></script>
+  <script src="asr.js?v=mvjlsxgm"></script>
   <!--
     The speech runtime: a plain IIFE bundle with no module system, so it loads like
     any other script. asr.js reads the window.transformers global it defines, and
     if the tag ever fails it reports the exact HTTP status of the file.
   -->
-  <script src="vendor/asr/transformers.bundle.js?v=mvjjqpy8" defer></script>
-  <script src="lua-export.js?v=mvjjqpy8"></script>
-  <script src="touchdesigner.js?v=mvjjqpy8"></script>
-  <script src="depth.js?v=mvjjqpy8"></script>
-  <script src="render.js?v=mvjjqpy8"></script>
-  <script src="app.js?v=mvjjqpy8"></script>
+  <script src="vendor/asr/transformers.bundle.js?v=mvjlsxgm" defer></script>
+  <script src="lua-export.js?v=mvjlsxgm"></script>
+  <script src="touchdesigner.js?v=mvjlsxgm"></script>
+  <script src="depth.js?v=mvjlsxgm"></script>
+  <script src="render.js?v=mvjlsxgm"></script>
+  <script src="app.js?v=mvjlsxgm"></script>
 </body>
 </html>

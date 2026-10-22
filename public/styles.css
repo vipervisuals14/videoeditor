@@ -6266,3 +6266,90 @@ body.tl-dragging * { cursor: ew-resize !important; }
   #timelineTracksContainer .tl-track-lane { height: 22px; }
   #timelineTracksContainer .tl-track[data-track="V1"] .tl-track-lane { height: 28px; }
 }
+
+/* ==========================================================================*
+ * THE MONITOR KEEPS ITS SHAPE, AND THE TRANSPORT KEEPS ITS PLACE
+ * --------------------------------------------------------------------------
+ * .canvas-stage used to be aspect-ratio:16/9 with width:100%, inside a column
+ * that had to fit the viewer, the keyframe panel and (now) the timeline. The
+ * ratio won every argument: the stage stayed ~870 px tall, overflowed the
+ * card, pushed the transport bar and everything under it off the page, and the
+ * only part of the picture left visible was a thin band at the top.
+ *
+ * Now the stage simply fills what is left of the card, and the *canvas* draws
+ * the 16:9 (or 9:16) frame letterboxed inside itself — see outputFrameRect()
+ * in app.js. Nothing overflows, and a portrait clip is no longer cropped into
+ * a strip.
+ * ==========================================================================*/
+.stage-wrap .canvas-stage {
+  aspect-ratio: auto;
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.stage-wrap .viewer-card {
+  flex: 1 1 auto;
+  min-height: 170px;
+}
+
+/* the timeline is a fixed-height row: it never grows into the picture */
+.stage-wrap > .timeline-card {
+  flex: 0 0 auto;
+  max-height: 34vh;
+}
+.stage-wrap > .timeline-card #timelineTracksContainer {
+  flex: 1 1 auto;
+  min-height: 88px;
+  overflow-y: auto;
+}
+
+/* the keyframe panel is the second row; short screens give it less */
+.stage-lower {
+  flex: 0 0 auto;
+  max-height: 26vh;
+  min-height: 0;
+  overflow: hidden;
+}
+.stage-lower > .stage-detail { min-height: 0; overflow-y: auto; }
+
+@media (max-height: 900px) {
+  .stage-wrap > .timeline-card { max-height: 30vh; }
+  .stage-lower { max-height: 22vh; }
+}
+
+/* Framing hint: says why a portrait clip looks cropped, instead of letting it
+   look like a broken preview. Never covers the picture: it sits on the bar. */
+.stage-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  z-index: 6;
+  max-width: min(92%, 620px);
+  padding: 4px 9px;
+  border-radius: 4px;
+  background: rgba(4, 8, 12, 0.86);
+  border: 1px solid rgba(76, 159, 216, 0.5);
+  color: #b9dcf2;
+  font: 600 9px/1.3 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-align: center;
+  pointer-events: none;
+}
+.stage-hint.hidden { display: none; }
+
+/* Height budget in pixels as well as vh: on a tall screen vh is too generous,
+   on a short one it is too mean. The viewer keeps at least 220 px. */
+.stage-wrap {
+  min-height: 0;
+  overflow: hidden;
+}
+.stage-wrap > .timeline-card { max-height: min(34vh, 268px); }
+.stage-lower { max-height: min(26vh, 240px); }
+@media (max-height: 820px) {
+  .stage-wrap > .timeline-card { max-height: min(30vh, 210px); }
+  .stage-lower { max-height: min(20vh, 150px); }
+}

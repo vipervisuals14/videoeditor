@@ -555,6 +555,31 @@ for text. Two switches drive the same state — **`Lyrics on monitor: OFF / ON`*
 `LYRC: off` rather than naming a style that is not drawing. Saved preferences from before this
 change are ignored once (they all said "on"), so the new default actually takes effect.
 
+## The monitor is a frame, not a stretch target
+
+`.canvas-stage` was `aspect-ratio: 16/9; width: 100%` inside a column that has to
+hold the viewer, the keyframe panel and the timeline. The ratio won: the stage stayed ~870 px
+tall, overflowed the viewer card, pushed the transport bar off the page, and the picture was
+cover-cropped into the short box that was left — a thin band through the middle of a portrait
+clip, which looks exactly like a broken preview.
+
+Now the stage fills whatever the card has left, and the **canvas draws the output frame
+letterboxed inside itself** (`outputFrameRect()`): 16:9, or 9:16 when that is on, with the
+bars in black. The backing store follows the CSS box (device pixel ratio, capped at 1600 px
+on the long edge so the per-pixel shader pass stays affordable), the offscreen history buffer
+follows it too, and the transport bar and the timeline are fixed-height rows that cannot be
+pushed out.
+
+And it says what it is doing: a portrait clip in a 16:9 frame shows
+*"Portrait clip (2160×3840) — press 9:16: ON to see the whole frame"*, and a landscape clip in
+9:16 says the sides are being cropped. Both are crops by design; neither should look like a fault.
+
+`node tools/dom/monitor.mjs` — **16 checks**: the frame geometry at five canvas shapes, 9:16
+and 16:9, that the frame can never exceed the canvas, that it keeps its aspect at any window
+size, the backing-store resize (including the 1600 px cap and the zero-size case), that the
+stage no longer forces a ratio, that the transport bar follows the canvas, and both hint
+messages.
+
 ## The timeline — drag an edge, change the cut
 
 The timeline is not a picture of an edit; it is the edit.
@@ -787,6 +812,7 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 | **Captions: fonts, size, spacing, placement, all 34 looks** | `node tools/dom/type.mjs` | 35 |
 | **In-app silence cut: plan, preview, and a full render** | `node tools/dom/cut.mjs` | 29 |
 | **Editable timeline: drag to trim, move, split, delete, monitor follows** | `node tools/dom/timeline.mjs` | 37 |
+| **Monitor framing: letterbox, 9:16, backing-store resize, framing hints** | `node tools/dom/monitor.mjs` | 16 |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified

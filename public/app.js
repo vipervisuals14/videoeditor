@@ -2224,7 +2224,9 @@ function initSceneSwitcher() {
       // real duration only exists after metadata; fill it in when it lands
       videoEl.addEventListener('loadedmetadata', () => {
         setStageLoaded('video', file.name, videoEl.duration);
+        syncStageHint();
       }, { once: true });
+      syncStageHint();
       if (state.depth) setTimeout(() => depthRescan(), 260);
       resetImageLabel();
       showToast(`Loaded "${file.name}" — press Play when you are ready`);
@@ -10081,6 +10083,7 @@ function initMonitorAndTimeline() {
     aspectBtn.textContent = state.vertical916 ? '9:16: ON' : '9:16: OFF';
     if (state.vertical916) autoFrameForSlot();
     syncFramingButton();
+    syncStageHint();
   });
 
   const framingBtn = document.getElementById('framingBtn');
@@ -11085,9 +11088,27 @@ function drawMonitorFrame(t) {
   // the 9:16 slot only exists on the monitor — an export canvas is already the
   // exact shape that was asked for, so it must never be letterboxed
   plateSlotActive = true;
+  syncPreviewCanvasSize(canvas);
   const ctx = canvas.getContext('2d');
-  const w = canvas.width;
-  const h = canvas.height;
+  const cw = canvas.width;
+  const ch = canvas.height;
+
+  // The monitor is a frame, not a stretch target. Whatever shape the window
+  // gives the canvas, the picture is letterboxed into a 16:9 (or 9:16) frame
+  // and the rest stays black — the way a viewer behaves in any NLE. Without
+  // this, a wide short stage turned a portrait clip into a thin band.
+  const frame = outputFrameRect(cw, ch);
+  ctx.save();
+  ctx.fillStyle = '#04060a';
+  ctx.fillRect(0, 0, cw, ch);
+  if (frame.w < cw || frame.h < ch) {
+    ctx.beginPath();
+    ctx.rect(frame.x, frame.y, frame.w, frame.h);
+    ctx.clip();
+  }
+  ctx.translate(frame.x, frame.y);
+  const w = frame.w;
+  const h = frame.h;
 
   // Nothing loaded: a flat, still, unlit frame. No procedural stand-in — the
   // empty-state message is HTML on top of this, so it stays crisp at any size.
@@ -11099,6 +11120,8 @@ function drawMonitorFrame(t) {
     // Typography is the one thing that can be previewed without footage,
     // because the user asked for it explicitly by switching lyrics on.
     if (state.showLyricsOverlay) drawLyrcStudioTypography(ctx, w, h, t, 0);
+    ctx.restore();
+    plateSlotActive = false;
     return;
   }
 
@@ -11107,6 +11130,11 @@ function drawMonitorFrame(t) {
     offscreenBuffer.width = w;
     offscreenBuffer.height = h;
     offscreenCtx = offscreenBuffer.getContext('2d');
+  }
+  // the window can be resized mid-session: the history buffer has to follow
+  if (offscreenBuffer.width !== w || offscreenBuffer.height !== h) {
+    offscreenBuffer.width = w;
+    offscreenBuffer.height = h;
   }
 
   const preset = state.activePreset;
@@ -11276,7 +11304,7 @@ function drawMonitorFrame(t) {
 
   // Save current frame into offscreen history buffer for 360° Shutter accumulation
   offscreenCtx.clearRect(0, 0, w, h);
-  offscreenCtx.drawImage(canvas, 0, 0);
+  offscreenCtx.drawImage(canvas, frame.x, frame.y, w, h, 0, 0, w, h);
 
   // Draw LYRC.studio Kinetic Typography Overlay (if toggled on)
   if (state.showLyricsOverlay) {
@@ -11301,9 +11329,75 @@ function drawMonitorFrame(t) {
     ctx.strokeRect(leftPillar, 1, vw, h - 2);
   }
 
-  ctx.restore();
+  ctx.restore();          // the picture's own save
+  ctx.restore();          // the letterbox clip
   plateSlotActive = false;
 }
+
+/** Keep the canvas's pixels matched to the box it is displayed in. */
+function syncPreviewCanvasSize(canvas) {
+  const el = canvas || document.getElementById('livePreviewCanvas');
+  if (!el) return;
+  const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+  const cssW = Math.round((rect && rect.width) || el.clientWidth || 0);
+  const cssH = Math.round((rect && rect.height) || el.clientHeight || 0);
+  if (!(cssW > 8) || !(cssH > 8)) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  // 1600 px on the long edge is plenty for a monitor and keeps the shader pass
+  // at a sane cost: the effects run per pixel, every frame.
+  const cap = Math.min(dpr, 1600 / Math.max(cssW, cssH));
+  const bw = Math.max(160, Math.round(cssW * cap));
+  const bh = Math.max(90, Math.round(cssH * cap));
+  if (el.width !== bw || el.height !== bh) {
+    el.width = bw;
+    el.height = bh;
+  }
+}
+
+/**
+ * Say the truth about the framing. A portrait clip shown in a 16:9 frame is a
+ * crop, not a bug — but it looks like one if nothing explains it.
+ */
+function syncStageHint() {
+  const el = document.getElementById('stageHint');
+  if (!el) return;
+  const vid = document.getElementById('customVideoElement');
+  const vw = vid ? Number(vid.videoWidth) || 0 : 0;
+  const vh = vid ? Number(vid.videoHeight) || 0 : 0;
+  const imgW = customImageEl ? Number(customImageEl.naturalWidth) || 0 : 0;
+  const imgH = customImageEl ? Number(customImageEl.naturalHeight) || 0 : 0;
+  const w = state.scene === 'custom_video' ? vw : imgW;
+  const h = state.scene === 'custom_video' ? vh : imgH;
+  let text = '';
+  if (w > 0 && h > 0) {
+    const portrait = h > w * 1.05;
+    if (portrait && !state.vertical916) {
+      text = `Portrait clip (${w}×${h}) — press 9:16: ON to see the whole frame`;
+    } else if (!portrait && state.vertical916) {
+      text = `Landscape clip (${w}×${h}) — 9:16 crops the sides; press 9:16: OFF for the full frame`;
+    }
+  }
+  el.textContent = text;
+  el.classList.toggle('hidden', !text);
+}
+
+/** The output frame, letterboxed inside the canvas. */
+function outputFrameRect(w, h) {
+  const aspect = state.vertical916 ? 9 / 16 : 16 / 9;
+  let fw = w;
+  let fh = Math.round(w / aspect);
+  if (fh > h) {
+    fh = h;
+    fw = Math.round(h * aspect);
+  }
+  return {
+    x: Math.round((w - fw) / 2),
+    y: Math.round((h - fh) / 2),
+    w: Math.max(2, fw),
+    h: Math.max(2, fh)
+  };
+}
+
 // The still image the user loaded, plus its real size. Kept outside `state` so
 // nothing tries to serialise an Image object into prefs.
 let customImageEl = null;
@@ -14328,6 +14422,9 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     tlHighlightSelection,
     tlUpdateButtons,
     seekTo,
+    syncStageHint,
+    outputFrameRect,
+    syncPreviewCanvasSize,
     bootFailures,
     renderTimelineTracks,
     renderTimelineSelection,
