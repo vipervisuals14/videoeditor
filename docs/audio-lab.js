@@ -797,6 +797,26 @@
     });
   }
 
+  // A stream of the element's own audio, for recording. The element keeps
+  // playing into this graph, so the recorded sound *is* the picture's sound:
+  // no scheduling, no splicing, no drift, and it works for any codec the
+  // browser can play even when it cannot decode the file for analysis.
+  function captureStreamFrom(el) {
+    var graph = captureGraph(el);
+    var dest = graph.ctx.createMediaStreamDestination();
+    graph.src.connect(dest);
+    if (graph.ctx.state === 'suspended' && graph.ctx.resume) {
+      try { graph.ctx.resume(); } catch (e) { /* ignore */ }
+    }
+    return {
+      stream: dest.stream,
+      context: graph.ctx,
+      release: function () {
+        try { graph.src.disconnect(dest); } catch (e) { /* already gone */ }
+      }
+    };
+  }
+
   // The panel's Sound switch: 0 mutes the monitor, 1 restores it.
   function setMonitorLevel(level) {
     monitorGain = Math.max(0, Math.min(1, Number(level)));
@@ -806,6 +826,7 @@
   var AudioLab = {
     version: '1.0',
     setMonitorLevel: setMonitorLevel,
+    captureStreamFrom: captureStreamFrom,
     TARGET_RATE: TARGET_RATE,
     FRAME_SEC: FRAME_SEC,
     features: features,

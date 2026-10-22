@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine</title>
-  <link rel="stylesheet" href="styles.css?v=mvjg1auk" />
+  <link rel="stylesheet" href="styles.css?v=mvjgrupb" />
 </head>
 <body>
  <div class="app-window">
@@ -658,12 +658,41 @@
             <div class="header-btn-group">
               <button class="btn-secondary" id="silenceDetectBtn"
                       title="Listen to the clip on the stage and measure where the talking stops">◉ Detect pauses</button>
-              <button class="btn-primary" id="applySilenceCutBtn">Cut Silences in Resolve</button>
+              <button class="btn-secondary" id="applySilenceCutBtn"
+                      title="If you would rather do the edit inside DaVinci Resolve, this builds the Lua for it">Send cuts to Resolve</button>
             </div>
           </div>
 
           <p class="lyrc-detect-status" id="silenceDetectStatus" data-kind="idle"
              style="margin:0 0 10px;">Nothing measured yet — load a clip on the stage and press ◉ Detect pauses. The cutter only ever cuts what it has actually heard.</p>
+
+          <!-- CUT HERE: the finished file, made in this page -->
+          <div class="cut-here-card" id="silenceCutCard">
+            <div class="cut-here-head">
+              <div class="cut-here-title">
+                <h4>Cut it here — no Resolve needed</h4>
+                <p id="silenceCutSummary">Detect the pauses first, then this renders a new file with the dead air already gone.</p>
+              </div>
+              <div class="cut-here-actions">
+                <label class="checkbox-pill" title="Play the monitor with the pauses skipped, so you hear the finished cut before rendering it">
+                  <input type="checkbox" id="silencePreviewToggle" />
+                  <span>Preview the cut</span>
+                </label>
+                <button class="btn-primary" id="silenceRenderBtn" disabled
+                        title="Render a new file with every detected pause removed. Records in real time.">✂ Render the cut file</button>
+              </div>
+            </div>
+            <div class="cut-progress"><i id="silenceCutProgress"></i></div>
+            <p class="cut-status" id="silenceCutStatus" data-kind="idle">Waiting for a measurement.</p>
+            <div class="cut-result" id="silenceCutResult" hidden>
+              <div class="cut-file">
+                <strong id="silenceCutFileName">cut.webm</strong>
+                <span id="silenceCutFileInfo"></span>
+              </div>
+              <a class="btn-primary cut-download" id="silenceDownloadLink" download>⇩ Download the cut</a>
+            </div>
+            <p class="cut-note" id="silenceCutNote">Renders at the clip's own resolution, in real time — a 3-minute cut takes about 3 minutes, so keep this tab in front while it runs. Your original file is never touched: this writes a new one.</p>
+          </div>
 
           <div class="stats-strip">
             <div class="stat-box">
@@ -1233,18 +1262,19 @@
 
  </div>
 
-  <script src="audio-lab.js?v=mvjg1auk"></script>
-  <script src="asr.js?v=mvjg1auk"></script>
+  <script src="audio-lab.js?v=mvjgrupb"></script>
+  <script src="silence-cut.js?v=mvjgrupb"></script>
+  <script src="asr.js?v=mvjgrupb"></script>
   <!--
     The speech runtime: a plain IIFE bundle with no module system, so it loads like
     any other script. asr.js reads the window.transformers global it defines, and
     if the tag ever fails it reports the exact HTTP status of the file.
   -->
-  <script src="vendor/asr/transformers.bundle.js?v=mvjg1auk" defer></script>
-  <script src="lua-export.js?v=mvjg1auk"></script>
-  <script src="touchdesigner.js?v=mvjg1auk"></script>
-  <script src="depth.js?v=mvjg1auk"></script>
-  <script src="render.js?v=mvjg1auk"></script>
-  <script src="app.js?v=mvjg1auk"></script>
+  <script src="vendor/asr/transformers.bundle.js?v=mvjgrupb" defer></script>
+  <script src="lua-export.js?v=mvjgrupb"></script>
+  <script src="touchdesigner.js?v=mvjgrupb"></script>
+  <script src="depth.js?v=mvjgrupb"></script>
+  <script src="render.js?v=mvjgrupb"></script>
+  <script src="app.js?v=mvjgrupb"></script>
 </body>
 </html>

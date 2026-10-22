@@ -1390,6 +1390,13 @@ const state = {
   silenceMinMs: 300,
   silencePadMs: 60,
   silenceSegments: [],        // nothing detected until you ask for it
+  // In-app cutter: the plan derived from those segments, whether the monitor is
+  // previewing it, and the file it produced (if any).
+  silencePlan: null,
+  silencePreview: false,
+  silenceRendering: false,
+  silenceCancel: false,
+  silenceCut: null,           // {url, name, info, blob, seconds, label}
 
   // LYRC.studio Captions & Lyrics state
   lyrcFilterCat: 'ALL',
@@ -2263,6 +2270,7 @@ function clearStage() {
   lastPlateAspect = 0;
   state.plateFile = null;
   state.lyricAnalysis = null;
+  resetSilenceCut();
   state.scene = 'empty';
   state.isPlaying = false;
   state.playheadSec = 0;
@@ -3371,6 +3379,28 @@ function initSilenceTab() {
 
   document.getElementById('applySilenceCutBtn').addEventListener('click', executeSilenceCut);
 
+  const renderBtn = document.getElementById('silenceRenderBtn');
+  if (renderBtn) renderBtn.addEventListener('click', () => { renderInAppCut(); });
+
+  const previewToggle = document.getElementById('silencePreviewToggle');
+  if (previewToggle) {
+    previewToggle.addEventListener('change', () => {
+      state.silencePreview = previewToggle.checked;
+      if (state.silencePreview) {
+        const plan = state.silencePlan;
+        const skipped = plan ? plan.removedSec : 0;
+        showToast(skipped > 0
+          ? `Preview on — the monitor now skips ${skipped.toFixed(1)}s of pause`
+          : 'Preview on — nothing to skip at this threshold', skipped > 0 ? 'ok' : 'warn');
+        // Jump out of a pause immediately, so pressing Play does not start on silence.
+        const here = silenceCutAt(state.playheadSec);
+        if (here) seekTo(here.end);
+      } else {
+        showToast('Preview off — the monitor plays the whole clip again');
+      }
+    });
+  }
+
   const detectBtn = document.getElementById('silenceDetectBtn');
   if (detectBtn) {
     detectBtn.addEventListener('click', async () => {
@@ -3457,6 +3487,7 @@ function renderSilenceSegments() {
     });
     const count = document.getElementById('silenceCutCount');
     if (count) count.textContent = '0 cuts';
+    refreshSilencePlan();
     return;
   }
   let keptSec = 0;
@@ -3494,6 +3525,7 @@ function renderSilenceSegments() {
   document.getElementById('silenceNewDur').textContent = orig > 0 ? formatClock(keptSec) : '—';
   document.getElementById('silenceSavedPct').textContent = orig > 0 ? `${pct}% (-${saved.toFixed(1)}s)` : '—';
   document.getElementById('silenceCutCount').textContent = `${cutCount} cut${cutCount === 1 ? '' : 's'}`;
+  refreshSilencePlan();
 
   listEl.querySelectorAll('.segment-row').forEach((row) => {
     row.addEventListener('click', () => {
@@ -3603,6 +3635,298 @@ function executeSilenceCut() {
     autoZoomJumpCut: autoZoom,
     segments: resolveSegments
   }, `Stripped silences & built ${kept.length} subclips on timeline`);
+}
+
+// ============================================================================
+// CUT IT HERE — the finished file, made in this page
+// ----------------------------------------------------------------------------
+// "Send cuts to Resolve" is still there for anyone who wants to edit natively,
+// but the point of this panel is that you do not have to: press one button and
+// the pauses are gone from a new file you can download and use anywhere.
+//
+// Three pieces:
+//   silenceKeptPlan()      which slices survive, from the measured segments
+//   silenceSkipTick()      preview: play the monitor with the pauses skipped
+//   renderInAppCut()       the real render, in real time, to a downloadable file
+// ============================================================================
+const CUT_MIME_NOTE = 'MP4 or WebM — whatever this browser can encode';
+
+function silenceKeptPlan() {
+  if (!window.SILENCE_CUT || !state.silenceSegments || !state.silenceSegments.length) return null;
+  // The padding slider has already been applied by the detector, but a user may
+  // move it after measuring, so the plan is always rebuilt from the segments as
+  // they are on screen (including any Keep/Cut overrides).
+  return window.SILENCE_CUT.plan(state.silenceSegments, { minSliceSec: 0.12 });
+}
+
+// A cut belongs to the clip it was measured from: loading another clip must not
+// leave a download button pointing at footage that is no longer on the stage.
+function resetSilenceCut() {
+  state.silencePlan = null;
+  state.silencePreview = false;
+  state.silenceRendering = false;
+  state.silenceCancel = false;
+  if (state.silenceCut && state.silenceCut.url) {
+    try { URL.revokeObjectURL(state.silenceCut.url); } catch (_e) { /* ignore */ }
+  }
+  state.silenceCut = null;
+  const card = document.getElementById('silenceCutResult');
+  if (card) card.hidden = true;
+  const bar = document.getElementById('silenceCutProgress');
+  if (bar) bar.style.width = '0%';
+  const toggle = document.getElementById('silencePreviewToggle');
+  if (toggle) { toggle.checked = false; toggle.disabled = true; }
+  const btn = document.getElementById('silenceRenderBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '✂ Render the cut file'; }
+}
+
+function silenceCutStatus(text, kind) {
+  const el = document.getElementById('silenceCutStatus');
+  if (el) {
+    el.textContent = text;
+    el.dataset.kind = kind || 'idle';
+  }
+}
+
+function refreshSilencePlan() {
+  const plan = silenceKeptPlan();
+  state.silencePlan = plan;
+
+  const summary = document.getElementById('silenceCutSummary');
+  const btn = document.getElementById('silenceRenderBtn');
+  const previewToggle = document.getElementById('silencePreviewToggle');
+
+  if (!plan) {
+    if (summary) summary.textContent = 'Detect the pauses first, then this renders a new file with the dead air already gone.';
+    if (btn) { btn.disabled = true; }
+    if (previewToggle) { previewToggle.checked = false; previewToggle.disabled = true; }
+    state.silencePreview = false;
+    silenceCutStatus('Waiting for a measurement.', 'idle');
+    return;
+  }
+
+  const removed = plan.removedSec;
+  const pct = plan.sourceSec > 0 ? Math.round((removed / plan.sourceSec) * 100) : 0;
+  if (summary) {
+    summary.textContent = plan.ranges.length
+      ? `${plan.ranges.length} piece${plan.ranges.length === 1 ? '' : 's'} kept · ${plan.keptSec.toFixed(1)}s from ${plan.sourceSec.toFixed(1)}s · ${removed.toFixed(1)}s (${pct}%) of pause removed`
+      : 'Every second was silence — nothing to keep. Move the threshold and try again.';
+  }
+  // The four stat boxes are the same arithmetic the renderer will use, so the
+  // number on screen and the length of the file cannot disagree.
+  const setStat = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  setStat('silenceOrigDur', formatClock(plan.sourceSec));
+  setStat('silenceNewDur', formatClock(plan.keptSec));
+  setStat('silenceSavedPct', plan.sourceSec > 0
+    ? `${plan.sourceSec > 0 ? Math.round((plan.removedSec / plan.sourceSec) * 100) : 0}% (-${plan.removedSec.toFixed(1)}s)`
+    : '—');
+  setStat('silenceCutCount', `${plan.cuts.length} cut${plan.cuts.length === 1 ? '' : 's'}`);
+
+  const canCut = plan.ranges.length > 0;
+  if (btn && !state.silenceRendering) btn.disabled = !canCut;
+  if (previewToggle) previewToggle.disabled = !canCut;
+  if (!canCut) silenceCutStatus('Nothing survives the cut at this threshold.', 'warn');
+  else if (!state.silenceRendering && !state.silenceCut) {
+    silenceCutStatus(`Ready — ${plan.keptSec.toFixed(1)}s of finished cut, ${plan.cuts.length} pause${plan.cuts.length === 1 ? '' : 's'} removed.`, 'good');
+  }
+}
+
+function silenceCutAt(t) {
+  const plan = state.silencePlan;
+  if (!plan || !plan.cuts) return null;
+  for (let i = 0; i < plan.cuts.length; i++) {
+    const c = plan.cuts[i];
+    if (t >= c.start && t < c.end) return c;
+  }
+  return null;
+}
+
+// Called from the monitor loop: while Preview is on, the playhead never sits
+// inside a pause, so the monitor plays the finished cut.
+function silenceSkipTick() {
+  if (!state.silencePreview || !state.silencePlan || !state.isPlaying) return false;
+  const cut = silenceCutAt(state.playheadSec);
+  if (!cut) return false;
+  state.playheadSec = Math.min(state.totalDurSec || cut.end, cut.end);
+  const vid = document.getElementById('customVideoElement');
+  if (vid && state.scene === 'custom_video') {
+    const dur = Number(vid.duration);
+    try { vid.currentTime = Number.isFinite(dur) && dur > 0.05 ? state.playheadSec % dur : state.playheadSec; } catch (_e) { /* ignore */ }
+  }
+  return true;
+}
+
+// decodeAudioData gives every channel; AudioLab's decode is mono because the
+// analyser only needs mono. A deliverable needs the real sound.
+async function decodePlateAudioBuffer() {
+  const file = state.plateFile;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!file || !Ctx) return null;
+  if (file.size > 700 * 1024 * 1024) return null;
+  const ctx = new Ctx();
+  try {
+    const bytes = await file.arrayBuffer();
+    const buf = await ctx.decodeAudioData(bytes);
+    return { buffer: buf, ctx };
+  } catch (_e) {
+    try { ctx.close(); } catch (_e2) { /* ignore */ }
+    return null;
+  }
+}
+
+function silenceSetCutResult(result, plan) {
+  if (state.silenceCut && state.silenceCut.url) {
+    try { URL.revokeObjectURL(state.silenceCut.url); } catch (_e) { /* ignore */ }
+  }
+  const base = (state.plateFile && state.plateFile.name
+    ? state.plateFile.name.replace(/\.[^.]+$/, '')
+    : 'PulseVFX_cut').replace(/[^\w\-. ]+/g, '_');
+  const name = `${base}_silence-cut.${result.ext}`;
+  const url = URL.createObjectURL(result.blob);
+  state.silenceCut = {
+    url,
+    name,
+    blob: result.blob,
+    seconds: result.seconds,
+    label: result.label,
+    width: result.width,
+    height: result.height
+  };
+  const card = document.getElementById('silenceCutResult');
+  const fileName = document.getElementById('silenceCutFileName');
+  const info = document.getElementById('silenceCutFileInfo');
+  const link = document.getElementById('silenceDownloadLink');
+  if (fileName) fileName.textContent = name;
+  if (info) {
+    info.textContent = `${result.width} × ${result.height} · ${result.seconds.toFixed(1)}s · `
+      + `${(result.blob.size / 1048576).toFixed(1)} MB · ${result.label}`;
+  }
+  if (link) {
+    link.href = url;
+    link.download = name;
+  }
+  if (card) card.hidden = false;
+  saveUiPrefs();
+  return state.silenceCut;
+}
+
+async function renderInAppCut() {
+  const btn = document.getElementById('silenceRenderBtn');
+  const bar = document.getElementById('silenceCutProgress');
+
+  if (state.silenceRendering) {
+    state.silenceCancel = true;
+    silenceCutStatus('Stopping after this piece…', 'warn');
+    if (btn) btn.disabled = true;
+    return;
+  }
+
+  const plan = state.silencePlan || silenceKeptPlan();
+  if (!plan || !plan.ranges.length) {
+    silenceCutStatus('Nothing to cut — detect the pauses first.', 'warn');
+    showToast('Detect the pauses first', 'warn');
+    return;
+  }
+  const vid = document.getElementById('customVideoElement');
+  if (!vid || state.scene !== 'custom_video' || !videoHasSource(vid)) {
+    silenceCutStatus('Load a video clip on the stage first — the cutter works on the clip it can hear.', 'warn');
+    showToast('Load a video clip first', 'warn');
+    return;
+  }
+  if (!window.SILENCE_CUT) {
+    silenceCutStatus('The cutter did not load — reload the page.', 'bad');
+    return;
+  }
+
+  state.silenceRendering = true;
+  state.silenceCancel = false;
+  if (btn) { btn.disabled = false; btn.textContent = '◼ Stop'; }
+  if (bar) bar.style.width = '0%';
+  silenceCutStatus('Reading the clip…', 'busy');
+
+  // Nothing else may touch the element while it renders, and nobody wants the
+  // monitor playing the raw clip over the top of it.
+  const wasMuted = vid.muted;
+  const wasPlaying = state.isPlaying;
+  const wasMonitor = state.stageSound;
+  state.isPlaying = false;
+  if (window.AudioLab && window.AudioLab.setMonitorLevel) {
+    window.AudioLab.setMonitorLevel(0);      // record it, don't play it at the user
+  }
+
+  // Sound, best source first: the element's own live output (exact sync, works
+  // for any codec the browser can play), then a decoded buffer spliced around
+  // the cuts, then picture only — and if it comes to that, the user is told.
+  let live = null;
+  try {
+    if (window.AudioLab && window.AudioLab.captureStreamFrom) {
+      silenceCutStatus('Connecting the sound…', 'busy');
+      live = window.AudioLab.captureStreamFrom(vid);
+    }
+  } catch (_e) { live = null; }
+
+  let audio = null;
+  if (!live) {
+    try {
+      silenceCutStatus('Preparing the sound…', 'busy');
+      audio = await decodePlateAudioBuffer();
+    } catch (_e) { audio = null; }
+  }
+
+  try {
+    const result = await window.SILENCE_CUT.render({
+      videoEl: vid,
+      ranges: plan.ranges,
+      audioStream: live ? live.stream : null,
+      audioBuffer: audio ? audio.buffer : null,
+      audioContext: audio ? audio.ctx : null,
+      fps: 30,
+      maxLongEdge: 3840,
+      onProgress: (p) => {
+        if (bar) bar.style.width = `${Math.round((p.pct || 0) * 100)}%`;
+        if (p.detail) silenceCutStatus(p.detail, 'busy');
+      },
+      cancelled: () => state.silenceCancel
+    });
+
+    const cut = silenceSetCutResult(result, plan);
+    const noise = (live || audio) ? (result.droppedAudio
+      ? ' This browser could not mux the sound, so the file is picture only.'
+      : '')
+      : ' (no audio could be read from this clip — the file is picture only)';
+    silenceCutStatus(`Done — ${cut.seconds.toFixed(1)}s, ${plan.cuts.length} pause${plan.cuts.length === 1 ? '' : 's'} removed. Press Download.${noise}`,
+      ((live || audio) && !result.droppedAudio) ? 'good' : 'warn');
+    showToast(`Cut rendered: ${cut.name}`, 'ok');
+    return cut;
+  } catch (err) {
+    const msg = (err && err.message) ? err.message : String(err);
+    silenceCutStatus(state.silenceCancel ? 'Stopped — nothing was written.' : `Could not render the cut: ${msg}`, state.silenceCancel ? 'warn' : 'bad');
+    showToast(state.silenceCancel ? 'Cut cancelled' : 'Could not render the cut', state.silenceCancel ? 'warn' : 'error');
+    return null;
+  } finally {
+    state.silenceRendering = false;
+    state.silenceCancel = false;
+    if (bar) bar.style.width = state.silenceCut ? '100%' : '0%';
+    if (btn) { btn.textContent = '✂ Render the cut file'; btn.disabled = !(state.silencePlan && state.silencePlan.ranges.length); }
+    vid.muted = wasMuted;
+    if (live && live.release) { try { live.release(); } catch (_e) { /* ignore */ } }
+    if (window.AudioLab && window.AudioLab.setMonitorLevel && wasMonitor) {
+      window.AudioLab.setMonitorLevel(1);
+    }
+    // Leave the transport paused rather than restarting playback under them.
+    if (wasPlaying) state.isPlaying = false;
+    refreshSilencePlan();
+    if (state.silenceCut) {
+      silenceCutStatus(silenceCutStatusText(), state.silenceCut ? 'good' : 'idle');
+    }
+  }
+}
+
+function silenceCutStatusText() {
+  const c = state.silenceCut;
+  const p = state.silencePlan;
+  if (!c || !p) return 'Ready.';
+  return `Done — ${c.seconds.toFixed(1)}s, ${p.cuts.length} pause${p.cuts.length === 1 ? '' : 's'} removed. Press Download.`;
 }
 
 // ============================================================================
@@ -9787,6 +10111,7 @@ function renderLivePreviewLoop(now) {
 
   if (state.isPlaying && state.motion && state.totalDurSec > 0) {
     state.playheadSec = (state.playheadSec + dt) % state.totalDurSec;
+    silenceSkipTick();
     const pct = (state.playheadSec / state.totalDurSec) * 100;
     const scrubber = document.getElementById('timelineScrubber');
     if (scrubber && document.activeElement !== scrubber) {
@@ -9837,6 +10162,9 @@ function videoHasSource(vid) {
 }
 
 function syncVideoTransport() {
+  // While the cutter is rendering it drives the element slice by slice; a
+  // transport sync here would yank the picture back to the playhead mid-record.
+  if (state.silenceRendering) return;
   const vid = document.getElementById('customVideoElement');
   if (!vid || vid.tagName !== 'VIDEO') return;
   // Nothing loaded yet: calling pause() on an empty element is pointless noise.
@@ -13230,6 +13558,14 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     applyLyricsState,
     segmentsFromAnalysis,
     renderSilenceSegments,
+    // in-app cutter
+    silenceKeptPlan,
+    refreshSilencePlan,
+    silenceSkipTick,
+    silenceCutAt,
+    renderInAppCut,
+    resetSilenceCut,
+    decodePlateAudioBuffer,
     drawSilenceWaveform,
     isSegmentCut,
 

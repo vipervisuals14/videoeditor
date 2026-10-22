@@ -658,12 +658,41 @@
             <div class="header-btn-group">
               <button class="btn-secondary" id="silenceDetectBtn"
                       title="Listen to the clip on the stage and measure where the talking stops">◉ Detect pauses</button>
-              <button class="btn-primary" id="applySilenceCutBtn">Cut Silences in Resolve</button>
+              <button class="btn-secondary" id="applySilenceCutBtn"
+                      title="If you would rather do the edit inside DaVinci Resolve, this builds the Lua for it">Send cuts to Resolve</button>
             </div>
           </div>
 
           <p class="lyrc-detect-status" id="silenceDetectStatus" data-kind="idle"
              style="margin:0 0 10px;">Nothing measured yet — load a clip on the stage and press ◉ Detect pauses. The cutter only ever cuts what it has actually heard.</p>
+
+          <!-- CUT HERE: the finished file, made in this page -->
+          <div class="cut-here-card" id="silenceCutCard">
+            <div class="cut-here-head">
+              <div class="cut-here-title">
+                <h4>Cut it here — no Resolve needed</h4>
+                <p id="silenceCutSummary">Detect the pauses first, then this renders a new file with the dead air already gone.</p>
+              </div>
+              <div class="cut-here-actions">
+                <label class="checkbox-pill" title="Play the monitor with the pauses skipped, so you hear the finished cut before rendering it">
+                  <input type="checkbox" id="silencePreviewToggle" />
+                  <span>Preview the cut</span>
+                </label>
+                <button class="btn-primary" id="silenceRenderBtn" disabled
+                        title="Render a new file with every detected pause removed. Records in real time.">✂ Render the cut file</button>
+              </div>
+            </div>
+            <div class="cut-progress"><i id="silenceCutProgress"></i></div>
+            <p class="cut-status" id="silenceCutStatus" data-kind="idle">Waiting for a measurement.</p>
+            <div class="cut-result" id="silenceCutResult" hidden>
+              <div class="cut-file">
+                <strong id="silenceCutFileName">cut.webm</strong>
+                <span id="silenceCutFileInfo"></span>
+              </div>
+              <a class="btn-primary cut-download" id="silenceDownloadLink" download>⇩ Download the cut</a>
+            </div>
+            <p class="cut-note" id="silenceCutNote">Renders at the clip's own resolution, in real time — a 3-minute cut takes about 3 minutes, so keep this tab in front while it runs. Your original file is never touched: this writes a new one.</p>
+          </div>
 
           <div class="stats-strip">
             <div class="stat-box">
@@ -1234,6 +1263,7 @@
  </div>
 
   <script src="/audio-lab.js?v=6"></script>
+  <script src="/silence-cut.js?v=6"></script>
   <script src="/asr.js?v=6"></script>
   <!--
     The speech runtime: a plain IIFE bundle with no module system, so it loads like

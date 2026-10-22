@@ -555,6 +555,38 @@ for text. Two switches drive the same state — **`Lyrics on monitor: OFF / ON`*
 `LYRC: off` rather than naming a style that is not drawing. Saved preferences from before this
 change are ignored once (they all said "on"), so the new default actually takes effect.
 
+## Cut Silences happens in the page
+
+`03 • Silences` no longer needs Resolve. Load a clip, press **◉ Detect pauses**, then
+**✂ Render the cut file**: the pauses are cut out here and you get a new file to download. The
+original is never modified.
+
+How it works (`public/silence-cut.js`), with no server and no upload:
+
+- **plan()** is pure arithmetic over the measured segments: which slices survive (a slice shorter
+  than 120 ms between two pauses is a click, not a word, and is dropped), how long the result is,
+  and how a moment in the cut maps back to the source (`toSource` / `toOutput`). A pause you click to
+  keep is honoured.
+- **render()** draws the source into a canvas at its own resolution (capped at 4K, even dimensions),
+  records that canvas plus an audio track through `MediaRecorder`, and plays the element through each
+  surviving slice in turn. Between slices the recorder **and** the play clock are paused, so a slow
+  seek records nothing at all — the file cannot grow a freeze-frame or slide out of sync.
+- The sound is the element's own live output (`AudioLab.captureStreamFrom`), so it is in sync by
+  construction. If a browser will not give a live stream, a decoded buffer is spliced around the cuts,
+  sample-accurately. If neither is possible the file is picture only and the panel says so.
+- Container: MP4/H.264+AAC when the browser can mux it, otherwise WebM/VP9+Opus. The panel prints
+  which one you got instead of promising a format.
+
+**Preview the cut** plays the monitor with the pauses skipped, so you can hear the result before
+spending a render on it. `Send cuts to Resolve` is still there as the second option for anyone who
+wants to edit natively.
+
+Two honest limits, both in the panel: it records in **real time** (a 3-minute cut takes about 3
+minutes, so keep the tab in front), and it is a delivery file, not a grading master.
+
+`node tools/dom/cut.mjs` proves the arithmetic, the preview skipping and a full render driven through
+a fake browser (canvas stream, MediaRecorder, a video element that really seeks) — 27 checks.
+
 ## Captions: 34 looks, one typography model
 
 The look list has 34 entries in six categories. Twenty are the kinetic presets (Duet, Redline,
@@ -678,6 +710,7 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 | **Speech engine, real weights, known recording** | `node tools/asr_check.mjs` | 5/5 |
 | **Speech engine, the browser's own code path** (IIFE bundle + ort-web wasm + relative paths) | `node tools/asr_browser_check.mjs` | 9/9 |
 | **Captions: fonts, size, spacing, placement, all 34 looks** | `node tools/dom/type.mjs` | 35 |
+| **In-app silence cut: plan, preview, and a full render** | `node tools/dom/cut.mjs` | 27 |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified

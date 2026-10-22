@@ -5830,3 +5830,128 @@ body:has(.workspace.compact-dock) { grid-template-columns: 460px minmax(0, 1fr);
   font: 500 9.5px/1.45 var(--font-mono);
   color: var(--dim);
 }
+
+/* ---------------------------------------------------------------------------
+ * Cut it here — the in-app silence render.
+ * The card is the answer to "why do I have to open Resolve": one button, one
+ * progress bar, one download. It sits above the waveform so it is impossible to
+ * miss, and it is the only thing on this tab that produces a finished file.
+ * -------------------------------------------------------------------------*/
+#tab-silences .cut-here-card {
+  margin: 0 0 12px;
+  padding: 11px 12px;
+  background: linear-gradient(180deg, #1a1f23, #161a1d);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blue);
+  border-radius: 7px;
+}
+
+#tab-silences .cut-here-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+#tab-silences .cut-here-title {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+#tab-silences .cut-here-title h4 {
+  margin: 0 0 3px;
+  font: 700 12px/1.2 var(--font-sans, sans-serif);
+  color: var(--paper);
+  letter-spacing: 0.01em;
+}
+
+#tab-silences .cut-here-title p {
+  margin: 0;
+  font: 500 10.5px/1.45 var(--font-mono);
+  color: var(--muted);
+}
+
+#tab-silences .cut-here-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+#tab-silences .cut-here-actions .checkbox-pill {
+  font-size: 10px;
+}
+
+#tab-silences .cut-progress {
+  position: relative;
+  height: 4px;
+  margin: 10px 0 6px;
+  background: #0c1012;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#tab-silences .cut-progress i {
+  display: block;
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--blue-deep), var(--blue));
+  transition: width 0.18s linear;
+}
+
+#tab-silences .cut-status {
+  margin: 0;
+  font: 500 10.5px/1.4 var(--font-mono);
+  color: var(--muted);
+}
+
+#tab-silences .cut-status[data-kind="good"] { color: var(--green); }
+#tab-silences .cut-status[data-kind="warn"] { color: var(--amber); }
+#tab-silences .cut-status[data-kind="bad"] { color: #e07067; }
+#tab-silences .cut-status[data-kind="busy"] { color: var(--blue); }
+
+#tab-silences .cut-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+  padding: 8px 10px;
+  background: #0d1214;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+}
+
+#tab-silences .cut-file {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#tab-silences .cut-file strong {
+  font: 600 11px/1.3 var(--font-mono);
+  color: var(--paper);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#tab-silences .cut-file span {
+  font: 500 9.5px/1.3 var(--font-mono);
+  color: var(--dim);
+}
+
+#tab-silences .cut-download {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+#tab-silences .cut-note {
+  margin: 8px 0 0;
+  font: 500 9.5px/1.45 var(--font-mono);
+  color: var(--dim);
+}
