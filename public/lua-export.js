@@ -628,6 +628,21 @@
     var style = payload.style || 'Kinetic Pop';
     var intensity = Number(payload.intensity == null ? 100 : payload.intensity);
     var fps = Number(payload.fps) || 24;
+    // Typography the user set on the panel. TextPlus input names differ between
+    // Fusion builds, so every one of these is written through pcall: the ones a
+    // build does not have are skipped instead of aborting the whole script.
+    var tp = payload.typography || {};
+    var sizeFrac = Number(tp.sizePct ? tp.sizePct / 100 : (payload.fontSize || 0.036));
+    if (!isFinite(sizeFrac) || sizeFrac <= 0) sizeFrac = 0.036;
+    var weight = Number(tp.weight) || 400;
+    var bold = weight >= 600;
+    var faceStyle = (bold && tp.italic) ? 'Bold Italic' : bold ? 'Bold' : tp.italic ? 'Italic' : 'Regular';
+    var faceName = tp.font || 'Helvetica Neue';
+    var tracking = (Number(tp.tracking) || 0) / 1000;          // em, as Fusion counts it
+    var leading = Number(tp.leading) || 1.05;
+    var anchorX = (Number(tp.xPct) || 50) / 100;
+    var anchorY = 1 - (Number(tp.yPct) || 52) / 100;           // Fusion Y runs bottom-up
+    var opacityPct = Math.max(0, Math.min(100, Number(tp.opacity) || 100));
 
     var markerCalls = lines.map(function (l) {
       var f = Math.round((Number(l.startSec) || 0) * 24);
@@ -643,14 +658,20 @@
       var fIn = Math.max(0, Math.round((t0 - 0.12) * fps));
       var fOn = Math.max(fIn + 1, Math.round(t0 * fps));
       var fOut = Math.max(fOn + 1, Math.round(t1 * fps));
-      var peak = Math.min(1, Math.max(0.05, intensity / 100)).toFixed(3);
+      var peak = Math.min(1, Math.max(0.05, (intensity / 100) * (opacityPct / 100))).toFixed(3);
       var n = i + 1;
       nodeLines.push(
         '        local t' + n + ' = comp:AddTool("TextPlus", -32768, -32768)\n'
         + '        if t' + n + ' then\n'
         + '            pcall(function() t' + n + '.Text = ' + luaQuote(String(l.text || 'Lyric ' + n)) + ' end)\n'
-        + '            pcall(function() t' + n + '.Size = 0.110 end)\n'
-        + '            pcall(function() t' + n + '.Style = "Bold" end)\n'
+        + '            pcall(function() t' + n + '.Size = ' + sizeFrac.toFixed(4) + ' end)\n'
+        + '            pcall(function() t' + n + '.Font = ' + luaQuote(faceName) + ' end)\n'
+        + '            pcall(function() t' + n + '.Style = ' + luaQuote(faceStyle) + ' end)\n'
+        + '            pcall(function() t' + n + '.Tracking = ' + tracking.toFixed(4) + ' end)\n'
+        + '            pcall(function() t' + n + '.LetterSpacing = ' + tracking.toFixed(4) + ' end)\n'
+        + '            pcall(function() t' + n + '.LineSpacing = ' + leading.toFixed(3) + ' end)\n'
+        + '            pcall(function() t' + n + '.Center = { ' + anchorX.toFixed(3) + ', ' + anchorY.toFixed(3) + ' } end)\n'
+        + '            pcall(function() t' + n + '.Opacity = 1 end)\n'
         + '            local s' + n + ' = comp:BezierSpline()\n'
         + '            s' + n + ':SetKeyFrames({ [' + fIn + '] = { 0 }, [' + fOn + '] = { ' + peak
         + ' }, [' + fOut + '] = { 0 } })\n'

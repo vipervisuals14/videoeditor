@@ -555,6 +555,55 @@ for text. Two switches drive the same state — **`Lyrics on monitor: OFF / ON`*
 `LYRC: off` rather than naming a style that is not drawing. Saved preferences from before this
 change are ignored once (they all said "on"), so the new default actually takes effect.
 
+## Captions: 34 looks, one typography model
+
+The look list has 34 entries in six categories. Twenty are the kinetic presets (Duet, Redline,
+Tiled Wave…) that perform words as they arrive. Fourteen are a **subtitle family** — `kind: 'block'`
+— that behaves like a caption rather than a dance: the words wrap onto as many lines as they need,
+nothing is drawn one word at a time, and the style is a legible text block over real footage.
+
+| Family | Looks |
+| --- | --- |
+| Subtitles (block) | Subtitle Clean, Subtitle Box, Streaming Pill, TikTok Word, Reels Hook, Karaoke Line, Lower Third, Outline Type, Cinema Serif, Terminal Mono, Tape Label, Duotone Stack, Highlighter, Press Caption |
+| Bold / Layered / Minimal / Talking | the 20 kinetic presets, unchanged |
+
+Nine of the block looks are legible-by-default (sentence case, a shadow or a plate); the loud ones
+(TikTok Word, Reels Hook, Duotone Stack, Highlighter) are deliberately the poster looks.
+
+### Everything is driven by one model
+
+`LYRC_TYPE_DEFAULTS` in `public/app.js` is the whole typographic surface — font, weight, italic,
+case, size, tracking, leading, alignment, x/y, line width, outline, shadow, opacity, and the plate
+(colour, opacity, padding, radius). A look carries its own values in `type: {…}`; your edits are kept
+per look in `state.lyrcTypeByStyle`, so switching away and back does not throw them away, and Reset
+returns the look to its own recipe. The whole thing is mirrored to `localStorage` (`pulsevfx.lyrc.v1`).
+
+The panel (`#tab-captions`, above the transcript box) exposes all of it: a font list of ten real
+stacks (Helvetica, Arial Black, Arial Narrow, Avenir, Baskerville, Didot, American Typewriter, SF
+Mono, Snell Roundhand), weight 300–900, case, Italic/Hollow/Heavy toggles, nine sliders, a live
+specimen that renders in the chosen face at the chosen size, a 3×3 placement pad, x/y sliders and
+left/centre/right alignment.
+
+**Sizes are a share of the frame height, not pixels.** `sizePct: 4.2` is 45 px at 1080p and 91 px at
+2160p, so the 4K export is the same design as the preview. Tracking is in thousandths of an em, so it
+scales with the size for free. Placement is a percentage of the frame, and the block is clamped
+inside the frame no matter where the anchor is pushed.
+
+Canvas letter-spacing is unreliable across browsers, so `lyrcDrawText` draws per character when
+tracking is non-zero; line wrapping and clamping come from `lyrcLayoutBlock`, which both the block
+renderer and the tests use, so a check can only pass if the real layout produced it.
+
+### It goes to Resolve with the type intact
+
+The Apply payload carries a `typography` object (font, weight, italic, case, sizePct, tracking,
+leading, alignment, x/y, outline, shadow, opacity, plate) and the lines arrive already cased. The Lua
+generator writes `Size`, `Font`, `Style`, `Tracking`/`LetterSpacing`, `LineSpacing` and `Center` onto
+each TextPlus through `pcall`, so a Fusion build that lacks one input skips it instead of aborting
+the script. Opacity keys are scaled by the opacity you set.
+
+`node tools/render-type-sheet.mjs` paints every block look through the shipped renderer to
+`style-sheet.png`; it needs `@napi-rs/canvas` (development only).
+
 ## The panel does not scroll sideways
 
 A 4-up style grid used `repeat(4, 1fr)`, whose minimum is `auto`: a long style name made the grid
@@ -628,6 +677,7 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 | Effect layers · Depth · Mask · Parameters (32) · Stack & shell (48) · **Lyrics auto-detect (53)** | `node tools/dom/{stack,params,depth,mask,lyrics}.mjs` | pass |
 | **Speech engine, real weights, known recording** | `node tools/asr_check.mjs` | 5/5 |
 | **Speech engine, the browser's own code path** (IIFE bundle + ort-web wasm + relative paths) | `node tools/asr_browser_check.mjs` | 9/9 |
+| **Captions: fonts, size, spacing, placement, all 34 looks** | `node tools/dom/type.mjs` | 35 |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified

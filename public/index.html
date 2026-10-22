@@ -480,49 +480,140 @@
 
           <!-- MODE + LYRC CATEGORY FILTER BAR -->
           <div class="lyrc-filter-row">
-            <div class="lyrc-cat-pills" id="lyrcCategoryPills">
-              <button class="lyrc-cat-pill active" data-lcat="ALL">All Styles (20)</button>
-              <button class="lyrc-cat-pill" data-lcat="Bold">Bold (Duet, Redline, Brat...)</button>
-              <button class="lyrc-cat-pill" data-lcat="Layered">Layered (Tiled Wave, Margin, Relay...)</button>
-              <button class="lyrc-cat-pill" data-lcat="Minimal">Minimal (Quiet, Afterglow, Deep Focus...)</button>
-              <button class="lyrc-cat-pill" data-lcat="Talking">Talking Head Captions</button>
-              <button class="lyrc-cat-pill" data-lcat="FAV">★ Favorites</button>
-            </div>
+            <!-- pills are generated from CAPTION_STYLES, so the counts can never go stale -->
+            <div class="lyrc-cat-pills" id="lyrcCategoryPills"></div>
           </div>
 
           <!-- LYRC PRESET GALLERY GRID -->
           <div class="lyrc-presets-grid" id="captionStyleStrip"></div>
 
-          <!-- CONTEXTUAL PRESET SETTINGS BAR -->
+          <!-- LYRC TYPOGRAPHY: font, size, spacing, placement -->
           <div class="lyrc-contextual-bar" id="lyrcContextualBar">
-            <div class="ctx-left">
-              <span class="ctx-preset-label" id="ctxPresetLabel">Active Preset: <strong>Duet</strong> — Two font roles trade emphasis as words arrive</span>
+            <div class="lyrc-type-head">
+              <span class="ctx-preset-label" id="ctxPresetLabel">Active LYRC Preset: <strong>Duet</strong></span>
+              <span class="lyrc-type-count" id="lyrcStyleCount">20 looks</span>
+              <button class="btn-mini" id="lyrcTypeResetBtn" title="Put this look back to its own font, size and placement">Reset</button>
             </div>
-            <div class="ctx-controls">
-              <label class="ctx-field">
-                <span>Font Pair</span>
-                <select id="lyrcFontPairSelect" class="select-input">
-                  <option value="sans_serif" selected>Grotesque Bold + Serif Italic (Duet)</option>
-                  <option value="condensed_mono">Condensed Impact + Tech Mono</option>
-                  <option value="editorial_display">Editorial Display + Script</option>
-                  <option value="lowercase_brat">Stretched Arial Lowercase (Brat)</option>
-                </select>
+
+            <div class="lyrc-type-specimen" id="lyrcTypeSpecimen" aria-hidden="true">
+              <span class="spec-main" id="lyrcSpecimenText">Aa</span>
+              <span class="spec-meta" id="lyrcSpecimenMeta">Helvetica · 900 · 39px</span>
+            </div>
+
+            <div class="lyrc-type-row">
+              <label class="ctx-field wide">
+                <span>Font</span>
+                <select id="lyrcFontSelect" class="select-input"></select>
               </label>
               <label class="ctx-field">
-                <span>Alignment</span>
-                <select id="lyrcAlignSelect" class="select-input">
-                  <option value="center" selected>Center Lockup</option>
-                  <option value="left">Left Editorial Margin</option>
-                  <option value="right">Right Editorial Margin</option>
-                </select>
+                <span>Weight</span>
+                <select id="lyrcWeightSelect" class="select-input"></select>
               </label>
               <label class="ctx-field">
-                <span>Backdrop / Knockout</span>
+                <span>Case</span>
+                <select id="lyrcCaseSelect" class="select-input">
+                  <option value="upper">UPPERCASE</option>
+                  <option value="asis">As typed</option>
+                  <option value="title">Title Case</option>
+                  <option value="lower">lowercase</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="lyrc-type-row toggles">
+              <button class="type-toggle" id="lyrcItalicBtn" aria-pressed="false" title="Slant the type">Italic</button>
+              <button class="type-toggle" id="lyrcOutlineBtn" aria-pressed="false" title="Stroke the letters instead of filling them">Hollow</button>
+              <button class="type-toggle" id="lyrcBoldBtn" aria-pressed="false" title="Jump straight to the heaviest weight">Heavy</button>
+            </div>
+
+            <div class="lyrc-type-sliders">
+              <label class="type-slider">
+                <span>Size <b id="lyrcSizeReadout">39 px</b></span>
+                <input type="range" id="lyrcSizeSlider" min="1.5" max="12" step="0.1" value="3.6" />
+              </label>
+              <label class="type-slider">
+                <span>Letter spacing <b id="lyrcTrackingReadout">0</b></span>
+                <input type="range" id="lyrcTrackingSlider" min="-60" max="200" step="2" value="0" />
+              </label>
+              <label class="type-slider">
+                <span>Line spacing <b id="lyrcLeadingReadout">1.05</b></span>
+                <input type="range" id="lyrcLeadingSlider" min="70" max="240" step="1" value="105" />
+              </label>
+              <label class="type-slider">
+                <span>Line width <b id="lyrcWidthReadout">86%</b></span>
+                <input type="range" id="lyrcWidthSlider" min="25" max="100" step="1" value="86" />
+              </label>
+              <label class="type-slider">
+                <span>Outline <b id="lyrcOutlineReadout">3</b></span>
+                <input type="range" id="lyrcOutlineSlider" min="0" max="16" step="1" value="3" />
+              </label>
+              <label class="type-slider">
+                <span>Shadow <b id="lyrcShadowReadout">55%</b></span>
+                <input type="range" id="lyrcShadowSlider" min="0" max="100" step="1" value="55" />
+              </label>
+              <label class="type-slider">
+                <span>Box behind <b id="lyrcBoxReadout">0%</b></span>
+                <input type="range" id="lyrcBoxSlider" min="0" max="100" step="1" value="0" />
+              </label>
+              <label class="type-slider">
+                <span>Box padding <b id="lyrcBoxPadReadout">34</b></span>
+                <input type="range" id="lyrcBoxPadSlider" min="0" max="120" step="2" value="34" />
+              </label>
+              <label class="type-slider">
+                <span>Opacity <b id="lyrcOpacityReadout">100%</b></span>
+                <input type="range" id="lyrcOpacitySlider" min="10" max="100" step="1" value="100" />
+              </label>
+            </div>
+
+            <div class="lyrc-place-block">
+              <div class="lyrc-place-pad" id="lyrcPlacementPad" role="group" aria-label="Where the caption sits in the frame">
+                <button class="place-dot" data-place="tl" title="Top left"></button>
+                <button class="place-dot" data-place="tc" title="Top centre"></button>
+                <button class="place-dot" data-place="tr" title="Top right"></button>
+                <button class="place-dot" data-place="ml" title="Middle left"></button>
+                <button class="place-dot" data-place="mc" title="Dead centre"></button>
+                <button class="place-dot" data-place="mr" title="Middle right"></button>
+                <button class="place-dot" data-place="bl" title="Lower left"></button>
+                <button class="place-dot" data-place="bc" title="Lower centre (safe title area)"></button>
+                <button class="place-dot" data-place="br" title="Lower right"></button>
+              </div>
+              <div class="lyrc-place-sliders">
+                <label class="type-slider">
+                  <span>Left ↔ Right <b id="lyrcPosXReadout">50%</b></span>
+                  <input type="range" id="lyrcPosXSlider" min="0" max="100" step="1" value="50" />
+                </label>
+                <label class="type-slider">
+                  <span>Up ↕ Down <b id="lyrcPosYReadout">52%</b></span>
+                  <input type="range" id="lyrcPosYSlider" min="10" max="95" step="1" value="52" />
+                </label>
+                <div class="lyrc-align-row" id="lyrcAlignRow" role="group" aria-label="Line alignment">
+                  <button class="align-btn" data-align="left" title="Flush left">Left</button>
+                  <button class="align-btn active" data-align="center" title="Centred">Centre</button>
+                  <button class="align-btn" data-align="right" title="Flush right">Right</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="lyrc-type-row colors">
+              <label class="ctx-field">
+                <span>Text</span>
+                <input type="color" id="capPrimaryColor" value="#ffffff" />
+              </label>
+              <label class="ctx-field">
+                <span>Accent</span>
+                <input type="color" id="capAccentColor" value="#f472b6" />
+              </label>
+              <label class="ctx-field">
+                <span>Box colour</span>
+                <input type="color" id="capBoxColor" value="#090a0f" />
+              </label>
+              <label class="ctx-field">
+                <span>Backdrop</span>
                 <select id="lyrcBackdropSelect" class="select-input">
-                  <option value="auto" selected>Preset Default (Redline / Relay Auto)</option>
-                  <option value="knockout">Force Inverted Knockout Box</option>
-                  <option value="solid_cards">Solid Color Phrase Cards</option>
-                  <option value="clean">Clean Typography Only (No Box)</option>
+                  <option value="auto">Preset default</option>
+                  <option value="knockout">Knockout box</option>
+                  <option value="solid_cards">Solid cards</option>
+                  <option value="clean">Clean (no box)</option>
                 </select>
               </label>
             </div>
@@ -539,24 +630,8 @@
                 </div>
               </div>
               <textarea id="lyricsRawInput" class="lyrics-textarea" rows="6" placeholder="Paste the song lyrics, or the script you read to camera — one line per phrase. Press ◉ Detect from clip above and each line lands on the beat / speech phrase it belongs to."></textarea>
-              <div class="caption-customizers">
-                <label class="color-Field">
-                  <span>Primary Text</span>
-                  <input type="color" id="capPrimaryColor" value="#ffffff" />
-                </label>
-                <label class="color-Field">
-                  <span>Emphasis / Knockout</span>
-                  <input type="color" id="capAccentColor" value="#ef4444" />
-                </label>
-                <label class="range-mini">
-                  <span>Scale</span>
-                  <input type="range" id="capFontSizeSlider" min="70" max="150" value="105" />
-                </label>
-                <label class="range-mini">
-                  <span>Y-Pos</span>
-                  <input type="range" id="capPosYSlider" min="20" max="85" value="52" />
-                </label>
-              </div>
+              <p class="caption-customizers-hint">Type, size, spacing and placement live in the panel above —
+                they apply to the preview and to the 4K export at the same time.</p>
             </div>
 
             <div class="caption-cues-col">

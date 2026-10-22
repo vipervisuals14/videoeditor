@@ -853,6 +853,55 @@ function setEnvelope(presetId, kind) {
 // ============================================================================
 // LYRC.STUDIO 20 KINETIC LYRIC PRESETS & BRAND CAPTION STYLES
 // ============================================================================
+// ---------------------------------------------------------------------------
+// LYRC typography
+// ---------------------------------------------------------------------------
+// Stacks, not downloads: every family below is already on macOS, so the 4K
+// export matches the preview and nothing has to be fetched before you type.
+// `stack` is the canvas font-family list; `face` is what Resolve/Fusion gets.
+const LYRC_FONTS = [
+  { id: 'grotesque', label: 'Grotesque — Helvetica / Inter', stack: '"Helvetica Neue", Helvetica, Arial, sans-serif', face: 'Helvetica Neue' },
+  { id: 'black', label: 'Black — heavy display', stack: '"Arial Black", "Helvetica Neue", Impact, sans-serif', face: 'Arial Black' },
+  { id: 'condensed', label: 'Condensed — narrow impact', stack: '"HelveticaNeue-CondensedBold", "Arial Narrow", Impact, sans-serif', face: 'Arial Narrow' },
+  { id: 'rounded', label: 'Rounded — friendly', stack: '"SF Pro Rounded", "Avenir Next", Verdana, sans-serif', face: 'Avenir Next' },
+  { id: 'grotesk', label: 'Neo-grotesk — Avenir', stack: '"Avenir Next", Avenir, "Helvetica Neue", sans-serif', face: 'Avenir Next' },
+  { id: 'serif', label: 'Editorial — Baskerville', stack: 'Baskerville, "Times New Roman", Georgia, serif', face: 'Baskerville' },
+  { id: 'didone', label: 'Didone — Didot display', stack: 'Didot, "Bodoni 72", Baskerville, serif', face: 'Didot' },
+  { id: 'slab', label: 'Slab — American Typewriter', stack: '"American Typewriter", Rockwell, Georgia, serif', face: 'American Typewriter' },
+  { id: 'mono', label: 'Mono — SF Mono / Menlo', stack: '"SF Mono", Menlo, Consolas, monospace', face: 'Menlo' },
+  { id: 'script', label: 'Script — handwritten', stack: '"Snell Roundhand", "Brush Script MT", cursive', face: 'Snell Roundhand' }
+];
+
+// One source of truth for every typographic knob. Sizes are a percentage of
+// frame HEIGHT, so 1080p and 4K are the same design; spacing is em-relative, so
+// it scales with the size for free.
+const LYRC_TYPE_DEFAULTS = {
+  font: 'grotesque',
+  weight: 900,
+  italic: false,
+  caseMode: 'upper',      // upper | lower | title | asis
+  sizePct: 3.6,           // % of frame height (3.6 = the old kinetic default)
+  tracking: 0,            // thousandths of an em, 25 = 0.025 em
+  leading: 1.05,          // line spacing multiplier
+  align: 'center',        // left | center | right
+  xPct: 50,
+  yPct: 52,
+  maxWidthPct: 86,
+  outline: 3,             // px at 1080p, scales with the frame
+  shadow: 55,             // 0-100 strength
+  opacity: 100,
+  boxOpacity: 0,
+  boxColor: '#090a0f',
+  boxPad: 16,
+  boxRadius: 8
+};
+
+const LYRC_WEIGHT_OPTIONS = [300, 400, 500, 600, 700, 800, 900];
+
+function lyrcFont(id) {
+  return LYRC_FONTS.find((f) => f.id === id) || LYRC_FONTS[0];
+}
+
 const CAPTION_STYLES = [
   {
     id: 'duet',
@@ -1073,6 +1122,208 @@ const CAPTION_STYLES = [
     fav: false,
     primary: '#ffffff',
     accent: '#10b981'
+  },
+  // -------------------------------------------------------------------------
+  // Subtitle family. These are text blocks, not word dances: their whole job is
+  // legibility on a real cut, and every one of them is driven by the typography
+  // panel (font, size, tracking, leading, placement, box). They wrap onto as many
+  // lines as the words need, so a 12-word cue no longer runs off the frame.
+  // -------------------------------------------------------------------------
+  {
+    id: 'subtitle_clean',
+    name: 'Subtitle Clean',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="font-weight:600;">Clean</span> subtitle',
+    desc: 'Broadcast subtitle block: sentence case, soft drop shadow, lower third safe area.',
+    supportsVariation: false,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#ffd166',
+    type: { font: 'grotesque', weight: 600, caseMode: 'asis', sizePct: 4.4, tracking: 0, leading: 1.24, yPct: 87, outline: 0, shadow: 70, boxOpacity: 0 },
+    look: { activeWord: 'none' }
+  },
+  {
+    id: 'subtitle_box',
+    name: 'Subtitle Box',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="background:#000;padding:0 3px;">BOXED</span>',
+    desc: 'Hard black caption box behind the text: works over any footage without an outline.',
+    supportsVariation: false,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#ffffff',
+    type: { font: 'grotesque', weight: 600, caseMode: 'asis', sizePct: 4.2, tracking: 0, leading: 1.22, yPct: 86, outline: 0, shadow: 0, boxOpacity: 80, boxRadius: 4, boxPad: 34 },
+    look: { activeWord: 'none', boxShape: 'block' }
+  },
+  {
+    id: 'streaming_pill',
+    name: 'Streaming Pill',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="background:#111;border-radius:9px;padding:1px 6px;">PILL</span>',
+    desc: 'Frosted rounded pill, the streaming-service look: centred, medium weight, no outline.',
+    supportsVariation: false,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#e2e7ea',
+    type: { font: 'grotesk', weight: 600, caseMode: 'asis', sizePct: 4.0, tracking: 0, leading: 1.2, yPct: 88, outline: 0, shadow: 0, boxOpacity: 72, boxRadius: 22, boxPad: 45 },
+    look: { activeWord: 'none', boxShape: 'pill' }
+  },
+  {
+    id: 'tiktok_word',
+    name: 'TikTok Word',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<b style="font-size:11px;">WORD</b><span style="color:#facc15;">POP</span>',
+    desc: 'Huge uppercase centre-screen word, the current word lit in your accent colour.',
+    supportsVariation: false,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#facc15',
+    type: { font: 'black', weight: 900, caseMode: 'upper', sizePct: 7.4, tracking: -1, leading: 1.02, yPct: 74, outline: 7, shadow: 40, maxWidthPct: 80 },
+    look: { activeWord: 'accent', perWord: true }
+  },
+  {
+    id: 'reels_hook',
+    name: 'Reels Hook',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="background:#111;color:#f97316;border-radius:5px;padding:0 4px;">HOOK</span>',
+    desc: 'Two-line hook card on a dark plate, accent on the word under the voice.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#f97316',
+    type: { font: 'black', weight: 900, caseMode: 'upper', sizePct: 6.4, tracking: 0, leading: 1.08, yPct: 70, outline: 3, shadow: 30, boxOpacity: 55, boxRadius: 8, boxPad: 34 },
+    look: { activeWord: 'accent', boxShape: 'block' }
+  },
+  {
+    id: 'karaoke_line',
+    name: 'Karaoke Line',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="color:#22d3ee;">KA</span>RA<span style="opacity:.45;">OKE</span>',
+    desc: 'The words fill with your accent colour in time with the vocal — the classic sing-along sweep.',
+    supportsVariation: false,
+    fav: true,
+    primary: '#ffffff',
+    accent: '#22d3ee',
+    type: { font: 'grotesque', weight: 800, caseMode: 'asis', sizePct: 5.2, tracking: 1, leading: 1.12, yPct: 82, outline: 4, shadow: 50 },
+    look: { activeWord: 'sweep' }
+  },
+  {
+    id: 'lower_third',
+    name: 'Lower Third',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="border-left:3px solid #38bdf8;padding-left:4px;">Name</span>',
+    desc: 'Left-anchored name / caption bar with an accent rule — interviews and talking heads.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#38bdf8',
+    type: { font: 'grotesk', weight: 600, caseMode: 'asis', sizePct: 3.8, tracking: 2, leading: 1.3, yPct: 79, xPct: 8, align: 'left', outline: 0, shadow: 65, boxOpacity: 45, boxRadius: 3, boxPad: 60, maxWidthPct: 60 },
+    look: { activeWord: 'none', rule: true, boxShape: 'block' }
+  },
+  {
+    id: 'outline_type',
+    name: 'Outline Type',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="-webkit-text-stroke:1px #fff;color:transparent;">OUTLINE</span>',
+    desc: 'Hollow stroked letterforms — reads on busy footage without covering it up.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#ffffff',
+    type: { font: 'black', weight: 900, caseMode: 'upper', sizePct: 8.0, tracking: 5, leading: 1.0, yPct: 62, outline: 2, shadow: 0, boxOpacity: 0 },
+    look: { activeWord: 'none', outlineOnly: true }
+  },
+  {
+    id: 'serif_cinema',
+    name: 'Cinema Serif',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<i style="font-family:Didot,serif;">Cinema</i> serif',
+    desc: 'Wide-tracked Didone in lower third — documentary and title-card restraint.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#f4efe6',
+    accent: '#c9a227',
+    type: { font: 'didone', weight: 400, caseMode: 'asis', sizePct: 4.4, tracking: 7, leading: 1.34, yPct: 85, outline: 0, shadow: 50, boxOpacity: 0 },
+    look: { activeWord: 'none' }
+  },
+  {
+    id: 'mono_terminal',
+    name: 'Terminal Mono',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="font-family:Menlo,monospace;color:#6ac465;">&gt; MONO_</span>',
+    desc: 'Fixed-width caption on a dark plate with a typed-on cursor: log, code and archive looks.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#d9f2c9',
+    accent: '#6ac465',
+    type: { font: 'mono', weight: 500, caseMode: 'upper', sizePct: 3.4, tracking: 2, leading: 1.28, yPct: 84, outline: 0, shadow: 0, boxOpacity: 62, boxRadius: 2, boxPad: 34, align: 'left', xPct: 10 },
+    look: { activeWord: 'accent', boxShape: 'block', cursor: true }
+  },
+  {
+    id: 'tape_label',
+    name: 'Tape Label',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="background:#e8e4d8;color:#111;padding:0 4px;transform:rotate(-1.5deg);display:inline-block;">TAPE</span>',
+    desc: 'Light label tape pasted on the frame, slightly rotated, dark ink — printed-ephemera look.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#111111',
+    accent: '#a8443b',
+    type: { font: 'mono', weight: 700, caseMode: 'upper', sizePct: 3.6, tracking: 3, leading: 1.18, yPct: 46, outline: 0, shadow: 35, boxOpacity: 100, boxColor: '#e8e4d8', boxRadius: 0, boxPad: 28 },
+    look: { activeWord: 'none', boxShape: 'block', rotate: -1.5 }
+  },
+  {
+    id: 'duotone_stack',
+    name: 'Duotone Stack',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="color:#ffffff;">DUO</span><span style="color:#f472b6;">TONE</span>',
+    desc: 'Tight stacked uppercase with the live word in the second colour — poster-weight lockup.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#f472b6',
+    type: { font: 'condensed', weight: 900, caseMode: 'upper', sizePct: 6.8, tracking: -3, leading: 0.96, yPct: 52, outline: 0, shadow: 40, maxWidthPct: 72 },
+    look: { activeWord: 'accent' }
+  },
+  {
+    id: 'highlight_bar',
+    name: 'Highlighter',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="background:#facc15;color:#111;padding:0 3px;">MARK</span>ER',
+    desc: 'Dark ink on a highlighter bar that follows the sentence, one line at a time.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#ffffff',
+    accent: '#facc15',
+    type: { font: 'black', weight: 800, caseMode: 'asis', sizePct: 5.0, tracking: 0, leading: 1.18, yPct: 84, outline: 0, shadow: 30, boxOpacity: 0 },
+    look: { activeWord: 'bar' }
+  },
+  {
+    id: 'press_caption',
+    name: 'Press Caption',
+    category: 'Subtitles',
+    kind: 'block',
+    previewHtml: '<span style="text-shadow:2px 2px 0 #a8443b;">PRESS</span>',
+    desc: 'Hard offset second-colour shadow, like a misregistered print plate.',
+    supportsVariation: false,
+    fav: false,
+    primary: '#f2ede4',
+    accent: '#a8443b',
+    type: { font: 'slab', weight: 800, caseMode: 'upper', sizePct: 5.4, tracking: 1, leading: 1.14, yPct: 80, outline: 0, shadow: 0, boxOpacity: 0 },
+    look: { activeWord: 'none', hardShadow: 1 }
   }
 ];
 
@@ -1151,6 +1402,13 @@ const state = {
   accentColor: '#f472b6',
   fontScale: 105,
   posY: 52,
+  posX: 50,
+  // Every typographic knob, one object. sizePct/tracking/leading are relative to
+  // the frame, so the preview and the 4K export are the same design.
+  lyrcType: Object.assign({}, LYRC_TYPE_DEFAULTS),
+  // Tweaks stick per style: switching to another look and back does not throw
+  // your font, size or placement away.
+  lyrcTypeByStyle: {},
   cues: [],
   // Auto-detect: measured from the clip's own audio, not guessed from a BPM box
   lyricAnalysis: null,
@@ -3359,14 +3617,7 @@ function initCaptionsTab() {
   updateContextualBar();
   syncLyricsToBeatCues();
 
-  document.querySelectorAll('#lyrcCategoryPills .lyrc-cat-pill').forEach((pill) => {
-    pill.addEventListener('click', () => {
-      document.querySelectorAll('#lyrcCategoryPills .lyrc-cat-pill').forEach((p) => p.classList.remove('active'));
-      pill.classList.add('active');
-      state.lyrcFilterCat = pill.dataset.lcat;
-      renderCaptionStyleStrip();
-    });
-  });
+  // category pills are built from the style list in buildLyrcCategoryPills()
 
   const tabLyricsSwitch = document.getElementById('lyricsTabToggleBtn');
   if (tabLyricsSwitch) {
@@ -3412,15 +3663,14 @@ function initCaptionsTab() {
     showToast(`Shuffled Media Pool clips under locked "${state.captionStyle.name}" Song Template`);
   });
 
-  document.getElementById('lyrcFontPairSelect').addEventListener('change', (e) => {
-    state.fontPair = e.target.value;
-  });
-  document.getElementById('lyrcAlignSelect').addEventListener('change', (e) => {
-    state.alignment = e.target.value;
-  });
   document.getElementById('lyrcBackdropSelect').addEventListener('change', (e) => {
     state.backdropMode = e.target.value;
+    saveLyrcType();
   });
+
+  loadLyrcType();
+  initLyrcTypePanel();
+  buildLyrcCategoryPills();
 
   // The speech runtime is 900 KB of JavaScript: fetch it when the tab opens so
   // the first Detect is not waiting on it. The 41 MB model still waits for a click.
@@ -3479,18 +3729,7 @@ function initCaptionsTab() {
       : `Re-synced ${state.cues.length} blocks to the speech positions`);
   });
 
-  document.getElementById('capPrimaryColor').addEventListener('input', (e) => {
-    state.primaryColor = e.target.value;
-  });
-  document.getElementById('capAccentColor').addEventListener('input', (e) => {
-    state.accentColor = e.target.value;
-  });
-  document.getElementById('capFontSizeSlider').addEventListener('input', (e) => {
-    state.fontScale = Number(e.target.value);
-  });
-  document.getElementById('capPosYSlider').addEventListener('input', (e) => {
-    state.posY = Number(e.target.value);
-  });
+  // colours, size, spacing and placement are wired once, in initLyrcTypePanel()
 
   document.getElementById('pushCaptionsResolveBtn').addEventListener('click', () => {
     syncLyricsToBeatCues();
@@ -3500,30 +3739,336 @@ function initCaptionsTab() {
       return;
     }
     renderTimelineTracks();
+    const t = lyrcTypeOf();
+    const face = lyrcFont(t.font);
+    // The typography travels with the payload: Resolve gets the same font, size,
+    // tracking, leading and anchor the monitor is showing, and the text arrives
+    // already cased so it cannot disagree with the preview.
+    const typography = {
+      fontId: t.font,
+      font: face.face,
+      weight: Number(t.weight) || 400,
+      italic: !!t.italic,
+      caseMode: t.caseMode,
+      sizePct: Number(t.sizePct) || 3.6,
+      sizeAt1080: lyrcSizePx(t),
+      tracking: Number(t.tracking) || 0,
+      leading: Number(t.leading) || 1.05,
+      align: t.align || 'center',
+      xPct: Number(t.xPct) || 50,
+      yPct: Number(t.yPct) || 52,
+      maxWidthPct: Number(t.maxWidthPct) || 86,
+      outline: Number(t.outline) || 0,
+      shadow: Number(t.shadow) || 0,
+      opacity: Number(t.opacity) || 100,
+      boxOpacity: Number(t.boxOpacity) || 0,
+      boxColor: t.boxColor || '#090a0f',
+      boxRadius: Number(t.boxRadius) || 0,
+      boxPad: Number(t.boxPad) || 0,
+      primary: state.primaryColor,
+      accent: state.accentColor,
+      kind: state.captionStyle.kind || 'kinetic'
+    };
+    const casedLines = state.cues.map((c) => Object.assign({}, c, {
+      text: lyrcApplyCase(c.text, t.caseMode)
+    }));
     dispatchToResolve('add_captions_lyrics', {
       presetId: state.captionStyle.id,
       style: `${state.captionStyle.name} (Var #${state.variationSeed})`,
       alignment: state.alignment,
       backdropMode: state.backdropMode,
       intensity: Math.round(state.fontScale),
-      fontSize: +(0.075 * (state.fontScale / 100)).toFixed(3),
+      fontSize: +((Number(t.sizePct) || 3.6) / 100).toFixed(4),
+      typography,
       fps: 24,
-      lines: state.cues
+      lines: casedLines
     }, `Built ${state.cues.length} native LYRC "${state.captionStyle.name}" TextPlus cards`);
   });
 
   document.getElementById('exportSrtBtn').addEventListener('click', downloadSrtFile);
 }
 
+// ============================================================================
+// LYRC TYPOGRAPHY PANEL
+// ----------------------------------------------------------------------------
+// The panel never guesses: it writes one value into state.lyrcType, then pushes
+// the whole model back into the controls, the specimen and the preview. Because
+// the preview and the 4K export read the same function, what you set here is
+// what renders.
+// ============================================================================
+const LYRC_STORE_KEY = 'pulsevfx.lyrc.v1';
+
+function saveLyrcType() {
+  try {
+    localStorage.setItem(LYRC_STORE_KEY, JSON.stringify({
+      v: 1,
+      styleId: state.captionStyle && state.captionStyle.id,
+      type: state.lyrcType,
+      byStyle: state.lyrcTypeByStyle,
+      colors: { primary: state.primaryColor, accent: state.accentColor, box: state.lyrcType.boxColor },
+      backdrop: state.backdropMode,
+      seed: state.variationSeed
+    }));
+  } catch (_e) { /* private mode */ }
+}
+
+function loadLyrcType() {
+  let prefs = null;
+  try { prefs = JSON.parse(localStorage.getItem(LYRC_STORE_KEY) || 'null'); } catch (_e) { prefs = null; }
+  if (!prefs || prefs.v !== 1) return false;
+  if (prefs.type && typeof prefs.type === 'object') {
+    state.lyrcType = Object.assign({}, LYRC_TYPE_DEFAULTS, prefs.type);
+  }
+  if (prefs.byStyle && typeof prefs.byStyle === 'object') state.lyrcTypeByStyle = prefs.byStyle;
+  if (prefs.colors) {
+    if (prefs.colors.primary) state.primaryColor = prefs.colors.primary;
+    if (prefs.colors.accent) state.accentColor = prefs.colors.accent;
+    if (prefs.colors.box) state.lyrcType.boxColor = prefs.colors.box;
+  }
+  if (prefs.backdrop) state.backdropMode = prefs.backdrop;
+  if (Number(prefs.seed) > 0) state.variationSeed = Number(prefs.seed);
+  const found = CAPTION_STYLES.find((st) => st.id === prefs.styleId);
+  if (found) state.captionStyle = found;
+  return true;
+}
+
+// Size is authored as a share of the frame height; showing it in pixels at
+// 1080p is what makes it a number a person can reason about.
+function lyrcSizePx(t) {
+  return Math.round((1080 * (Number(t.sizePct) || 3.6)) / 100);
+}
+
+function lyrcTrackingEm(t) {
+  return ((Number(t.tracking) || 0) / 1000).toFixed(3).replace(/0$/, '').replace(/\.$/, '.0');
+}
+
+function setLyrcType(patch, opts) {
+  const st = state.captionStyle || CAPTION_STYLES[0];
+  state.lyrcType = Object.assign({}, state.lyrcType, patch || {});
+  // remember the edit against this look, so switching away and back is lossless
+  if (!opts || opts.remember !== false) {
+    state.lyrcTypeByStyle = state.lyrcTypeByStyle || {};
+    state.lyrcTypeByStyle[st.id] = Object.assign({}, state.lyrcTypeByStyle[st.id] || {}, patch || {});
+  }
+  // the kinetic renderers still read these two mirrors
+  state.posY = Number(state.lyrcType.yPct) || 52;
+  state.posX = Number(state.lyrcType.xPct) || 50;
+  state.alignment = state.lyrcType.align || 'center';
+  state.fontScale = Math.round(((Number(state.lyrcType.sizePct) || 3.6) / LYRC_TYPE_DEFAULTS.sizePct) * 100);
+  if (state.lyrcType.font) state.fontPair = state.lyrcType.font;
+  syncLyrcTypePanel();
+  if (!opts || opts.persist !== false) saveLyrcType();
+}
+
+// Adopt a look's own typography, dropping edits made to a different look.
+function applyLyrcStyleDefaults(style) {
+  const base = lyrcTypeBase(style);
+  const saved = (state.lyrcTypeByStyle && state.lyrcTypeByStyle[style.id]) || null;
+  state.lyrcType = Object.assign({}, base, saved || {});
+  state.posY = Number(state.lyrcType.yPct) || 52;
+  state.posX = Number(state.lyrcType.xPct) || 50;
+  state.alignment = state.lyrcType.align || 'center';
+  state.fontScale = Math.round(((Number(state.lyrcType.sizePct) || 3.6) / LYRC_TYPE_DEFAULTS.sizePct) * 100);
+  syncLyrcTypePanel();
+}
+
+function fillLyrcTypeOptions() {
+  const fontSel = document.getElementById('lyrcFontSelect');
+  if (fontSel && !fontSel.options.length) {
+    fontSel.innerHTML = LYRC_FONTS
+      .map((f) => `<option value="${f.id}">${f.label}</option>`).join('');
+  }
+  const weightSel = document.getElementById('lyrcWeightSelect');
+  if (weightSel && !weightSel.options.length) {
+    const labels = { 300: '300 Light', 400: '400 Regular', 500: '500 Medium', 600: '600 Semibold', 700: '700 Bold', 800: '800 Heavy', 900: '900 Black' };
+    weightSel.innerHTML = LYRC_WEIGHT_OPTIONS
+      .map((w) => `<option value="${w}">${labels[w] || w}</option>`).join('');
+  }
+}
+
+const LYRC_SLIDERS = [
+  { id: 'lyrcSizeSlider', key: 'sizePct', read: 'lyrcSizeReadout', from: (v) => Number(v), to: (t) => t.sizePct, text: (t) => `${lyrcSizePx(t)} px` },
+  { id: 'lyrcTrackingSlider', key: 'tracking', read: 'lyrcTrackingReadout', from: Number, to: (t) => t.tracking, text: (t) => `${lyrcTrackingEm(t)} em` },
+  { id: 'lyrcLeadingSlider', key: 'leading', read: 'lyrcLeadingReadout', from: (v) => Number(v) / 100, to: (t) => Math.round(t.leading * 100), text: (t) => Number(t.leading).toFixed(2) },
+  { id: 'lyrcWidthSlider', key: 'maxWidthPct', read: 'lyrcWidthReadout', from: Number, to: (t) => t.maxWidthPct, text: (t) => `${t.maxWidthPct}%` },
+  { id: 'lyrcOutlineSlider', key: 'outline', read: 'lyrcOutlineReadout', from: Number, to: (t) => t.outline, text: (t) => `${t.outline}` },
+  { id: 'lyrcShadowSlider', key: 'shadow', read: 'lyrcShadowReadout', from: Number, to: (t) => t.shadow, text: (t) => `${t.shadow}%` },
+  { id: 'lyrcBoxSlider', key: 'boxOpacity', read: 'lyrcBoxReadout', from: Number, to: (t) => t.boxOpacity, text: (t) => `${t.boxOpacity}%` },
+  { id: 'lyrcBoxPadSlider', key: 'boxPad', read: 'lyrcBoxPadReadout', from: Number, to: (t) => t.boxPad, text: (t) => `${t.boxPad}` },
+  { id: 'lyrcOpacitySlider', key: 'opacity', read: 'lyrcOpacityReadout', from: Number, to: (t) => t.opacity, text: (t) => `${t.opacity}%` },
+  { id: 'lyrcPosXSlider', key: 'xPct', read: 'lyrcPosXReadout', from: Number, to: (t) => t.xPct, text: (t) => `${t.xPct}%` },
+  { id: 'lyrcPosYSlider', key: 'yPct', read: 'lyrcPosYReadout', from: Number, to: (t) => t.yPct, text: (t) => `${t.yPct}%` }
+];
+
+function syncLyrcTypePanel() {
+  const t = lyrcTypeOf();
+  const setVal = (id, value) => {
+    const el = document.getElementById(id);
+    if (el && el.value !== String(value)) el.value = String(value);
+  };
+  fillLyrcTypeOptions();
+  setVal('lyrcFontSelect', t.font);
+  setVal('lyrcWeightSelect', t.weight);
+  setVal('lyrcCaseSelect', t.caseMode);
+  setVal('lyrcBackdropSelect', state.backdropMode);
+  LYRC_SLIDERS.forEach((slider) => {
+    const el = document.getElementById(slider.id);
+    if (el) el.value = String(slider.to(t));
+    const read = document.getElementById(slider.read);
+    if (read) read.textContent = slider.text(t);
+  });
+  const color = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
+  color('capPrimaryColor', state.primaryColor);
+  color('capAccentColor', state.accentColor);
+  color('capBoxColor', t.boxColor);
+
+  const italic = document.getElementById('lyrcItalicBtn');
+  if (italic) {
+    italic.classList.toggle('on', !!t.italic);
+    italic.setAttribute('aria-pressed', t.italic ? 'true' : 'false');
+  }
+  const hollow = document.getElementById('lyrcOutlineBtn');
+  const look = (state.captionStyle && state.captionStyle.look) || {};
+  if (hollow) {
+    hollow.classList.toggle('on', !!look.outlineOnly);
+    hollow.setAttribute('aria-pressed', look.outlineOnly ? 'true' : 'false');
+  }
+  const heavy = document.getElementById('lyrcBoldBtn');
+  if (heavy) {
+    heavy.classList.toggle('on', Number(t.weight) >= 800);
+    heavy.setAttribute('aria-pressed', Number(t.weight) >= 800 ? 'true' : 'false');
+  }
+
+  document.querySelectorAll('#lyrcAlignRow .align-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.align === (t.align || 'center'));
+  });
+  document.querySelectorAll('#lyrcPlacementPad .place-dot').forEach((dot) => {
+    const [v, hz] = [dot.dataset.place[0], dot.dataset.place[1]];
+    const yWant = v === 't' ? 15 : v === 'm' ? 50 : 85;
+    const xWant = hz === 'l' ? 12 : hz === 'c' ? 50 : 88;
+    dot.classList.toggle('active', Math.abs(Number(t.yPct) - yWant) <= 2 && Math.abs(Number(t.xPct) - xWant) <= 2);
+  });
+
+  // specimen: the real font at the real size, with the real spacing
+  const face = lyrcFont(t.font);
+  const spec = document.getElementById('lyrcTypeSpecimen');
+  const main = document.getElementById('lyrcSpecimenText');
+  const meta = document.getElementById('lyrcSpecimenMeta');
+  if (main) {
+    main.style.fontFamily = face.stack;
+    main.style.fontWeight = String(t.weight || 400);
+    main.style.fontStyle = t.italic ? 'italic' : 'normal';
+    main.style.letterSpacing = `${(Number(t.tracking) || 0) / 1000}em`;
+    main.style.lineHeight = String(t.leading || 1.05);
+    main.style.fontSize = `${Math.max(18, Math.min(46, lyrcSizePx(t) * 0.62))}px`;
+  }
+  if (meta) meta.textContent = `${face.label.split(' — ')[0]} · ${t.weight} · ${lyrcSizePx(t)}px · ${t.align}`;
+  if (spec) spec.style.color = state.primaryColor;
+
+  const count = document.getElementById('lyrcStyleCount');
+  if (count) count.textContent = `${CAPTION_STYLES.length} looks`;
+  const label = document.getElementById('ctxPresetLabel');
+  const st = state.captionStyle || CAPTION_STYLES[0];
+  if (label) label.innerHTML = `Active LYRC Preset: <strong>${st.name}</strong> <span class="type-count">${st.category}</span>`;
+}
+
+function initLyrcTypePanel() {
+  fillLyrcTypeOptions();
+  const on = (id, evt, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(evt, fn);
+  };
+
+  LYRC_SLIDERS.forEach((slider) => {
+    on(slider.id, 'input', (e) => {
+      const patch = {};
+      patch[slider.key] = slider.from(e.target.value);
+      setLyrcType(patch);
+    });
+  });
+
+  on('lyrcFontSelect', 'change', (e) => setLyrcType({ font: e.target.value }));
+  on('lyrcWeightSelect', 'change', (e) => setLyrcType({ weight: Number(e.target.value) }));
+  on('lyrcCaseSelect', 'change', (e) => setLyrcType({ caseMode: e.target.value }));
+
+  on('lyrcItalicBtn', 'click', () => setLyrcType({ italic: !lyrcTypeOf().italic }));
+  on('lyrcBoldBtn', 'click', () => {
+    const t = lyrcTypeOf();
+    setLyrcType({ weight: Number(t.weight) >= 800 ? 400 : 900 });
+  });
+  // "Hollow" is a look property, not a typographic one: it belongs to the style,
+  // so it is written onto the style object and the strip is re-rendered.
+  on('lyrcOutlineBtn', 'click', () => {
+    const st = state.captionStyle;
+    st.look = Object.assign({}, st.look || {}, { outlineOnly: !(st.look && st.look.outlineOnly) });
+    state.lyrcTypeByStyle[st.id] = Object.assign({}, state.lyrcTypeByStyle[st.id] || {}, { hollow: !!(st.look && st.look.outlineOnly) });
+    syncLyrcTypePanel();
+    saveLyrcType();
+    showToast(st.look.outlineOnly ? 'Outline type ON — letters are stroked, not filled' : 'Filled type ON');
+  });
+
+  document.querySelectorAll('#lyrcAlignRow .align-btn').forEach((btn) => {
+    btn.addEventListener('click', () => setLyrcType({ align: btn.dataset.align }));
+  });
+
+  document.querySelectorAll('#lyrcPlacementPad .place-dot').forEach((dot) => {
+    dot.addEventListener('click', () => {
+      const v = dot.dataset.place[0];
+      const hz = dot.dataset.place[1];
+      setLyrcType({
+        yPct: v === 't' ? 15 : v === 'm' ? 50 : 85,
+        xPct: hz === 'l' ? 12 : hz === 'c' ? 50 : 88,
+        align: hz === 'l' ? 'left' : hz === 'r' ? 'right' : 'center'
+      });
+    });
+  });
+
+  on('capPrimaryColor', 'input', (e) => { state.primaryColor = e.target.value; syncLyrcTypePanel(); saveLyrcType(); });
+  on('capAccentColor', 'input', (e) => { state.accentColor = e.target.value; syncLyrcTypePanel(); saveLyrcType(); });
+  on('capBoxColor', 'input', (e) => setLyrcType({ boxColor: e.target.value }));
+  on('lyrcTypeResetBtn', 'click', () => {
+    const st = state.captionStyle;
+    delete state.lyrcTypeByStyle[st.id];
+    applyLyrcStyleDefaults(st);
+    state.primaryColor = st.primary;
+    state.accentColor = st.accent;
+    syncLyrcTypePanel();
+    saveLyrcType();
+    showToast(`Reset “${st.name}” to its own typography`);
+  });
+
+  syncLyrcTypePanel();
+}
+
+function buildLyrcCategoryPills() {
+  const wrap = document.getElementById('lyrcCategoryPills');
+  if (!wrap) return;
+  const cats = [];
+  CAPTION_STYLES.forEach((st) => { if (cats.indexOf(st.category) < 0) cats.push(st.category); });
+  const countOf = (cat) => CAPTION_STYLES.filter((st) => cat === 'ALL' || (cat === 'FAV' ? st.fav : st.category === cat)).length;
+  const label = (cat) => (cat === 'ALL' ? 'All looks' : cat === 'FAV' ? '★ Favourites' : cat);
+  wrap.innerHTML = ['ALL'].concat(cats).concat(['FAV']).map((cat) => `
+    <button class="lyrc-cat-pill ${state.lyrcFilterCat === cat ? 'active' : ''}" data-lcat="${cat}">
+      ${label(cat)} (${countOf(cat)})
+    </button>`).join('');
+  wrap.querySelectorAll('.lyrc-cat-pill').forEach((pill) => {
+    pill.addEventListener('click', () => {
+      state.lyrcFilterCat = pill.dataset.lcat;
+      wrap.querySelectorAll('.lyrc-cat-pill').forEach((p) => p.classList.toggle('active', p === pill));
+      renderCaptionStyleStrip();
+    });
+  });
+}
+
 function selectLyrcPreset(st) {
   state.captionStyle = st;
   state.primaryColor = st.primary;
   state.accentColor = st.accent;
-  document.getElementById('capPrimaryColor').value = st.primary;
-  document.getElementById('capAccentColor').value = st.accent;
-  if (st.id === 'margin') state.alignment = 'left';
-  else state.alignment = 'center';
-  document.getElementById('lyrcAlignSelect').value = state.alignment;
+  // A look carries its own typography (font, size, spacing, placement). Your
+  // edits to that look are restored if you come back to it.
+  applyLyrcStyleDefaults(st);
+  syncLyrcTypePanel();
+  saveLyrcType();
 
   refreshLyricsPill();
   updateContextualBar();
@@ -3533,7 +4078,11 @@ function selectLyrcPreset(st) {
 function updateContextualBar() {
   const st = state.captionStyle;
   const label = document.getElementById('ctxPresetLabel');
-  label.innerHTML = `Active LYRC Preset: <strong>${st.name}</strong> (${st.category}) — ${st.desc}`;
+  if (label) {
+    label.innerHTML = `Active LYRC Preset: <strong>${st.name}</strong>`
+      + ` <span class="type-count">${st.category}</span>`;
+    label.title = st.desc;
+  }
   const varBtn = document.getElementById('lyricVariationBtn');
   varBtn.disabled = !st.supportsVariation;
   document.getElementById('variationSeedBadge').textContent = st.supportsVariation ? `#${state.variationSeed}` : 'Fixed';
@@ -3575,7 +4124,9 @@ function renderCaptionStyleStrip() {
       const found = CAPTION_STYLES.find((s) => s.id === fbtn.dataset.favid);
       if (found) {
         found.fav = !found.fav;
+        buildLyrcCategoryPills();
         renderCaptionStyleStrip();
+        syncLyrcTypePanel();
       }
     });
   });
@@ -11792,6 +12343,302 @@ function fxFinishPass(ctx, w, h, effectType, P, before, grainAmount) {
 }
 
 // ============================================================================
+// LYRC TYPOGRAPHY: fonts, spacing, placement, and the block renderer
+// ----------------------------------------------------------------------------
+// Two renderers share one typography model:
+//   * the kinetic presets below draw words as a performance;
+//   * the block styles (kind: 'block') draw a real caption — wrapped lines,
+//     tracking, leading, a placement anchor and an optional plate behind it.
+// Both read `lyrcTypeOf()`, so a font/size/placement change is visible
+// immediately and identical in the 4K export.
+// ============================================================================
+function lyrcTypeBase(style) {
+  return Object.assign({}, LYRC_TYPE_DEFAULTS, (style && style.type) || {});
+}
+
+function lyrcTypeOf() {
+  const st = state.captionStyle || CAPTION_STYLES[0];
+  // per-style tweaks win over the preset's base, so nothing is lost when you
+  // switch looks and come back
+  const saved = (state.lyrcTypeByStyle && state.lyrcTypeByStyle[st.id]) || {};
+  return Object.assign({}, LYRC_TYPE_DEFAULTS, (st && st.type) || {}, state.lyrcType || {}, saved);
+}
+
+function lyrcApplyCase(text, mode) {
+  const src = String(text == null ? '' : text);
+  if (mode === 'upper') return src.toUpperCase();
+  if (mode === 'lower') return src.toLowerCase();
+  if (mode === 'title') return src.replace(/\S+/g, (word) => word[0].toUpperCase() + word.slice(1).toLowerCase());
+  return src;
+}
+
+function lyrcTypeFont(t, sizePx) {
+  const face = lyrcFont(t.font);
+  const weight = Number(t.weight) || 400;
+  return `${t.italic ? 'italic ' : ''}${weight} ${Math.max(6, sizePx)}px ${face.stack}`;
+}
+
+// Canvas letter-spacing is patchy across versions; draw it by hand when it
+// matters so tracking looks the same everywhere.
+function lyrcTrackPx(sizePx, t) {
+  return ((Number(t && t.tracking) || 0) / 1000) * sizePx;
+}
+
+function lyrcTextWidth(ctx, text, trackPx) {
+  const src = String(text == null ? '' : text);
+  if (!trackPx || src.length < 2) return ctx.measureText(src).width;
+  let total = 0;
+  for (const ch of Array.from(src)) total += ctx.measureText(ch).width + trackPx;
+  return total - trackPx;
+}
+
+function lyrcDrawText(ctx, text, x, y, opts) {
+  const o = opts || {};
+  const track = Number(o.track) || 0;
+  const mode = o.mode || 'fill';
+  if (!track) {
+    if (mode !== 'stroke' && o.fill) { ctx.fillStyle = o.fill; ctx.fillText(text, x, y); }
+    if (mode !== 'fill' && o.stroke) {
+      ctx.strokeStyle = o.stroke;
+      if (o.lineWidth != null) ctx.lineWidth = o.lineWidth;
+      ctx.strokeText(text, x, y);
+    }
+    return;
+  }
+  let cx = x;
+  for (const ch of Array.from(String(text))) {
+    if (mode !== 'stroke' && o.fill) { ctx.fillStyle = o.fill; ctx.fillText(ch, cx, y); }
+    if (mode !== 'fill' && o.stroke) {
+      ctx.strokeStyle = o.stroke;
+      if (o.lineWidth != null) ctx.lineWidth = o.lineWidth;
+      ctx.strokeText(ch, cx, y);
+    }
+    cx += ctx.measureText(ch).width + track;
+  }
+}
+
+// Where the lines land. Pure layout, no painting: the tests use it directly.
+function lyrcLayoutBlock(ctx, t, w, h, words) {
+  const sizePx = Math.max(8, (h * (Number(t.sizePct) || 4)) / 100);
+  const trackPx = lyrcTrackPx(sizePx, t);
+  const lineH = sizePx * Math.max(0.7, Number(t.leading) || 1.05);
+  const spaceW = lyrcTextWidth(ctx, ' ', 0) + trackPx;
+  const display = (words || []).map((word) => lyrcApplyCase(word, t.caseMode));
+  const widths = display.map((d) => lyrcTextWidth(ctx, d, trackPx));
+  const maxW = Math.max(60, (w * (Number(t.maxWidthPct) || 86)) / 100);
+
+  const lines = [];
+  let cur = { items: [], width: 0 };
+  for (let i = 0; i < display.length; i++) {
+    const add = (cur.items.length ? spaceW : 0) + widths[i];
+    if (cur.items.length && cur.width + add > maxW) {
+      lines.push(cur);
+      cur = { items: [i], width: widths[i] };
+    } else {
+      cur.items.push(i);
+      cur.width += add;
+    }
+  }
+  if (cur.items.length) lines.push(cur);
+
+  const align = t.align || 'center';
+  const anchorX = (Number(t.xPct) / 100) * w;
+  const marginX = Math.max(4, w * 0.02);
+  lines.forEach((line) => {
+    const left = align === 'left' ? anchorX : align === 'right' ? anchorX - line.width : anchorX - line.width / 2;
+    line.x = Math.min(Math.max(left, marginX), Math.max(marginX, w - marginX - line.width));
+  });
+
+  const blockH = lines.length * lineH;
+  const cy = (Number(t.yPct) / 100) * h;
+  return { lines, display, widths, sizePx, trackPx, lineH, blockH, cy, anchorX, maxW };
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  const radius = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  if (typeof ctx.roundRect === 'function') {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, radius);
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function drawLyrcBlockStyle(ctx, w, h, st, t, info) {
+  const look = (st && st.look) || {};
+  const words = (info && info.words) || [];
+  if (!words.length) return;
+  const activeIdx = Number.isFinite(info.activeIdx) ? info.activeIdx : 0;
+  const pxScale = h / 1080;
+
+  ctx.save();
+  // Measure with the font that will be drawn. Measuring with a placeholder made
+  // every wrapped line and every clamp wrong by the size ratio.
+  const measureSize = Math.max(8, (h * (Number(t.sizePct) || 4)) / 100);
+  ctx.font = lyrcTypeFont(t, measureSize);
+  const layout = lyrcLayoutBlock(ctx, t, w, h, words);
+  const { lines, display, widths, sizePx, trackPx, lineH, blockH, cy } = layout;
+  ctx.font = lyrcTypeFont(t, sizePx);
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  lyrcSetTracking(ctx, 0);
+
+  const rotate = Number(look.rotate) || 0;
+  if (rotate) { ctx.translate(layout.anchorX, cy); ctx.rotate((rotate * Math.PI) / 180); ctx.translate(-layout.anchorX, -cy); }
+  ctx.globalAlpha = Math.max(0, Math.min(1, (Number(t.opacity) || 100) / 100));
+
+  const pad = Math.max(0, (Number(t.boxPad) || 0) / 100) * sizePx;
+  const boxAlpha = Math.max(0, Math.min(1, (Number(t.boxOpacity) || 0) / 100));
+  const top = cy - blockH / 2;
+  // The vertical centre of line n's text. Bars and plates are placed from this,
+  // not from the top of the line box, which is what put the bar above the words.
+  const lineY = (n) => top + lineH / 2 + n * lineH;
+
+  // plate behind the whole block
+  if (boxAlpha > 0.01) {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    lines.forEach((line) => { minX = Math.min(minX, line.x); maxX = Math.max(maxX, line.x + line.width); });
+    ctx.save();
+    ctx.globalAlpha *= boxAlpha;
+    ctx.fillStyle = t.boxColor || '#090a0f';
+    roundRectPath(ctx, minX - pad, top - pad * 0.7, (maxX - minX) + pad * 2, blockH + pad * 1.4,
+      (Number(t.boxRadius) || 0) * pxScale);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // accent rule (lower thirds)
+  if (look.rule) {
+    let minX = Infinity;
+    lines.forEach((line) => { minX = Math.min(minX, line.x); });
+    ctx.save();
+    ctx.fillStyle = state.accentColor;
+    ctx.fillRect(minX - pad * 0.9, top - pad * 0.2, Math.max(2, 4 * pxScale), blockH + pad * 0.4);
+    // (the rule spans the whole block, so the line box is the right reference here)
+    ctx.restore();
+  }
+
+  const activeLine = lines.findIndex((line) => line.items.indexOf(activeIdx) >= 0);
+  const primary = state.primaryColor;
+  const accent = state.accentColor;
+  const inkOnAccent = look.barInk || '#111111';
+  const wantBar = look.activeWord === 'bar' || look.activeWord === 'invert';
+  const outlinePx = (Number(t.outline) || 0) * pxScale;
+  const shadowStrength = Math.max(0, Math.min(1, (Number(t.shadow) || 0) / 100));
+
+  // highlighter / knockout plates go under the words they belong to
+  if (wantBar) {
+    const line = lines[activeLine] || null;
+    if (line) {
+      ctx.save();
+      ctx.fillStyle = accent;
+      const barY = lineY(activeLine || 0);
+      if (look.activeWord === 'invert') {
+        // a box behind just the current word
+        let x = line.x;
+        line.items.forEach((wi) => {
+          if (wi === activeIdx) {
+            roundRectPath(ctx, x - sizePx * 0.08, barY - sizePx * 0.62,
+              widths[wi] + sizePx * 0.16, sizePx * 1.24, sizePx * 0.12);
+            ctx.fill();
+          }
+          x += widths[wi] + lyrcTextWidth(ctx, ' ', 0) + trackPx;
+        });
+      } else {
+        // a bar behind the whole line being sung
+        roundRectPath(ctx, line.x - sizePx * 0.14, barY - sizePx * 0.6,
+          line.width + sizePx * 0.28, sizePx * 1.2, sizePx * 0.08);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  lines.forEach((line, li) => {
+    const y = lineY(li);
+    let x = line.x;
+    line.items.forEach((wi) => {
+      const isActive = wi === activeIdx;
+      const onBarLine = wantBar && li === activeLine;
+      let fill = primary;
+      if (look.activeWord === 'accent' && isActive) fill = accent;
+      else if (look.activeWord === 'sweep' && wi < activeIdx) fill = accent;
+      else if (onBarLine) fill = inkOnAccent;
+
+      ctx.save();
+      if (isActive && look.pop) {
+        const mid = x + widths[wi] / 2;
+        const pop = 1.05 + Math.sin((info.progress || 0) * Math.PI) * 0.03;
+        ctx.translate(mid, y);
+        ctx.scale(pop, pop);
+        ctx.translate(-mid, -y);
+      }
+      if (shadowStrength > 0.01) {
+        ctx.shadowColor = `rgba(0,0,0,${(shadowStrength * 0.9).toFixed(2)})`;
+        ctx.shadowBlur = sizePx * 0.16;
+        ctx.shadowOffsetY = sizePx * 0.05;
+      }
+      if (look.hardShadow) {
+        lyrcDrawText(ctx, display[wi], x + sizePx * 0.05, y + sizePx * 0.05,
+          { track: trackPx, fill: accent, mode: 'fill' });
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+      }
+      if (look.outlineOnly) {
+        lyrcDrawText(ctx, display[wi], x, y, {
+          track: trackPx,
+          stroke: fill,
+          lineWidth: outlinePx > 0.2 ? outlinePx : Math.max(1, sizePx * 0.02),
+          mode: 'stroke'
+        });
+      } else {
+        lyrcDrawText(ctx, display[wi], x, y, {
+          track: trackPx,
+          fill,
+          stroke: outlinePx > 0.2 ? '#000000' : null,
+          lineWidth: outlinePx,
+          mode: outlinePx > 0.2 ? 'both' : 'fill'
+        });
+      }
+      ctx.restore();
+
+      // terminal cursor
+      if (look.cursor && wi === activeIdx && Math.floor((info.progress || 0) * 6) % 2 === 0) {
+        ctx.save();
+        ctx.fillStyle = accent;
+        ctx.fillRect(x + widths[wi] + trackPx + sizePx * 0.06, y - sizePx * 0.34, sizePx * 0.28, sizePx * 0.68);
+        ctx.restore();
+      }
+
+      x += widths[wi] + lyrcTextWidth(ctx, ' ', 0) + trackPx;
+    });
+  });
+
+  ctx.restore();
+}
+
+// ctx.letterSpacing is the cheap path for the kinetic presets; where it is not
+// implemented the block renderer's own tracking still applies.
+function lyrcSetTracking(ctx, px) {
+  try {
+    if ('letterSpacing' in ctx) { ctx.letterSpacing = Math.round(px * 100) / 100 + 'px'; return true; }
+  } catch (_e) { /* older canvas: ignore */ }
+  return false;
+}
+
+// ============================================================================
 // LYRC.STUDIO MULTI-WORD SPATIAL KINETIC PRESET ENGINE
 // ============================================================================
 function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
@@ -11821,11 +12668,28 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
   }
 
   const styleId = state.captionStyle.id;
-  const baseScale = state.fontScale / 100;
-  const centerY = (state.posY / 100) * h;
+  const type = lyrcTypeOf();
+
+  // The block family is a caption, not a performance: wrapped lines, tracking,
+  // leading and a placement anchor. Same model, different renderer.
+  if (state.captionStyle.kind === 'block') {
+    drawLyrcBlockStyle(ctx, w, h, state.captionStyle, type, {
+      words, activeIdx, subProgress: wordSubProgress, progress: phraseProgress
+    });
+    return;
+  }
+
+  // Size, position and tracking come from the typography model. The 25px base
+  // is the old default, so an untouched preset lays out exactly as before.
+  const baseScale = Math.max(0.4, ((h * (Number(type.sizePct) || 3.6)) / 100) / 25);
+  const centerY = (Number(type.yPct) / 100) * h;
+  const align = type.align || 'center';
+  const fontStack = lyrcFont(type.font).stack;
   const seed = state.variationSeed;
 
   ctx.save();
+  ctx.letterSpacingFallback = 0;
+  lyrcSetTracking(ctx, lyrcTrackPx((h * (Number(type.sizePct) || 3.6)) / 100, type));
 
   // 1. BRAT
   if (styleId === 'brat') {
@@ -11836,7 +12700,7 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
     }
     ctx.filter = 'blur(0.75px)';
     ctx.fillStyle = state.backdropMode === 'clean' ? '#8ace00' : '#000000';
-    ctx.font = `600 ${Math.round(25 * baseScale)}px Arial, Helvetica, sans-serif`;
+    ctx.font = `600 ${Math.round(25 * baseScale)}px ${fontStack}`;
     ctx.textAlign = 'center';
     const line1 = visibleWords.slice(0, 3).join(' ');
     const line2 = visibleWords.slice(3, 6).join(' ');
@@ -11868,7 +12732,7 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
         const fSize = Math.round((isSerif ? 31 : 28) * baseScale * (isCurrent ? 1.08 : 1.0));
         ctx.font = isSerif
           ? `italic 700 ${fSize}px Georgia, "Times New Roman", serif`
-          : `900 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+          : `900 ${fSize}px ${fontStack}`;
         const textStr = isSerif ? word.toLowerCase() : word.toUpperCase();
         const mw = ctx.measureText(textStr).width;
         totalRowW += mw;
@@ -11876,13 +12740,13 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
       });
       totalRowW += Math.max(0, metrics.length - 1) * 14;
 
-      let xCursor = state.alignment === 'left' ? w * 0.16 : state.alignment === 'right' ? w * 0.84 - totalRowW : (w - totalRowW) / 2;
+      let xCursor = align === 'left' ? w * 0.16 : align === 'right' ? w * 0.84 - totalRowW : (w - totalRowW) / 2;
 
       metrics.forEach((m) => {
         ctx.save();
         ctx.font = m.isSerif
           ? `italic 700 ${m.fSize}px Georgia, "Times New Roman", serif`
-          : `900 ${m.fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+          : `900 ${m.fSize}px ${fontStack}`;
         const popY = m.isCurrent ? -Math.sin(wordSubProgress * Math.PI) * 5 : 0;
 
         if (state.backdropMode === 'knockout' && m.isCurrent) {
@@ -11917,9 +12781,9 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
       const isKnockout = isCurrent || ((gIdx + seed) % 3 === 0);
       const upper = word.toUpperCase();
       const fSize = Math.round((isCurrent ? 32 : 26) * baseScale);
-      ctx.font = `900 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+      ctx.font = `900 ${fSize}px ${fontStack}`;
       const tw = ctx.measureText(upper).width;
-      const x = state.alignment === 'left' ? w * 0.16 : state.alignment === 'right' ? w * 0.84 - tw : (w - tw) / 2;
+      const x = align === 'left' ? w * 0.16 : align === 'right' ? w * 0.84 - tw : (w - tw) / 2;
       const y = startY + sIdx * lineH;
 
       if (isKnockout && state.backdropMode !== 'clean') {
@@ -11948,7 +12812,7 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
       const isCurrent = idx === slice.length - 1;
       const upper = word.toUpperCase();
       const fSize = Math.round((isCurrent ? 27 : 21) * baseScale);
-      ctx.font = `900 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+      ctx.font = `900 ${fSize}px ${fontStack}`;
       const tw = ctx.measureText(upper).width;
 
       let tx = w / 2;
@@ -11985,7 +12849,7 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
 
   // 5. MARGIN
   if (styleId === 'margin') {
-    const isRight = state.alignment === 'right';
+    const isRight = align === 'right';
     const railX = isRight ? w * 0.82 : w * 0.18;
     const visible = words.slice(0, activeIdx + 1).slice(-5);
     const lineH = 34 * baseScale;
@@ -11998,8 +12862,8 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
       const isCurrent = idx === visible.length - 1;
       const fSize = Math.round((isCurrent ? 28 : 22) * baseScale);
       ctx.font = isCurrent
-        ? `900 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`
-        : `600 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+        ? `900 ${fSize}px ${fontStack}`
+        : `600 ${fSize}px ${fontStack}`;
       ctx.textAlign = isRight ? 'right' : 'left';
       const slideOffset = isCurrent ? (1 - wordSubProgress) * (isRight ? -18 : 18) : 0;
       const x = isRight ? railX - 14 + slideOffset : railX + 16 + slideOffset;
@@ -12025,7 +12889,7 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
       const isCurrent = idx === visible.length - 1;
       const upper = word.toUpperCase();
       const fSize = Math.round((isCurrent ? 28 : 23) * baseScale);
-      ctx.font = `900 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+      ctx.font = `900 ${fSize}px ${fontStack}`;
       const tw = ctx.measureText(upper).width;
       const y = startY + idx * lineH;
       const x = (w - tw) / 2;
@@ -12051,8 +12915,8 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
     const fSize = Math.round((styleId === 'quiet' ? 20 : 28) * baseScale);
 
     ctx.font = styleId === 'quiet'
-      ? `500 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`
-      : `800 ${fSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+      ? `500 ${fSize}px ${fontStack}`
+      : `800 ${fSize}px ${fontStack}`;
 
     const spaceW = ctx.measureText(' ').width * (styleId === 'quiet' ? 1.8 : 1.25);
     const formatted = chunkWords.map((wStr) => (styleId === 'quiet' ? wStr.toLowerCase() : wStr.toUpperCase()));
@@ -12100,8 +12964,8 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
   const fontSize = Math.round(25 * baseScale);
 
   ctx.font = styleId === 'overdrive'
-    ? `italic 900 ${fontSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`
-    : `900 ${fontSize}px -apple-system, BlinkMacSystemFont, "Inter", sans-serif`;
+    ? `italic 900 ${fontSize}px ${fontStack}`
+    : `900 ${fontSize}px ${fontStack}`;
   ctx.textBaseline = 'middle';
 
   const spaceW = ctx.measureText(' ').width * 1.2;
@@ -12344,6 +13208,24 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     loadTranscriptFile,
     renderCueList,
     drawLyrcStudioTypography,
+    // LYRC typography: fonts, spacing, placement, block renderer
+    LYRC_FONTS,
+    LYRC_TYPE_DEFAULTS,
+    CAPTION_STYLES,
+    lyrcTypeOf,
+    lyrcTypeBase,
+    lyrcLayoutBlock,
+    drawLyrcBlockStyle,
+    lyrcApplyCase,
+    lyrcTrackPx,
+    lyrcSizePx,
+    setLyrcType,
+    applyLyrcStyleDefaults,
+    syncLyrcTypePanel,
+    selectLyrcPreset,
+    buildLyrcCategoryPills,
+    saveLyrcType,
+    loadLyrcType,
     setLyricsOverlay,
     applyLyricsState,
     segmentsFromAnalysis,
