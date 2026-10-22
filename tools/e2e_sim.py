@@ -71,6 +71,26 @@ def run_console_snippet(code_text):
     return True, ""
 
 
+def run_snippet_settings(code_text, expected):
+    """Run a settings-writing snippet (no node graph) and check it landed."""
+    try:
+        from lupa import luajit21 as lua_mod
+    except Exception:
+        from lupa import lua51 as lua_mod
+    rt = lua_mod.LuaRuntime()
+    mock = rt.execute((ROOT / "tools" / "mock_resolve.lua").read_text())
+    mock.install()
+    try:
+        rt.execute(code_text)
+    except Exception as exc:
+        return False, f"lua error: {exc}"
+    for key, want in expected.items():
+        got = rt.eval(f'__mock_tbl.project:GetSetting("{key}")')
+        if str(got) != str(want):
+            return False, f"{key}={got!r}, expected {want!r}"
+    return True, ""
+
+
 def post(path, payload):
     req = urllib.request.Request(
         f"http://127.0.0.1:{PORT}{path}",
@@ -332,6 +352,29 @@ def main():
             "SoftGlow" in res.get("luaSnippet", "") and "Bitmap" in res.get("luaSnippet", "")
             and "Multiply" in res.get("luaSnippet", ""),
             "snippet missing layer nodes"))
+
+        # ---- 4K hand-off: the panel tells Resolve to work and render at 4K
+        res = post("/api/dispatch", {
+            "action": "set_4k_timeline",
+            "payload": {"width": 3840, "height": 2160, "fps": 24},
+        })
+        k4 = (res.get("bridgeResponse") or {}).get("result") or {}
+        check("4K switch answered live in Resolve", lambda: (
+            res.get("liveBridgeConnected") is True, f"res={str(res)[:200]}"))
+        check("4K switch reports the new size", lambda: (
+            k4.get("ok") is True and k4.get("width") == 3840 and k4.get("height") == 2160,
+            f"result={k4}"))
+        check("console snippet for 4K sets the project to 4K",
+              lambda: run_snippet_settings(res.get("luaSnippet", ""), {
+                  "timelineResolutionWidth": 3840,
+                  "timelineResolutionHeight": 2160,
+                  "timelineOutputResolutionWidth": 3840,
+                  "timelineFrameRate": 24,
+              }))
+        check("4K snippet sets every dimension", lambda: (
+            all(k in res.get("luaSnippet", "") for k in
+                ("timelineResolutionWidth", "timelineOutputResolutionWidth", "timelineFrameRate", "3840")),
+            "snippet missing settings"))
 
         # ---- media pool + auto edit
         res = post("/api/dispatch", {"action": "get_media_pool", "payload": {}})

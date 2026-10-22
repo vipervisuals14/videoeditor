@@ -217,7 +217,7 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 
 ---
 
-## Part 9 — The six tabs
+## Part 9 — The seven tabs
 
 **`02 • LYRC Typography`** — 20 kinetic lyric styles (Bold / Layered / Minimal / Talking).
 
@@ -284,6 +284,21 @@ it by hand.
 5. **`↑` `↓`** change the order, **`◐`** mutes a layer, **`✕`** removes it.
 6. Press **`◆`** on a row to keyframe that layer's strength at the playhead.
 7. **`Send Stack to Resolve`** hands Resolve the whole stack as one ordered graph.
+
+---
+
+## 4K import & export
+
+1. Open **`07 • 4K Render`**.
+2. Drag a clip or image onto the dashed box (or press **`⬆ Import footage`**). The panel shows its
+   real resolution and whether it is 4K.
+3. Pick a size (4K UHD is already selected), frame rate and format.
+4. **`⬇ Export still`** saves one full-resolution frame.
+   **`⬇ Render PNG sequence (ZIP)`** saves a numbered sequence — drag that folder into Resolve's
+   Media Pool and it imports as an image sequence.
+5. For a finishing master press **`▦ Make Resolve render 4K natively`**: it copies a Lua snippet
+   that sets your project and timeline to 3840 × 2160, then Resolve renders with its own codecs.
+   In the hosted website version you paste that snippet into Resolve's Console.
 
 ---
 

@@ -182,6 +182,25 @@
     return out;
   }
 
+  // Pull a sub-rectangle of a depth map at an arbitrary size. Used by the 4K
+  // renderer, which processes frames tile by tile so a 3840x2160 frame never
+  // needs a full 33 MB float buffer per pass.
+  function sampleDepthRect(depth, mw, mh, x0, y0, rw, rh, frameW, frameH) {
+    var fw = Math.max(1, frameW || mw);
+    var fh = Math.max(1, frameH || mh);
+    var out = new Float32Array(rw * rh);
+    for (var y = 0; y < rh; y++) {
+      var ny = (y0 + y) / Math.max(1, fh - 1);
+      var sy = clamp(Math.round(ny * (mh - 1)), 0, mh - 1);
+      for (var x = 0; x < rw; x++) {
+        var nx = (x0 + x) / Math.max(1, fw - 1);
+        var sx = clamp(Math.round(nx * (mw - 1)), 0, mw - 1);
+        out[y * rw + x] = depth[sy * mw + sx];
+      }
+    }
+    return out;
+  }
+
   function resizeDepth(depth, sw, sh, dw, dh) {
     var out = new Float32Array(dw * dh);
     for (var y = 0; y < dh; y++) {
@@ -698,6 +717,7 @@
     apply: apply,
     toGray: toGray,
     resizeDepth: resizeDepth,
+    sampleDepthRect: sampleDepthRect,
     boxBlurRGB: boxBlurRGB,
     guidedSmooth: guidedSmooth,
     percentileStretch: percentileStretch,

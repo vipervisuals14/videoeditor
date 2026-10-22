@@ -365,6 +365,16 @@ def _error_mentions(rt, h, req_id, needle):
     return True, ""
 
 
+def _setting_readback(rt, h, req_id):
+    data = h.decode(rt, req_id)
+    if data is None:
+        return False, f"no response for {req_id}"
+    rb = (data.get("result") or {}).get("readback") or {}
+    if str(rb.get("width")) != "3840" or str(rb.get("height")) != "2160":
+        return False, f"readback={rb}"
+    return True, ""
+
+
 def _node_report(rt, h, req_id, expected, must_skip=None):
     data = h.decode(rt, req_id)
     if data is None:
@@ -635,6 +645,22 @@ def main():
             chk_response("ok", True, req_id="ly3"),
             chk_nested("result", "applied", expected=False, req_id="ly3"),
             ("error text", lambda rt, h: _error_mentions(rt, h, "ly3", "No effect layers")),
+        ],
+    ))
+
+    results.append(scenario(
+        "set_4k_timeline → project + timeline switched to 4K, readback confirms",
+        [{"id": "k1", "op": "set_4k_timeline",
+          "args": {"width": 3840, "height": 2160, "fps": 24}}],
+        [
+            chk_response("ok", True, req_id="k1"),
+            ("no error", chk_no_error),
+            chk_nested("result", "ok", expected=True, req_id="k1"),
+            chk_nested("result", "width", expected=3840, req_id="k1"),
+            chk_nested("result", "height", expected=2160, req_id="k1"),
+            ("readback 4K", lambda rt, h: _setting_readback(rt, h, "k1")),
+            ("calls.setting", lambda rt, h: _has_call(rt, "proj:SetSetting timelineResolutionWidth")),
+            ("calls.marker", lambda rt, h: _has_call(rt, "Green")),
         ],
     ))
 

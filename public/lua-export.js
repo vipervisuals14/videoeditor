@@ -236,6 +236,73 @@
   }
 
   // ---------------------------------------------------------------------------
+  // set_4k_timeline — tell Resolve to work and render at 4K, so the *native*
+  // Fusion graph produces final frames at 3840x2160. This is the highest
+  // quality path: no browser render, no scaling, Resolve's own codecs.
+  // ---------------------------------------------------------------------------
+  function set4K(payload) {
+    var p = payload || {};
+    var width = Math.round(Number(p.width) || 3840);
+    var height = Math.round(Number(p.height) || 2160);
+    var fps = Number(p.fps) || 24;
+    var src = p.source || null;
+    var srcLine = src
+      ? '-- source footage: ' + (src.name || 'clip') + ' (' + src.width + 'x' + src.height + ')\n'
+      : '-- source: whatever clip is under the playhead\n';
+
+    return HEADER + '\n'
+      + '-- "4K Timeline": ' + width + ' x ' + height + ' @ ' + fps + ' fps\n'
+      + '-- Every dimension is set explicitly because Resolve Free defaults new\n'
+      + '-- timelines to whatever the last project used, not to 4K.\n'
+      + srcLine
+      + 'local pm = resolve:GetProjectManager()\n'
+      + 'local proj = pm and pm:GetCurrentProject()\n'
+      + 'if not proj then return "no project open" end\n'
+      + 'local ok, err = pcall(function()\n'
+      + '    proj:SetSetting("timelineUseCustomSettings", "1")\n'
+      + '    proj:SetSetting("timelineResolutionWidth", "' + width + '")\n'
+      + '    proj:SetSetting("timelineResolutionHeight", "' + height + '")\n'
+      + '    proj:SetSetting("timelineOutputResolutionWidth", "' + width + '")\n'
+      + '    proj:SetSetting("timelineOutputResolutionHeight", "' + height + '")\n'
+      + '    proj:SetSetting("timelineFrameRate", "' + fps + '")\n'
+      + '    proj:SetSetting("timelineOutputFrameRate", "' + fps + '")\n'
+      + '    proj:SetSetting("timelinePlaybackFrameRate", "' + fps + '")\n'
+      + '    pcall(function() proj:SetSetting("timelineProxyResolutionWidth", "' + width + '") end)\n'
+      + '    pcall(function() proj:SetSetting("timelineProxyResolutionHeight", "' + height + '") end)\n'
+      + '    pcall(function() proj:SetSetting("timelineProxyMedia", "0") end)\n'
+      + '    -- Render settings: 4K, highest quality, no resize\n'
+      + '    pcall(function() proj:SetRenderSettings({\n'
+      + '        SelectAllFrames = 1,\n'
+      + '        TargetDir = "",\n'
+      + '        CustomName = "PulseVFX_4K",\n'
+      + '        ExportVideo = 1,\n'
+      + '        FormatWidth = ' + width + ',\n'
+      + '        FormatHeight = ' + height + ',\n'
+      + '        FrameRate = ' + fps + ',\n'
+      + '        VideoQuality = 0,\n'
+      + '        NetworkOptimizationUseForRendering = 0\n'
+      + '    }) end)\n'
+      + 'end)\n'
+      + 'if not ok then return "Resolve refused the setting: " .. tostring(err) end\n'
+      + 'local tl = proj:GetCurrentTimeline()\n'
+      + 'if tl then\n'
+      + '    pcall(function() tl:SetSetting("useCustomSettings", "1") end)\n'
+      + '    pcall(function() tl:SetSetting("useCustomResolution", "1") end)\n'
+      + '    pcall(function() tl:SetSetting("resolutionWidth", "' + width + '") end)\n'
+      + '    pcall(function() tl:SetSetting("resolutionHeight", "' + height + '") end)\n'
+      + '    pcall(function() tl:AddMarker(1, "Green", "4K: ' + width + 'x' + height + '", "Render this timeline natively", 1) end)\n'
+      + 'end\n'
+      + 'local item = tl and (tl:GetCurrentVideoItem() or (tl:GetItemListInTrack("video", 1) or {})[1])\n'
+      + 'if item then\n'
+      + '    -- Push the clip\'s own scaling to 4K without softening it\n'
+      + '    pcall(function() item:SetProperty("SuperScale", 3) end)\n'
+      + '    pcall(function() item:SetProperty("ZoomX", 1.0) end)\n'
+      + '    pcall(function() item:SetProperty("ZoomY", 1.0) end)\n'
+      + 'end\n'
+      + 'return "project set to ' + width + 'x' + height + ' @ ' + fps + ' fps"\n';
+  }
+
+  // ---------------------------------------------------------------------------
   // depth_apply — depth-driven effects built in the panel. Resolve gets a real
   // DepthMap node plus one native tool per effect, each keyframed on Blend with
   // a BezierSpline so the intensity animates exactly as it does in the panel.
@@ -584,6 +651,7 @@
     if (action === 'mask_apply') return maskApply(p);
     if (action === 'depth_apply') return depthApply(p);
     if (action === 'layers_apply') return layersApply(p);
+    if (action === 'set_4k_timeline') return set4K(p);
     if (action === 'cut_silences') return cutSilences(p);
     if (action === 'add_captions_lyrics') return captions(p);
     if (action === 'auto_edit_timeline') return autoEdit(p);
@@ -596,6 +664,7 @@
     mask_apply: true,
     depth_apply: true,
     layers_apply: true,
+    set_4k_timeline: true,
     add_captions_lyrics: true,
     cut_silences: true,
     auto_edit_timeline: true,

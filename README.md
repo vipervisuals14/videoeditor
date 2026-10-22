@@ -246,6 +246,37 @@ bridge did not answer.
 
 ---
 
+## True 4K import and export (in the browser)
+
+The hosted build is the product, so 4K has to work with nothing installed. `07 • 4K Render`:
+
+| Path | What it produces | Where it runs |
+|---|---|---|
+| **Export still** | one PNG / JPEG / WebP at up to 6K (4K UHD default) | your browser |
+| **Render PNG sequence (ZIP)** | numbered `beauty/plate_00001.png …` frames, optional `depth/` and `matte/` passes, zipped in-page | your browser |
+| **Render review .webm** | 4K review copy via MediaRecorder (codec-limited) | your browser |
+| **Make Resolve render 4K natively** | the panel hands you a Lua snippet that sets the project + timeline to 3840×2160 and the render settings; Resolve renders final frames with real codecs | Resolve |
+
+**Import** reads the real resolution of anything you drop in (`videoWidth/videoHeight` or
+`naturalWidth/naturalHeight`) and tells you honestly whether it is 4K — a 1080p source can still
+be exported at 4K, but the panel says so instead of pretending.
+
+### How a 4K frame is composed without dying
+
+`composeExportFrame()` runs the same pipeline as the monitor — plate → optical shader → depth
+stack → effect layers → lyrics/mask overlays — but at export size. Depth work is **tiled**:
+`planTiles()` splits the frame into 960×540 blocks with 48 px of real overlap, processes each
+tile, and writes back only the inner rect, so blurs match seamlessly and peak memory stays near
+one frame (~95 MB at 4K instead of ~400 MB). Sizes past the browser budget are refused with a
+warning before a render starts, and every long job is cancellable with a progress bar.
+
+The ZIP is written from scratch (`crc32` + store-only local/central directory), because PNGs are
+already compressed — deflating again only burns battery. The output validates against
+`python3 -m zipfile` and imports straight into Resolve's Media Pool or ffmpeg.
+
+**Honest limits:** browsers cannot write ProRes or DNxHR, and MediaRecorder's WebM is a review
+codec. For a finishing master, use the native Resolve path — same graph, Resolve's own renderer.
+
 ## Effect Layers — stack looks, in order
 
 Under the Effect Browser is an optional **Effect Layers** rack. Pick a card, press

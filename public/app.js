@@ -781,6 +781,9 @@ const state = {
   layers: [],
   layerSeq: 0,
 
+  // Imported 4K source metadata for the render bay
+  rbSource: null,
+
   // Silence Cutter state
   silenceThresholdDb: -32,
   silenceMinMs: 300,
@@ -853,6 +856,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initMaskTab();
   initDepthTab();
   initLayers();
+  initRenderBay();
   initMonitorAndTimeline();
   initModules();
   initBridgeModal();
@@ -1029,6 +1033,9 @@ function staticDispatch(action, payload, toastMsg) {
   }
   if (action === 'mask_apply') {
     p.chainLabel = 'Paint → Polygon → Blur → MatteControl → Merge';
+  }
+  if (action === 'set_4k_timeline') {
+    p.chainLabel = `Project → ${p.width || 3840} × ${p.height || 2160} @ ${p.fps || 24} fps → native render`;
   }
   if (action === 'layers_apply') {
     const rows = (p.layers || []).map((l) => {
@@ -1358,6 +1365,7 @@ function initTabs() {
       if (tab === 'silences') drawSilenceWaveform();
       if (tab === 'mask') maskSyncUI();
       if (tab === 'depth') depthSyncUI();
+      if (tab === 'render') { rbSyncSourceUI(); rbSyncMemory(); }
     });
   });
 
@@ -2953,6 +2961,638 @@ function initLayers() {
       if (out) out.textContent = v + '%';
     });
   }, 220);
+}
+// ============================================================================
+// 4K RENDER BAY — true-resolution import + export
+// ----------------------------------------------------------------------------
+// The monitor is a 640x360 preview. This is the finishing path: it composes the
+// SAME pipeline (plate -> optical shader -> effect layers -> depth stack ->
+// optional matte/depth pass) at full export resolution, in tiles so a 3840x2160
+// frame never needs several full float buffers at once.
+//
+// Everything heavy is cancellable and reports progress, because a 4K sequence
+// is minutes of work and a dead tab is worse than a slow one.
+// ============================================================================
+const RB_TILE_W = 960;
+const RB_TILE_H = 540;
+const RB_TILE_OVERLAP = 48;
+
+let rbScratch = null;
+let rbCancelled = false;
+let rbBusy = false;
+
+function renderBaySource() {
+  return state.rbSource || null;
+}
+
+function rbLogLine(msg) {
+  const el = document.getElementById('rbLog');
+  if (!el) return;
+  const stamp = new Date().toLocaleTimeString();
+  el.textContent = `[${stamp}] ${msg}\n` + el.textContent.split('\n').slice(0, 60).join('\n');
+}
+
+function rbProgress(pct, text) {
+  const wrap = document.getElementById('rbProgressWrap');
+  const fill = document.getElementById('rbProgressFill');
+  const label = document.getElementById('rbProgressText');
+  if (wrap) wrap.hidden = false;
+  if (fill) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  if (label && text) label.textContent = text;
+}
+
+function rbSetBusy(busy) {
+  rbBusy = busy;
+  const cancel = document.getElementById('rbCancelBtn');
+  if (cancel) cancel.hidden = !busy;
+  ['rbStillBtn', 'rbSequenceBtn', 'rbVideoBtn', 'rbResolve4KBtn', 'rbImportBtn'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = busy;
+  });
+}
+
+function rbSizeSelection() {
+  const sel = document.getElementById('rbSizeSelect');
+  const id = sel && sel.value ? sel.value : 'uhd4k';
+  if (id === 'custom') {
+    const w = Number((document.getElementById('rbCustomW') || {}).value) || 3840;
+    const h = Number((document.getElementById('rbCustomH') || {}).value) || 2160;
+    return { width: Math.max(16, Math.round(w)), height: Math.max(16, Math.round(h)), label: `${w} × ${h} (custom)` };
+  }
+  const p = RENDER_ENGINE.presetFor(id);
+  return { width: p.width, height: p.height, label: p.label };
+}
+
+function rbFps() {
+  const el = document.getElementById('rbFpsSelect');
+  return Number(el && el.value) || 24;
+}
+
+function rbFormat() {
+  const el = document.getElementById('rbFormatSelect');
+  return (el && el.value) || 'png';
+}
+
+// --------------------------------------------------------------- composition
+
+/**
+ * Draws one finished export frame at w x h. Mirrors drawMonitorFrame, but takes
+ * the target surface and size as arguments so it can render 4K off-screen.
+ */
+function composeExportFrame(ctx, w, h, t) {
+  const preset = state.activePreset || VFX_PRESETS[0];
+  const effectType = preset.effectType || 'opt_halation';
+  const intensity = effectiveIntensity(preset.id, state.playheadSec) / 100;
+  const grainAmount = state.mixStylized / 100;
+  const beatPhase = (t * (state.bpm / 60)) % 1;
+  const onBeatPulse = Math.pow(Math.max(0, 1 - beatPhase * 3.5), 2.2);
+  const renderTime = effectType === 'time_smear' ? Math.floor(t * 9) / 9 : t;
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0, 0, w, h);
+
+  // same camera-weight math as the preview, scaled to export size
+  const scaleFactor = w / 640;
+  let dx = 0;
+  let dy = 0;
+  let scale = 1;
+  let rot = 0;
+  if (effectType === 'cam_float') {
+    dx = Math.sin(t * 1.7) * 5.5 * intensity * scaleFactor;
+    dy = Math.cos(t * 1.3) * 4.2 * intensity * scaleFactor;
+    rot = Math.sin(t * 0.9) * 0.006 * intensity;
+    scale = 1.02;
+  } else if (effectType === 'opt_gateweave') {
+    dx = (Math.sin(t * 19) * 1.4 + Math.cos(t * 31) * 0.9) * intensity * scaleFactor;
+    dy = Math.cos(t * 23) * 1.2 * intensity * scaleFactor;
+    scale = 1.01;
+  } else if (effectType === 'cam_thump' || state.hitFlashBurst > 0.05) {
+    const thump = (0.075 * intensity * onBeatPulse) + (state.hitFlashBurst * 0.09);
+    scale = 1.0 + thump;
+  }
+
+  ctx.save();
+  ctx.translate(w / 2 + dx, h / 2 + dy);
+  ctx.rotate(rot);
+  ctx.scale(scale, scale);
+  ctx.translate(-w / 2, -h / 2);
+
+  drawCinematicPlate(ctx, w, h, renderTime, onBeatPulse);
+  drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
+  applyDepthStackTiled(ctx, w, h, t, preset);
+  renderEffectLayers(ctx, w, h, renderTime, onBeatPulse, grainAmount);
+  ctx.restore();
+
+  if (state.showLyricsOverlay) drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse);
+  if (state.mask && state.mask.soft && state.mask.showOnMonitor && state.mask.view !== 'off') {
+    drawMaskOverlay(ctx, w, h, t);
+  }
+  ctx.restore();
+  return ctx.canvas;
+}
+
+function rbScratchCanvas(w, h) {
+  if (!rbScratch) rbScratch = document.createElement('canvas');
+  if (rbScratch.width !== w || rbScratch.height !== h) {
+    rbScratch.width = w;
+    rbScratch.height = h;
+  }
+  return rbScratch;
+}
+
+// Depth effects, tile by tile. Convolution effects get RB_TILE_OVERLAP px of
+// real neighbours, then only the inner rect is written back, so tiles match
+// seamlessly at full resolution.
+function applyDepthStackTiled(ctx, w, h, t) {
+  const d = state.depth;
+  if (!d || !d.map || !window.DEPTH_ENGINE) return 0;
+  const on = depthEffectsOn();
+  if (!on.count) return 0;
+
+  const tiles = RENDER_ENGINE.planTiles(w, h, {
+    tileW: RB_TILE_W,
+    tileH: RB_TILE_H,
+    overlap: RB_TILE_OVERLAP
+  });
+  let applied = 0;
+  tiles.forEach((tile) => {
+    let img;
+    try {
+      img = ctx.getImageData(tile.sx, tile.sy, tile.sw, tile.sh);
+    } catch (_e) {
+      return;
+    }
+    if (!img || !img.data || img.width !== tile.sw) return;
+    const depthRect = DEPTH_ENGINE.sampleDepthRect(
+      d.map, d.mapW || MASK_W, d.mapH || MASK_H,
+      tile.sx, tile.sy, tile.sw, tile.sh, w, h
+    );
+    const out = DEPTH_ENGINE.apply(
+      { data: img.data, width: tile.sw, height: tile.sh },
+      depthRect,
+      on.effects,
+      { focus: d.focus / 100, aperture: d.aperture, time: t }
+    );
+    const full = ctx.createImageData(tile.w, tile.h);
+    for (let y = 0; y < tile.h; y++) {
+      for (let x = 0; x < tile.w; x++) {
+        const src = ((y + tile.innerY) * tile.sw + (x + tile.innerX)) * 4;
+        const dst = (y * tile.w + x) * 4;
+        full.data[dst] = out.data[src];
+        full.data[dst + 1] = out.data[src + 1];
+        full.data[dst + 2] = out.data[src + 2];
+        full.data[dst + 3] = 255;
+      }
+    }
+    try {
+      ctx.putImageData(full, tile.x, tile.y);
+    } catch (_e) { /* tile rejection just leaves that area unprocessed */ }
+    applied++;
+  });
+  return applied;
+}
+
+// ------------------------------------------------------------------- helpers
+
+function rbCanvasToBlob(canvas, format, quality) {
+  return new Promise((resolve) => {
+    const type = format === 'png' ? 'image/png' : format === 'webp' ? 'image/webp' : 'image/jpeg';
+    if (canvas.toBlob) {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else resolve(rbDataUrlToBlob(canvas.toDataURL(type, quality || 0.95)));
+      }, type, quality || 0.95);
+    } else {
+      resolve(rbDataUrlToBlob(canvas.toDataURL(type, quality || 0.95)));
+    }
+  });
+}
+
+function rbDataUrlToBlob(dataUrl) {
+  const parts = String(dataUrl).split(',');
+  const bin = typeof atob === 'function' ? atob(parts[1] || '') : '';
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: 'image/png' });
+}
+
+function rbDownload(blob, name) {
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 800);
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+function rbBlobBytes(blob) {
+  if (blob && typeof blob.arrayBuffer === 'function') {
+    return blob.arrayBuffer().then((ab) => new Uint8Array(ab));
+  }
+  if (typeof FileReader !== 'undefined' && blob) {
+    return new Promise((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(new Uint8Array(fr.result));
+      fr.readAsArrayBuffer(blob);
+    });
+  }
+  return Promise.resolve(new Uint8Array(0));
+}
+
+const rbSleep = (ms) => new Promise((r) => setTimeout(r, ms || 0));
+
+// -------------------------------------------------------------------- import
+
+function rbAdoptSource(info) {
+  state.rbSource = RENDER_ENGINE.describeSource(info);
+  rbSyncSourceUI();
+  return state.rbSource;
+}
+
+function rbSyncSourceUI() {
+  const src = renderBaySource();
+  const nameEl = document.getElementById('rbSourceName');
+  const resEl = document.getElementById('rbSourceRes');
+  const kindEl = document.getElementById('rbSourceKind');
+  const badEl = document.getElementById('rbSource4k');
+  const verdictEl = document.getElementById('rbSourceVerdict');
+  if (!nameEl) return;
+  if (!src) {
+    nameEl.textContent = 'No footage imported — the procedural plate is the source.';
+    if (resEl) resEl.textContent = '— × —';
+    if (kindEl) kindEl.textContent = 'procedural';
+    if (badEl) badEl.classList.add('hidden');
+    if (verdictEl) verdictEl.textContent = 'Import a clip to work at its native resolution.';
+  } else {
+    nameEl.textContent = src.name;
+    if (resEl) resEl.textContent = `${src.width} × ${src.height}`;
+    if (kindEl) kindEl.textContent = src.kind + (src.duration ? ` · ${src.duration.toFixed(2)}s` : '');
+    if (badEl) badEl.classList.toggle('hidden', !src.is4K);
+    if (verdictEl) verdictEl.textContent = src.verdict;
+  }
+  rbSyncMemory();
+
+  // sequence length defaults to the clip length once we know it
+  const seq = document.getElementById('rbSeqSeconds');
+  if (seq && src && src.duration) {
+    seq.max = String(Math.min(60, Math.ceil(src.duration)));
+    if (Number(seq.value) > src.duration) seq.value = String(Math.max(1, Math.ceil(src.duration)));
+  }
+}
+
+function rbSyncMemory() {
+  const el = document.getElementById('rbMemory');
+  if (!el || !window.RENDER_ENGINE) return;
+  const size = rbSizeSelection();
+  const v = RENDER_ENGINE.memoryVerdict(size.width, size.height);
+  const tiles = RENDER_ENGINE.planTiles(size.width, size.height, {
+    tileW: RB_TILE_W, tileH: RB_TILE_H, overlap: RB_TILE_OVERLAP
+  });
+  const fps = rbFps();
+  const frames = RENDER_ENGINE.framesFor(Number((document.getElementById('rbSeqSeconds') || {}).value) || 4, fps);
+  const est = RENDER_ENGINE.estimateSequenceBytes(frames, rbFormat(), size.width, size.height);
+  el.className = 'rb-memory ' + v.level;
+  el.textContent = `${size.width} × ${size.height} · ${frames} frames · ~${RENDER_ENGINE.formatBytes(v.bytes)} of frame buffers in ${tiles.length} tiles · a ${rbFormat().toUpperCase()} sequence is roughly ${RENDER_ENGINE.formatBytes(est)}`
+    + (v.level === 'blocked' ? ' — this size is likely to run out of browser memory.' : '');
+}
+
+function rbImportFile(file) {
+  if (!file) return;
+  const kind = /^image\//.test(file.type) || /\.(png|jpe?g|webp|tiff?|bmp|avif)$/i.test(file.name)
+    ? 'image' : 'video';
+  rbSyncMemory();
+  rbLogLine(`Importing ${file.name} (${RENDER_ENGINE.formatBytes(file.size)}) …`);
+
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    if (kind === 'image') {
+      const img = new Image();
+      img.onload = () => {
+        rbAdoptSource({ name: file.name, kind: 'image', width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+        rbLogLine(`Image ready at ${img.naturalWidth} × ${img.naturalHeight}.`);
+        showToast(`${file.name} imported at ${img.naturalWidth} × ${img.naturalHeight}`, 'ok');
+        resolve(state.rbSource);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        rbLogLine('Could not decode that image.');
+        showToast('Could not read that image', 'error');
+        resolve(null);
+      };
+      img.src = url;
+      return;
+    }
+
+    const videoEl = document.getElementById('customVideoElement');
+    if (!videoEl) {
+      rbLogLine('No video element available.');
+      resolve(null);
+      return;
+    }
+    const onMeta = () => {
+      videoEl.removeEventListener('loadedmetadata', onMeta);
+      const width = videoEl.videoWidth || 0;
+      const height = videoEl.videoHeight || 0;
+      const duration = videoEl.duration || 0;
+      rbAdoptSource({ name: file.name, kind: 'video', width, height, duration });
+      state.scene = 'custom_video';
+      document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
+      rbLogLine(`Clip ready: ${width} × ${height}, ${duration.toFixed(2)}s${RENDER_ENGINE.is4K(width, height) ? ' (4K)' : ''}.`);
+      showToast(`${file.name} imported — ${width} × ${height}${RENDER_ENGINE.is4K(width, height) ? ' · 4K' : ''}`, 'ok');
+      resolve(state.rbSource);
+    };
+    videoEl.addEventListener('loadedmetadata', onMeta);
+    videoEl.src = url;
+    videoEl.muted = true;
+    videoEl.playsInline = true;
+    const p = videoEl.play();
+    if (p && p.catch) p.catch(() => {});
+    setTimeout(() => {
+      if (!state.rbSource || state.rbSource.name !== file.name) {
+        const w = videoEl.videoWidth || 0;
+        const h = videoEl.videoHeight || 0;
+        if (w && h) onMeta();
+      }
+    }, 1200);
+  });
+}
+
+// -------------------------------------------------------------------- exports
+
+async function rbExportStill() {
+  if (rbBusy) return null;
+  const size = rbSizeSelection();
+  const verdict = RENDER_ENGINE.memoryVerdict(size.width, size.height);
+  if (verdict.level === 'blocked') {
+    showToast('That size is too big for this browser — pick 4K', 'error');
+    return null;
+  }
+  rbSetBusy(true);
+  rbProgress(5, `Rendering ${size.width} × ${size.height} still …`);
+  rbLogLine(`Still export started at ${size.width} × ${size.height}.`);
+  try {
+    const canvas = rbScratchCanvas(size.width, size.height);
+    const ctx = canvas.getContext('2d');
+    composeExportFrame(ctx, size.width, size.height, state.playheadSec);
+    rbProgress(70, 'Encoding …');
+    const format = rbFormat();
+    const blob = await rbCanvasToBlob(canvas, format, 0.95);
+    const name = `PulseVFX_${size.width}x${size.height}_${state.playheadSec.toFixed(2)}s.${RENDER_ENGINE.extFor(format)}`;
+    const ok = rbDownload(blob, name);
+    rbProgress(100, `Still exported — ${RENDER_ENGINE.formatBytes(blob.size)}`);
+    rbLogLine(`Still written: ${name} (${RENDER_ENGINE.formatBytes(blob.size)})${ok ? '' : ' — download blocked by the browser'}.`);
+    showToast(`4K still exported (${size.width} × ${size.height})`, ok ? 'ok' : 'warn');
+    return { name, bytes: blob.size, width: size.width, height: size.height };
+  } catch (err) {
+    rbLogLine('Still export failed: ' + (err && err.message));
+    showToast('Still export failed', 'error');
+    return null;
+  } finally {
+    rbSetBusy(false);
+  }
+}
+
+async function rbExportSequence() {
+  if (rbBusy) return null;
+  const size = rbSizeSelection();
+  const fps = rbFps();
+  const format = rbFormat();
+  const seconds = Math.max(1, Number((document.getElementById('rbSeqSeconds') || {}).value) || 4);
+  const count = Math.min(600, Math.max(1, Math.round(seconds * fps)));
+  const verdict = RENDER_ENGINE.memoryVerdict(size.width, size.height);
+  if (verdict.level === 'blocked') {
+    showToast('That size is too large for this browser — pick 4K', 'error');
+    return null;
+  }
+
+  rbCancelled = false;
+  rbSetBusy(true);
+  rbLogLine(`Sequence export started: ${count} frames at ${size.width} × ${size.height}, ${fps} fps, ${format.toUpperCase()}.`);
+
+  const files = [];
+  const startSec = 0;
+  const depthPass = !!(document.getElementById('rbPassDepth') || {}).checked;
+  const mattePass = !!(document.getElementById('rbPassMatte') || {}).checked;
+  let sequenceCanvas = null;
+
+  try {
+    for (let i = 0; i < count; i++) {
+      if (rbCancelled) {
+        rbLogLine('Cancelled by user.');
+        rbProgress(0, 'Cancelled');
+        return { cancelled: true, frames: files.length };
+      }
+      const t = startSec + i / fps;
+      sequenceCanvas = rbScratchCanvas(size.width, size.height);
+      const ctx = sequenceCanvas.getContext('2d');
+      state.playheadSec = t;
+      composeExportFrame(ctx, size.width, size.height, t);
+      const blob = await rbCanvasToBlob(sequenceCanvas, format, 0.95);
+      files.push({
+        name: RENDER_ENGINE.frameFilename('beauty/plate', i + 1, RENDER_ENGINE.extFor(format)),
+        bytes: await rbBlobBytes(blob)
+      });
+
+      if (depthPass && state.depth && state.depth.map && window.DEPTH_ENGINE) {
+        // its own canvas: the beauty frame must survive for the next pass
+        const depthCanvas = document.createElement('canvas');
+        depthCanvas.width = size.width;
+        depthCanvas.height = size.height;
+        const dctx = depthCanvas.getContext('2d');
+        const gray = DEPTH_ENGINE.toGray(state.depth.map, state.depth.mapW || MASK_W, state.depth.mapH || MASK_H, false);
+        const tmp = document.createElement('canvas');
+        tmp.width = state.depth.mapW || MASK_W;
+        tmp.height = state.depth.mapH || MASK_H;
+        const tctx = tmp.getContext('2d');
+        const idata = tctx.createImageData(tmp.width, tmp.height);
+        idata.data.set(gray);
+        tctx.putImageData(idata, 0, 0);
+        dctx.setTransform(1, 0, 0, 1, 0, 0);
+        dctx.drawImage(tmp, 0, 0, size.width, size.height);
+        const depthBlob = await rbCanvasToBlob(depthCanvas, 'png', 1);
+        files.push({
+          name: RENDER_ENGINE.frameFilename('depth/plate', i + 1, 'png'),
+          bytes: await rbBlobBytes(depthBlob)
+        });
+        composeExportFrame(ctx, size.width, size.height, t);
+      }
+
+      if (mattePass && state.mask && state.mask.soft) {
+        const matteCanvas = document.createElement('canvas');
+        matteCanvas.width = size.width;
+        matteCanvas.height = size.height;
+        const mctx = matteCanvas.getContext('2d');
+        mctx.fillStyle = '#000';
+        mctx.fillRect(0, 0, size.width, size.height);
+        mctx.drawImage(maskColoredCanvas('#ffffff', null), 0, 0, size.width, size.height);
+        const matteBlob = await rbCanvasToBlob(matteCanvas, 'png', 1);
+        files.push({
+          name: RENDER_ENGINE.frameFilename('matte/plate', i + 1, 'png'),
+          bytes: await rbBlobBytes(matteBlob)
+        });
+      }
+
+      const pct = ((i + 1) / count) * 100;
+      rbProgress(pct, `Frame ${i + 1} / ${count} · ${size.width} × ${size.height}`);
+      if (i % 3 === 0) await rbSleep(0); // keep the page responsive
+    }
+
+    rbProgress(96, 'Zipping frames …');
+    rbLogLine(`Zipping ${files.length} files …`);
+    const zip = RENDER_ENGINE.zipStore(files);
+    const blob = new Blob([zip], { type: 'application/zip' });
+    const name = `PulseVFX_${size.width}x${size.height}_${count}f_${format}.zip`;
+    const ok = rbDownload(blob, name);
+    rbProgress(100, `Sequence exported — ${RENDER_ENGINE.formatBytes(blob.size)}`);
+    rbLogLine(`Sequence written: ${name} (${RENDER_ENGINE.formatBytes(blob.size)}, ${files.length} files).`);
+    showToast(`${count} frames at ${size.width} × ${size.height} exported`, ok ? 'ok' : 'warn');
+    return { name, bytes: blob.size, frames: count, files: files.length, width: size.width, height: size.height };
+  } catch (err) {
+    rbLogLine('Sequence export failed: ' + (err && err.message));
+    showToast('Sequence export failed', 'error');
+    return null;
+  } finally {
+    rbSetBusy(false);
+    rbCancelled = false;
+  }
+}
+
+async function rbExportVideo() {
+  if (rbBusy) return null;
+  const size = rbSizeSelection();
+  const fps = rbFps();
+  const seconds = Math.max(1, Number((document.getElementById('rbSeqSeconds') || {}).value) || 4);
+  const canvas = rbScratchCanvas(size.width, size.height);
+  if (!canvas.captureStream || typeof MediaRecorder === 'undefined') {
+    rbLogLine('This browser cannot record video from a canvas — use the PNG sequence.');
+    showToast('This browser has no canvas recorder — use the PNG sequence', 'warn');
+    return null;
+  }
+
+  rbCancelled = false;
+  rbSetBusy(true);
+  const bitrate = Math.round(size.width * size.height * fps * 0.12); // ~12% bits/pixel/frame
+  rbLogLine(`Review render started: ${size.width} × ${size.height} @ ${fps} fps, ${Math.round(bitrate / 1e6)} Mbps.`);
+
+  try {
+    const stream = canvas.captureStream(fps);
+    const chunks = [];
+    const rec = new MediaRecorder(stream, {
+      mimeType: MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : 'video/webm',
+      videoBitsPerSecond: bitrate
+    });
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    const done = new Promise((resolve) => { rec.onstop = resolve; });
+    rec.start();
+
+    const total = Math.round(seconds * fps);
+    const ctx = canvas.getContext('2d');
+    for (let i = 0; i < total; i++) {
+      if (rbCancelled) break;
+      const t = i / fps;
+      state.playheadSec = t;
+      composeExportFrame(ctx, size.width, size.height, t);
+      rbProgress((i / total) * 100, `Recording ${i + 1} / ${total}`);
+      await rbSleep(1000 / fps);
+    }
+    rec.stop();
+    await done;
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const name = `PulseVFX_review_${size.width}x${size.height}.webm`;
+    const ok = rbDownload(blob, name);
+    rbProgress(100, `Review render written — ${RENDER_ENGINE.formatBytes(blob.size)}`);
+    rbLogLine(`Review render: ${name} (${RENDER_ENGINE.formatBytes(blob.size)}).`);
+    showToast('4K review render exported — for a master, use "Make Resolve render 4K natively"', ok ? 'ok' : 'warn');
+    return { name, bytes: blob.size, width: size.width, height: size.height };
+  } catch (err) {
+    rbLogLine('Review render failed: ' + (err && err.message));
+    showToast('Review render failed', 'error');
+    return null;
+  } finally {
+    rbSetBusy(false);
+    rbCancelled = false;
+  }
+}
+
+function rbResolve4K() {
+  const size = rbSizeSelection();
+  const fps = rbFps();
+  rbLogLine(`Asking Resolve to switch to ${size.width} × ${size.height} @ ${fps} fps.`);
+  return dispatchToResolve(
+    'set_4k_timeline',
+    { width: size.width, height: size.height, fps: fps, source: state.rbSource || null },
+    `Resolve set to ${size.width} × ${size.height} — render the Fusion graph natively`
+  );
+}
+
+function initRenderBay() {
+  if (!window.RENDER_ENGINE) return;
+
+  const sizeSel = document.getElementById('rbSizeSelect');
+  if (sizeSel) {
+    sizeSel.innerHTML = RENDER_ENGINE.PRESETS
+      .map((p) => `<option value="${p.id}"${p.id === 'uhd4k' ? ' selected' : ''}>${p.label}</option>`)
+      .join('') + '<option value="custom">Custom size…</option>';
+    sizeSel.addEventListener('change', rbSyncMemory);
+  }
+  ['rbFpsSelect', 'rbFormatSelect', 'rbSeqSeconds'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', rbSyncMemory);
+  });
+
+  const importBtn = document.getElementById('rbImportBtn');
+  const fileInput = document.getElementById('rbFileInput');
+  if (importBtn && fileInput) importBtn.addEventListener('click', () => fileInput.click());
+  if (fileInput) {
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (file) rbImportFile(file);
+    });
+  }
+  const drop = document.getElementById('rbDropZone');
+  if (drop) {
+    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => {
+      e.preventDefault();
+      drop.classList.add('hot');
+    }));
+    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove('hot')));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) rbImportFile(file);
+    });
+  }
+
+  const still = document.getElementById('rbStillBtn');
+  if (still) still.addEventListener('click', () => rbExportStill());
+  const seq = document.getElementById('rbSequenceBtn');
+  if (seq) seq.addEventListener('click', () => rbExportSequence());
+  const vid = document.getElementById('rbVideoBtn');
+  if (vid) vid.addEventListener('click', () => rbExportVideo());
+  const res = document.getElementById('rbResolve4KBtn');
+  if (res) res.addEventListener('click', rbResolve4K);
+  const cancel = document.getElementById('rbCancelBtn');
+  if (cancel) cancel.addEventListener('click', () => {
+    rbCancelled = true;
+    rbLogLine('Cancelling after this frame …');
+  });
+
+  rbSyncSourceUI();
+  rbSyncMemory();
 }
 // ============================================================================
 // DEPTH MAP & DEPTH EFFECTS

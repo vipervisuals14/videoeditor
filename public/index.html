@@ -19,7 +19,7 @@
           <span class="badge-version">RESOLVE FREE 21.1.1</span>
           <span class="badge-os" id="osBadge">macOS • Optical VFX + LYRC Engine</span>
         </div>
-        <p class="brand-subtitle">Optical & Film Lab VFX • 360° Shutter & Time • Magic Mask • Depth Map • LYRC Kinetic Typography • Silence Cutter • Media Pool AI</p>
+        <p class="brand-subtitle">Optical & Film Lab VFX • 360° Shutter & Time • Magic Mask • Depth Map • 4K Render • LYRC Kinetic Typography • Silence Cutter • Media Pool AI</p>
       </div>
     </div>
 
@@ -110,6 +110,12 @@
           <div class="tab-text">
             <span class="tab-name">06 • Depth Map</span>
             <span class="tab-meta">11 Depth Effects</span>
+          </div>
+        </button>
+        <button class="main-tab" data-tab="render">
+          <div class="tab-text">
+            <span class="tab-name">07 • 4K Render</span>
+            <span class="tab-meta">Import · Export</span>
           </div>
         </button>
       </nav>
@@ -703,6 +709,100 @@
           </div>
         </div>
       </div>
+      <!-- ================================================================== -->
+      <!-- TAB 7: 4K RENDER — true-resolution import and export               -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-render">
+        <div class="pane-card" data-module="render" data-label="4K Render">
+          <div class="pane-card-header">
+            <div>
+              <h3>4K Import &amp; Export</h3>
+              <p>Bring in any clip or still at its real resolution, then render out at 3840&nbsp;×&nbsp;2160 — single frames, a numbered PNG sequence Resolve imports directly, a review video, or let Resolve render the native graph at 4K.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="rbImportBtn">⬆ Import footage</button>
+              <button class="btn-primary" id="rbStillBtn">⬇ Export still</button>
+            </div>
+          </div>
+
+          <div class="rb-source">
+            <div class="rb-source-info">
+              <div class="rb-source-name" id="rbSourceName">No footage imported — the procedural plate is the source.</div>
+              <div class="rb-source-meta">
+                <span class="rb-chip" id="rbSourceRes">— × —</span>
+                <span class="rb-chip" id="rbSourceKind">procedural</span>
+                <span class="rb-chip rb-chip-4k hidden" id="rbSource4k">4K source</span>
+              </div>
+              <p class="rb-source-verdict" id="rbSourceVerdict">Import a clip to work at its native resolution.</p>
+            </div>
+            <div class="rb-source-actions">
+              <input type="file" id="rbFileInput" accept="video/*,image/*" hidden />
+              <label class="rb-drop" id="rbDropZone" for="rbFileInput">
+                <strong>Drop a video or image here</strong>
+                <span>MP4, MOV, WebM, PNG, TIFF, EXR-to-PNG — any resolution, up to 6K</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="rb-grid">
+            <label class="rb-field">
+              <span>Export size</span>
+              <select id="rbSizeSelect"></select>
+            </label>
+            <label class="rb-field">
+              <span>Frame rate</span>
+              <select id="rbFpsSelect">
+                <option value="24" selected>24 fps</option>
+                <option value="25">25 fps</option>
+                <option value="30">30 fps</option>
+                <option value="48">48 fps</option>
+                <option value="60">60 fps</option>
+              </select>
+            </label>
+            <label class="rb-field">
+              <span>Image format</span>
+              <select id="rbFormatSelect">
+                <option value="png" selected>PNG (lossless, 16-bit workflow)</option>
+                <option value="jpeg">JPEG (smaller, delivery)</option>
+                <option value="webp">WebP</option>
+              </select>
+            </label>
+            <label class="rb-field">
+              <span>Sequence length</span>
+              <div class="rb-inline">
+                <input type="number" id="rbSeqSeconds" min="1" max="60" value="4" />
+                <span>sec</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="rb-memory" id="rbMemory">—</div>
+
+          <div class="rb-actions">
+            <button class="btn-secondary" id="rbSequenceBtn">⬇ Render PNG sequence (ZIP)</button>
+            <button class="btn-secondary" id="rbVideoBtn">⬇ Render review .webm at 4K</button>
+            <button class="btn-secondary" id="rbResolve4KBtn">▦ Make Resolve render 4K natively</button>
+            <button class="btn-mini" id="rbCancelBtn" hidden>Cancel</button>
+          </div>
+
+          <div class="rb-progress-wrap" id="rbProgressWrap" hidden>
+            <div class="rb-progress"><div class="rb-progress-fill" id="rbProgressFill"></div></div>
+            <div class="rb-progress-text" id="rbProgressText">Idle</div>
+          </div>
+
+          <label class="rb-checkbox">
+            <input type="checkbox" id="rbPassDepth" />
+            <span>Also export the <b>depth map</b> pass (separate folder, for compositing)</span>
+          </label>
+          <label class="rb-checkbox">
+            <input type="checkbox" id="rbPassMatte" />
+            <span>Also export the <b>Magic Mask</b> pass (separate folder, alpha matte)</span>
+          </label>
+
+          <pre class="rb-log" id="rbLog">Ready.</pre>
+          <p class="mask-hint">A browser can't write ProRes or DNxHR, so for a finishing master use <b>Make Resolve render 4K natively</b>: the panel sends the same Fusion graph and Resolve renders final frames at 3840 × 2160 with its own codecs. The PNG sequence is the lossless alternative that imports straight back into Resolve's Media Pool.</p>
+        </div>
+      </div>
     </section>
 
     <!-- RIGHT / LIVE RESOLVE MONITOR + MULTI-TRACK TIMELINE SIMULATOR -->
@@ -895,6 +995,7 @@
 
   <script src="/touchdesigner.js"></script>
   <script src="/depth.js"></script>
+  <script src="/render.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

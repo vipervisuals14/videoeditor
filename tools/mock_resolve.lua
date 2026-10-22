@@ -264,13 +264,24 @@ function M.install()
     end
   }
 
+  local project_settings = {
+    timelineFrameRate = "24",
+    timelineResolutionWidth = "1920",
+    timelineResolutionHeight = "1080"
+  }
   local project = {
     __type = "Project",
     GetName = function(self) return "Client Music Video" end,
+    -- Resolve stores these as strings; the mock does the same so a handler that
+    -- writes numbers instead of strings is caught by the readback.
+    SetSetting = function(self, k, v)
+      project_settings[k] = tostring(v)
+      rec("proj:SetSetting", tostring(k) .. "=" .. tostring(v))
+      return true
+    end,
     GetSetting = function(self, k)
+      if project_settings[k] ~= nil then return project_settings[k] end
       if k == "timelineFrameRate" then return "24" end
-      if k == "timelineResolutionWidth" then return "3840" end
-      if k == "timelineResolutionHeight" then return "2160" end
       return nil
     end,
     GetCurrentTimeline = function(self) return M.current_timeline end,

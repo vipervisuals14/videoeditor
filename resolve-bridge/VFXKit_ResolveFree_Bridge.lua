@@ -1118,6 +1118,71 @@ Handlers.layers_apply = function(res, _fus, args)
     }
 end
 
+-- ---------------------------------------------------------------------------
+-- set_4k_timeline — set the open project + current timeline to 4K so the native
+-- Fusion graph renders final frames at full resolution with Resolve's codecs.
+-- Resolve Free defaults to the last used timeline size, so every dimension is
+-- written explicitly. Missing settings are ignored (pcall), never fatal.
+-- ---------------------------------------------------------------------------
+Handlers.set_4k_timeline = function(res, _fus, args)
+    local pm = res:GetProjectManager()
+    local proj = pm and pm:GetCurrentProject()
+    if not proj then return { ok = false, error = "No project open" } end
+
+    local a = args or {}
+    local width = math.floor(tonumber(a.width) or 3840)
+    local height = math.floor(tonumber(a.height) or 2160)
+    local fps = tostring(tonumber(a.fps) or 24)
+
+    local applied = {}
+    local failed = {}
+    local function set(key, value)
+        local ok = pcall(function() proj:SetSetting(key, tostring(value)) end)
+        if ok then applied[#applied + 1] = key else failed[#failed + 1] = key end
+    end
+
+    set("timelineUseCustomSettings", "1")
+    set("timelineResolutionWidth", width)
+    set("timelineResolutionHeight", height)
+    set("timelineOutputResolutionWidth", width)
+    set("timelineOutputResolutionHeight", height)
+    set("timelineFrameRate", fps)
+    set("timelineOutputFrameRate", fps)
+    set("timelinePlaybackFrameRate", fps)
+
+    local tl = proj:GetCurrentTimeline()
+    local timeline_name = ""
+    if tl then
+        pcall(function() timeline_name = tl:GetName() end)
+        pcall(function() tl:SetSetting("useCustomSettings", "1") end)
+        pcall(function() tl:SetSetting("useCustomResolution", "1") end)
+        pcall(function() tl:SetSetting("resolutionWidth", tostring(width)) end)
+        pcall(function() tl:SetSetting("resolutionHeight", tostring(height)) end)
+        pcall(function()
+            tl:AddMarker(1, "Green", "4K: " .. width .. "x" .. height, "Render natively at 4K", 1)
+        end)
+    end
+
+    -- read back what the project now reports, so the panel can prove it landed
+    local readback = {}
+    pcall(function()
+        readback.width = proj:GetSetting("timelineResolutionWidth")
+        readback.height = proj:GetSetting("timelineResolutionHeight")
+        readback.fps = proj:GetSetting("timelineFrameRate")
+    end)
+
+    return {
+        ok = true,
+        width = width,
+        height = height,
+        fps = tonumber(fps),
+        timelineName = timeline_name,
+        applied = table.concat(applied, ","),
+        failed = table.concat(failed, ","),
+        readback = readback
+    }
+end
+
 Handlers.batch_ai_vfx = function(res, fus, args)
     local pm = res:GetProjectManager()
     local proj = pm and pm:GetCurrentProject()
