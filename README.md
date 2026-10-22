@@ -577,6 +577,10 @@ How it works (`public/silence-cut.js`), with no server and no upload:
 - Container: MP4/H.264+AAC when the browser can mux it, otherwise WebM/VP9+Opus. The panel prints
   which one you got instead of promising a format.
 
+The three sliders re-measure from the level envelope that was already stored, so moving the
+threshold or the minimum pause changes the cut immediately — no second listen, and the numbers stay
+measured rather than guessed.
+
 **Preview the cut** plays the monitor with the pauses skipped, so you can hear the result before
 spending a render on it. `Send cuts to Resolve` is still there as the second option for anyone who
 wants to edit natively.
@@ -585,7 +589,7 @@ Two honest limits, both in the panel: it records in **real time** (a 3-minute cu
 minutes, so keep the tab in front), and it is a delivery file, not a grading master.
 
 `node tools/dom/cut.mjs` proves the arithmetic, the preview skipping and a full render driven through
-a fake browser (canvas stream, MediaRecorder, a video element that really seeks) — 27 checks.
+a fake browser (canvas stream, MediaRecorder, a video element that really seeks) — 29 checks.
 
 ## Captions: 34 looks, one typography model
 
@@ -710,7 +714,7 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 | **Speech engine, real weights, known recording** | `node tools/asr_check.mjs` | 5/5 |
 | **Speech engine, the browser's own code path** (IIFE bundle + ort-web wasm + relative paths) | `node tools/asr_browser_check.mjs` | 9/9 |
 | **Captions: fonts, size, spacing, placement, all 34 looks** | `node tools/dom/type.mjs` | 35 |
-| **In-app silence cut: plan, preview, and a full render** | `node tools/dom/cut.mjs` | 27 |
+| **In-app silence cut: plan, preview, and a full render** | `node tools/dom/cut.mjs` | 29 |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified

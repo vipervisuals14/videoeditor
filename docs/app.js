@@ -3369,6 +3369,11 @@ function initSilenceTab() {
     document.getElementById('silenceMinMsVal').textContent = `${state.silenceMinMs} ms`;
     document.getElementById('silencePadMsVal').textContent = `${state.silencePadMs} ms`;
 
+    // Re-measure from the level envelope we already have instead of making the
+    // user press Detect again: moving a slider has to visibly change the cut.
+    // The envelope is the same one the detector used, so the numbers stay real.
+    remeasureSilenceSegments();
+
     renderSilenceSegments();
     drawSilenceWaveform();
   };
@@ -3650,6 +3655,22 @@ function executeSilenceCut() {
 //   renderInAppCut()       the real render, in real time, to a downloadable file
 // ============================================================================
 const CUT_MIME_NOTE = 'MP4 or WebM — whatever this browser can encode';
+
+// Re-derive the pauses from the stored level envelope, with the sliders as they
+// are now. No listening, no decoding: analysis.features is the measurement the
+// detector already made.
+function remeasureSilenceSegments() {
+  const a = state.measuredAnalysis;
+  if (!a || !a.features || !window.AudioLab || !window.AudioLab.findSilences) return false;
+  a.silences = window.AudioLab.findSilences(a.features, {
+    thresholdDb: state.silenceThresholdDb,
+    minMs: state.silenceMinMs,
+    padMs: state.silencePadMs
+  });
+  // Keep/Cut overrides were tied to the old boundaries, so they go with them.
+  state.silenceSegments = segmentsFromAnalysis(a);
+  return true;
+}
 
 function silenceKeptPlan() {
   if (!window.SILENCE_CUT || !state.silenceSegments || !state.silenceSegments.length) return null;
@@ -13560,6 +13581,7 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     renderSilenceSegments,
     // in-app cutter
     silenceKeptPlan,
+    remeasureSilenceSegments,
     refreshSilencePlan,
     silenceSkipTick,
     silenceCutAt,

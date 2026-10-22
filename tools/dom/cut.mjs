@@ -204,6 +204,72 @@ check('loading a new clip throws the old cut away', () => {
   `plan=${P.state.silencePlan} cut=${P.state.silenceCut} hidden=${card.hidden}`];
 });
 
+// ---- the sliders re-measure instead of needing another listen --------------
+// Synthetic speech with real gaps, analysed by the shipped engine: the same
+// measurement the Detect button produces.
+const SR = 16000;
+function speechBurst(i, at, length, amp) {
+  const t = i / SR - at;
+  if (t < 0 || t > length) return 0;
+  const v = Math.sin(2 * Math.PI * 120 * t) + 0.6 * Math.sin(2 * Math.PI * 240 * t)
+    + 0.35 * Math.sin(2 * Math.PI * 780 * t) + 0.2 * Math.sin(2 * Math.PI * 1600 * t);
+  const env = Math.min(1, t * 40, (length - t) * 40);
+  return v * 0.22 * amp * env;
+}
+function talking(seconds) {
+  const spans = [[0.5, 1.6], [2.4, 3.4], [4.2, 5.6], [6.4, 7.2], [8.0, 9.6], [10.4, 12.4]];
+  const n = Math.round(SR * seconds);
+  const out = new Float32Array(n);
+  spans.forEach(([a, b]) => {
+    for (let i = Math.floor(a * SR); i < Math.floor(b * SR) && i < n; i++) out[i] += speechBurst(i, a, b - a, 0.9);
+  });
+  // a room tone at about -26 dBFS under everything: this is what makes the
+  // threshold mean something, and it is what a real recording sounds like
+  for (let i = 0; i < n; i++) {
+    const x = Math.sin(i * 12.9898) * 43758.5453;
+    out[i] += (((x - Math.floor(x)) * 2) - 1) * 0.05;
+  }
+  return out;
+}
+
+check('moving the threshold re-measures without listening again', () => {
+  const Lab = window.AudioLab;
+  const analysis = Lab.analyze(talking(14), SR, { mode: 'speech', thresholdDb: -32, minMs: 300, padMs: 60 });
+  P.state.measuredAnalysis = analysis;
+  P.state.silenceThresholdDb = -32;
+  P.state.silenceMinMs = 300;
+  P.state.silencePadMs = 60;
+  P.state.silenceSegments = P.segmentsFromAnalysis(analysis);
+  P.renderSilenceSegments();
+  const loose = P.state.silencePlan.cuts.length;
+
+  // -20 dB is the looser threshold: it counts the room tone between sentences
+  // as a pause, so it should find more gaps than -32 does
+  P.state.silenceThresholdDb = -20;
+  P.state.silenceMinMs = 300;
+  P.state.silencePadMs = 60;
+  const remeasured = P.remeasureSilenceSegments();
+  P.renderSilenceSegments();
+  const looseThreshold = P.state.silencePlan.cuts.length;
+
+  return [remeasured && looseThreshold > loose,
+    `${loose} cuts at -32 dB → ${looseThreshold} at -20 dB`];
+});
+
+check('a tighter minimum pause leaves the short gaps alone', () => {
+  P.state.silenceThresholdDb = -20;
+  P.state.silenceMinMs = 300;
+  P.state.silencePadMs = 60;
+  P.remeasureSilenceSegments();
+  P.renderSilenceSegments();
+  const short = P.state.silencePlan.cuts.length;
+  P.state.silenceMinMs = 900;
+  P.remeasureSilenceSegments();
+  P.renderSilenceSegments();
+  const long = P.state.silencePlan.cuts.length;
+  return [long < short, `${short} cuts at 300 ms → ${long} at 900 ms`];
+});
+
 // ============================================================================
 // 3. The render, driven through a fake browser
 // ============================================================================
