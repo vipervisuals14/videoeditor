@@ -734,6 +734,7 @@ Handlers.mask_apply = function(res, _fus, args)
         return { applied = false, error = "Mask needs at least 3 points (build the matte in the panel first)" }
     end
     local tracked = type(a.tracked) == "table" and a.tracked or {}
+    local shapes = type(a.frames) == "table" and a.frames or {}
     local keyframes = type(a.keyframes) == "table" and a.keyframes or {}
     local strokes = type(a.strokes) == "table" and a.strokes or {}
     local feather = tonumber(a.feather) or 0
@@ -802,6 +803,35 @@ Handlers.mask_apply = function(res, _fus, args)
                 pcall(function() pn.Polygon = shape end)
                 pcall(function() pn.BorderWidth = math.max(0, math.floor(expand * 0.5 + 0.5)) end)
                 built[#built + 1] = "Polygon(" .. shape_points .. "pts)"
+            end
+
+            -- The tracked shapes: one polygon key per followed frame, same point
+            -- count in the same order, so Resolve animates a moving matte
+            -- instead of holding one still shape for the whole clip.
+            if pn and #shapes >= 2 then
+                local shape_id = nil
+                local first = shapes[1]
+                if type(first) == "table" and type(first.points) == "table" then
+                    local f0 = tonumber(first.frame) or 0
+                    if pcall(function() pn:SetInput("Polygon", first.points, f0, 0) end) then
+                        shape_id = "Polygon"
+                    elseif pcall(function() pn:SetInput("Polyline", first.points, f0, 0) end) then
+                        shape_id = "Polyline"
+                    end
+                end
+                if shape_id then
+                    local keys = 0
+                    for si = 1, math.min(#shapes, 60) do
+                        local sf = shapes[si]
+                        if type(sf) == "table" and type(sf.points) == "table" and #sf.points >= 3 then
+                            local fno = tonumber(sf.frame) or 0
+                            if pcall(function() pn:SetInput(shape_id, sf.points, fno, 0) end) then
+                                keys = keys + 1
+                            end
+                        end
+                    end
+                    built[#built + 1] = "PolygonTrack(" .. keys .. " keys)"
+                end
             end
 
             if softn then
@@ -883,6 +913,7 @@ Handlers.mask_apply = function(res, _fus, args)
         clipName = item:GetName(),
         fusionNode = table.concat(built, " -> "),
         points = shape_points,
+        shapeKeys = #shapes,
         trackedFrames = #tracked,
         keyframes = #keyframes,
         mode = mode,

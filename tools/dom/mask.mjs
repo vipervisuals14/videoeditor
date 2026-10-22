@@ -221,9 +221,109 @@ m.tracked = [];
 T.maskRebuild();
 await T.maskTrackFrames(1);
 const emptyStatus = String(document.getElementById('maskStatus').textContent || '');
-verify('tracking stops when the subject leaves the frame',
-  () => [m.tracked.length === 0 && /could not follow/i.test(emptyStatus),
+verify('tracking stops when the subject leaves the frame, keeping the frame you drew',
+  () => [m.tracked.length <= 1 && /could not follow|could not be followed/i.test(emptyStatus),
     `tracked=${m.tracked.length} status="${emptyStatus}"`]);
+
+// ---- a harder scene: textured room, walking subject, drifting exposure ----
+// (a flood-fill tracker leaks here; the colour model should hold the shape)
+function hardFrame(sec) {
+  const data = new Uint8ClampedArray(W * H * 4);
+  const cx = 58 + sec * 20;
+  const cy = 96;
+  const r = 26;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      // cool, striped wall with a deterministic dither: not a flat colour
+      const stripe = (y % 7 === 0) ? 9 : 0;
+      const dither = ((x * 37 + y * 61) % 11) - 5;
+      let rC = 34 + stripe + dither;
+      let gC = 44 + stripe + dither;
+      let bC = 62 + stripe + dither;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d <= r) {
+        // warm face, exposure drifts slowly as the clip runs
+        const shade = (1 - d / (r * 3.4)) * (1 + 0.1 * Math.sin(sec * 0.9));
+        rC = Math.round(196 * shade);
+        gC = Math.round(150 * shade);
+        bC = Math.round(118 * shade);
+      }
+      data[i] = Math.max(0, Math.min(255, rC));
+      data[i + 1] = Math.max(0, Math.min(255, gC));
+      data[i + 2] = Math.max(0, Math.min(255, bC));
+      data[i + 3] = 255;
+    }
+  }
+  return data;
+}
+
+st.playheadSec = 1;
+window.maskSampleFrame = (sec) => Promise.resolve({ data: hardFrame(Number(sec) || 0), width: W, height: H });
+const hardBox = new Uint8Array(W * H);
+for (let y = 70; y < 122; y++) for (let x = 66; x < 102; x++) hardBox[y * W + x] = 255;
+m.raw = hardBox;
+m.soft = null;
+m.polygon = [];
+m.coverage = 0;
+m.tracked = [];
+m.seeds = [];
+m.strokes = [];
+m.feather = 6;
+m.mode = 'subject';
+T.maskRebuild();
+await T.maskTrackFrames(1);
+const hardTracked = m.tracked.slice();
+const errs = hardTracked.map((f) => Math.abs((centroidOf(f.polygon).x * W) - (58 + f.sec * 20)));
+const meanErr = errs.length ? errs.reduce((a, b) => a + b, 0) / errs.length : 999;
+const covs = hardTracked.map((f) => f.coverage);
+const trueArea = (Math.PI * 26 * 26) / (W * H);
+
+verify('a textured, drifting scene is followed without leaking',
+  () => [hardTracked.length >= 40, `tracked=${hardTracked.length} status="${m.status}"`]);
+
+verify('the outline stays on the subject (mean error under 3% of frame width)',
+  () => [meanErr / W < 0.03, `mean error ${(meanErr / W * 100).toFixed(2)}% of width`]);
+
+verify('the matte keeps the subject size instead of creeping over the scene',
+  () => covs.every((c) => c > trueArea * 0.6 && c < trueArea * 1.7),
+  `coverage ${(Math.min(...covs) / trueArea).toFixed(2)}–${(Math.max(...covs) / trueArea).toFixed(2)}x true area`);
+
+// ---- tracking backwards, from the clip's end -------------------------------
+st.playheadSec = 4;
+m.tracked = [];
+m.raw = hardBox;
+m.polygon = [];
+m.coverage = 0;
+T.maskRebuild();
+// put the matte where the subject actually is at 4 s
+const atFour = hardFrame(4);
+const seedFour = T.maskSolveFromPixels(atFour, W, H, [{ x: (58 + 80) / (W - 1), y: 96 / (H - 1) }], { mode: 'subject', sensitivity: 38 });
+m.raw = seedFour;
+T.maskRebuild();
+await T.maskTrackFrames(-1);
+const backTracked = m.tracked.slice();
+verify('Track back follows the subject into earlier frames',
+  () => [backTracked.length >= 40 && backTracked[0].sec < backTracked[backTracked.length - 1].sec,
+    `tracked=${backTracked.length} first=${backTracked[0] && backTracked[0].sec}`]);
+
+// a browser that will not hand over frames: say so, do not blame the matte
+window.maskSampleFrame = (sec) => Promise.resolve({
+  data: hardFrame(Number(sec) || 0),
+  width: W,
+  height: H,
+  seekOk: false
+});
+st.playheadSec = 1;
+m.raw = hardBox;
+m.polygon = [];
+m.coverage = 0;
+m.tracked = [];
+T.maskRebuild();
+await T.maskTrackFrames(1);
+const stuckMsg = String(document.getElementById('maskStatus').textContent || '');
+verify('a clip that will not seek is reported as a decode problem, not a lost subject',
+  () => [/not giving new frames|stopped handing over frames/i.test(stuckMsg), `status="${stuckMsg}"`]);
 
 verify('Clear empties the matte and the tracked frames', () => {
   document.getElementById('maskClearBtn').click();
@@ -249,6 +349,13 @@ const emptyMsg = String(document.getElementById('maskStatus').textContent || '')
 verify('a click with nothing loaded asks for footage instead of matting a demo plate',
   () => [/load a clip or a photo/i.test(emptyMsg), `status="${emptyMsg}"`]);
 st.scene = 'custom_video';
+
+verify('the panel sells a real tracker instead of "buy Studio"', () => {
+  const hint = String(document.querySelector('.mask-hint').textContent || '');
+  const bad = /can't run|Studio-only|Studio only|upgrade/i.test(hint);
+  return [!bad && /tracker|follow/i.test(String(document.querySelector('#tab-mask').textContent || '')),
+    `hint="${hint.slice(0, 90)}…"`];
+});
 
 verify('the mask panel gives four numbered steps', () => {
   const steps = [...document.querySelectorAll('.mask-steps li')];

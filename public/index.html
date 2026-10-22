@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=6" />
 </head>
 <body>
  <div class="app-window">
@@ -735,7 +735,7 @@
           <div class="pane-card-header">
             <div>
               <h3>Magic Mask &amp; AI Matte Studio</h3>
-              <p>Click the person, face or object once in the Live Preview. It builds a soft matte, follows it frame by frame, and writes a real Fusion <b>Paint → Polygon → Blur → MatteControl → Merge</b> graph onto the clip.</p>
+              <p>Click the person, face or object once in the Live Preview. It builds a soft matte, learns what the subject looks like, follows it frame by frame, and writes a real Fusion <b>Paint → Polygon → Blur → MatteControl → Merge</b> graph onto the clip.</p>
             </div>
             <div class="header-btn-group">
               <button class="btn-secondary" id="maskClearBtn">Clear matte</button>
@@ -820,7 +820,7 @@
                 <button class="btn-mini" id="maskExportPngBtn">⬇ Matte as .PNG (1920×1080)</button>
               </div>
               <p class="mask-status" id="maskStatus">Click your subject in the Live Preview to build a matte.</p>
-              <p class="mask-hint">Resolve <b>Free</b> can't run Magic Mask — that tool is Studio-only. This builds the same idea here (click-to-select, add/subtract, feather, frame tracking) and then writes native Fusion nodes, with BezierSpline keyframes, so the clip keeps the matte after you export.</p>
+              <p class="mask-hint"><b>Our own tracker.</b> Resolve Free has no matting tool, so this panel does the work itself: it learns the subject's colours on the frame you clicked, then follows that shape through the clip and re-checks it against every new frame. When you send it, you get native Fusion nodes with BezierSpline keyframes — the shape travels with the clip inside Resolve, no Studio licence involved.</p>
             </div>
           </div>
         </div>
@@ -1114,10 +1114,10 @@
 
  </div>
 
-  <script src="/lua-export.js"></script>
-  <script src="/touchdesigner.js"></script>
-  <script src="/depth.js"></script>
-  <script src="/render.js"></script>
-  <script src="/app.js"></script>
+  <script src="/lua-export.js?v=6"></script>
+  <script src="/touchdesigner.js?v=6"></script>
+  <script src="/depth.js?v=6"></script>
+  <script src="/render.js?v=6"></script>
+  <script src="/app.js?v=6"></script>
 </body>
 </html>

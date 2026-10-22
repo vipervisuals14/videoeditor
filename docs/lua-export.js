@@ -436,6 +436,7 @@
     var p = payload || {};
     var poly = Array.isArray(p.polygon) ? p.polygon : [];
     var tracked = Array.isArray(p.tracked) ? p.tracked : [];
+    var shapes = Array.isArray(p.frames) ? p.frames : [];
     var strokes = Array.isArray(p.strokes) ? p.strokes : [];
     var keyframes = Array.isArray(p.keyframes) ? p.keyframes : [];
     var fps = Number(p.fps) || 24;
@@ -480,6 +481,19 @@
       });
     });
 
+    // One row per tracked frame, same points in the same order, so Fusion
+    // animates a moving shape instead of swapping masks between frames.
+    var shapeRows = shapes.slice(0, 60).map(function (f) {
+      var pts = Array.isArray(f.points) ? f.points : [];
+      if (pts.length < 8) return '';
+      // Fusion takes polygon points as named x/y pairs
+      var rows = pts.map(function (pt) {
+        return '{ x = ' + (Number(pt.x) || 0).toFixed(4) + ', y = ' + (Number(pt.y) || 0).toFixed(4) + ' }';
+      }).join(', ');
+      return '                { frame = ' + Math.max(0, Math.round(Number(f.frame) || 0))
+        + ', points = { ' + rows + ' } }';
+    }).filter(Boolean);
+
     var trackComment = tracked.length
       ? '-- tracked frames: ' + tracked.map(function (f) {
         return String(f.timeSec) + 's@' + (Number(f.coverage) * 100).toFixed(1) + '%';
@@ -490,6 +504,9 @@
       + '-- "Magic Mask" (' + (p.mode || 'subject') + ' select) — ' + poly.length + ' point matte, '
       + coverage.toFixed(1) + '% of frame, ' + feather + 'px feather, ' + tracked.length + ' tracked frame(s)\n'
       + '-- native graph: MediaIn1 -> Paint -> Polygon -> Blur -> MatteControl -> Merge -> MediaOut1\n'
+      + (shapes.length > 1
+        ? '-- the Polygon carries ' + shapes.length + ' animated shape keys (one per tracked frame)\n'
+        : '')
       + '-- Fusion Free has no Magic Mask, so this is the same matte built natively from the panel.\n'
       + trackComment
       + 'local proj = resolve:GetProjectManager():GetCurrentProject()\n'
@@ -516,6 +533,31 @@
       + '            pcall(function() polyNode.BorderWidth = ' + Math.max(0, Math.round(expand * 0.5)) + ' end)\n'
       + '        end\n'
       + '\n'
+      + (shapeRows.length
+        ? '        -- 2b) the tracked shapes: one key per followed frame, so the matte\n'
+          + '        -- travels with the subject inside Resolve (no Studio needed)\n'
+          + '        if polyNode then\n'
+          + '            local shapeFrames = {\n'
+          + shapeRows.join(',\n') + '\n'
+          + '            }\n'
+          + '            -- the input is "Polygon" on current builds and "Polyline" on older\n'
+          + '            local shapeId = nil\n'
+          + '            local firstPts = shapeFrames[1] and shapeFrames[1].points or nil\n'
+          + '            if firstPts then\n'
+          + '                if pcall(function() polyNode:SetInput("Polygon", firstPts, shapeFrames[1].frame, 0) end) then\n'
+          + '                    shapeId = "Polygon"\n'
+          + '                elseif pcall(function() polyNode:SetInput("Polyline", firstPts, shapeFrames[1].frame, 0) end) then\n'
+          + '                    shapeId = "Polyline"\n'
+          + '                end\n'
+          + '            end\n'
+          + '            if shapeId then\n'
+          + '                for i = 1, #shapeFrames do\n'
+          + '                    local sf = shapeFrames[i]\n'
+          + '                    pcall(function() polyNode:SetInput(shapeId, sf.points, sf.frame, 0) end)\n'
+          + '                end\n'
+          + '            end\n'
+          + '        end\n'
+        : '')
       + '        -- 3) feather / softness in pixels\n'
       + '        if soft then\n'
       + '            pcall(function() soft.BlurSize = ' + (feather + softness * 0.12).toFixed(2) + ' end)\n'

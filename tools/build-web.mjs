@@ -34,9 +34,12 @@ const VENDOR_FILES = [
 
 // index.html is shared with the local server build (absolute /paths). The web
 // build only rewrites those, so both variants stay in sync from one source.
-function rewriteHtml(html) {
+function rewriteHtml(html, stamp) {
+  // The cache-buster matters: a browser holding yesterday's app.js shows a bug
+  // that was fixed, and there is no way to tell from the page.
+  const assets = '(styles\\.css|app\\.js|touchdesigner\\.js|depth\\.js|render\\.js|lua-export\\.js)';
   return html
-    .replace(/(href|src)="\/(styles\.css|app\.js|touchdesigner\.js|depth\.js|render\.js|lua-export\.js)"/g, '$1="$2"')
+    .replace(new RegExp('(href|src)="\\/?' + assets + '(\\?v=[^"]*)?"', 'g'), '$1="$2?v=' + stamp + '"')
     .replace(/\/download\/bridge\.lua/g, 'VFXKit_ResolveFree_Bridge.lua')
     .replace(
       '<script src="touchdesigner.js"></script>',
@@ -45,6 +48,11 @@ function rewriteHtml(html) {
 }
 
 async function main() {
+  // one stamp per build, taken from the newest source file
+  const sources = await Promise.all(
+    ['app.js', 'styles.css', 'index.html'].map((f) => stat(path.join(ROOT, 'public', f)).then((st) => st.mtimeMs))
+  );
+  const stamp = Math.round(Math.max(...sources)).toString(36);
   await rm(OUT, { recursive: true, force: true });
   await mkdir(OUT, { recursive: true });
 
@@ -60,7 +68,7 @@ async function main() {
   }
 
   const html = await readFile(path.join(ROOT, 'public', 'index.html'), 'utf8');
-  const rewritten = rewriteHtml(html);
+  const rewritten = rewriteHtml(html, stamp);
   if (rewritten.includes('src="/')) {
     throw new Error('build-web: an absolute asset path survived the rewrite');
   }

@@ -524,6 +524,31 @@ def main():
         check("lyric snippet builds TextPlus cards", lambda: (
             res.get("luaSnippet", "").count("TextPlus") >= 2, "no TextPlus in snippet"))
 
+        # ---- the mask hand-off: a tracked matte must arrive as animated shapes
+        ring = []
+        for i in range(16):
+            ang = i / 16.0 * 6.28318
+            ring.append({"x": round(0.5 + 0.12 * __import__("math").cos(ang), 4),
+                         "y": round(0.5 + 0.12 * __import__("math").sin(ang), 4)})
+        frames = [{"frame": k * 2,
+                   "points": [{"x": round(p["x"] + k * 0.004, 4), "y": p["y"]} for p in ring],
+                   "coverage": 0.06} for k in range(12)]
+        res = post("/api/dispatch", {
+            "action": "mask_apply",
+            "payload": {"mode": "subject", "polygon": ring, "frames": frames,
+                        "feather": 6, "softness": 35, "opacity": 85, "coverage": 6.1, "fps": 24,
+                        "keyframes": [{"timeSec": k * 2 / 24.0, "value": 80} for k in range(12)]},
+        })
+        snippet = res.get("luaSnippet", "")
+        check("console snippet for a tracked matte runs in Resolve Lua",
+              lambda: run_console_snippet(snippet))
+        check("the matte travels: one polygon key per tracked frame", lambda: (
+            snippet.count("frame = ") >= 12 and 'SetInput("Polygon"' in snippet,
+            f"shapeKeys={snippet.count('frame = ')}"))
+        check("the matte lands as native Fusion nodes", lambda: (
+            all(t in snippet for t in ("Paint", "Polygon", "MatteControl", "BezierSpline")),
+            "missing node in mask snippet"))
+
         # ---- capabilities endpoint
         rec = get("/api/recipes")
         check("recipes endpoint lists graphs", lambda: (rec.get("count", 0) >= 50, f"count={rec.get('count')}"))
