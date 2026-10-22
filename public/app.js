@@ -3425,8 +3425,11 @@ function initCaptionsTab() {
   // the speech model reports its own progress; show it in the same status line
   if (window.AsrLab && window.AsrLab.onState) {
     window.AsrLab.onState((info) => {
-      if (state.lyricDetecting && (info.phase === 'loading' || info.phase === 'transcribing')) {
+      if (!state.lyricDetecting) return;
+      if (info.phase === 'loading' || info.phase === 'transcribing') {
         lyricSetStatus(info.detail || 'Working…', 'busy', info.pct);
+        const b = document.getElementById('lyricsDetectBtn');
+        if (b) b.textContent = info.phase === 'transcribing' ? '◉ Transcribing…' : '◉ Loading model…';
       }
     });
   }
