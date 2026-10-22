@@ -9,7 +9,9 @@
  *   node tools/dom/params.mjs            (public/)
  *   node tools/dom/params.mjs dist-web   (the built site)
  * ==========================================================================*/
+import fs from 'node:fs';
 import path from 'node:path';
+import { PUB } from './harness.mjs';
 import { boot, makeCheck, ROOT } from './harness.mjs';
 
 const target = process.argv[2];
@@ -241,6 +243,29 @@ check('a look with no stored settings falls back to its defaults', () => {
     card.dispatchEvent(new fresh.window.MouseEvent('click', { bubbles: true }));
     const rows = fresh.document.querySelectorAll('#fxParamRack .fx-param').length;
     return rows >= 6 ? true : `rows=${rows}`;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Every dial must be read by something. A declared-but-unread slider is a lie:
+// the UI promises a control and the renderer ignores it. This scan found 28
+// effects with no dials at all, and later lab_flir's edge detail and ed_scope's
+// feather/guides. Keep it as a permanent guard.
+{
+  const src = fs.readFileSync(path.join(PUB, 'app.js'), 'utf8')
+    + fs.readFileSync(path.join(PUB, 'touchdesigner.js'), 'utf8')
+    + fs.readFileSync(path.join(PUB, 'depth.js'), 'utf8');
+  const defsStart = src.indexOf('const FX_PARAM_DEFS');
+  const defsEnd = src.indexOf('function fxParamDefs', defsStart);
+  const body = src.slice(defsStart, defsEnd);
+  const rest = src.slice(0, defsStart) + src.slice(defsEnd);
+  const keys = [...new Set([...body.matchAll(/\{\s*k:\s*'([A-Za-z0-9_]+)'/g)].map((m) => m[1]))];
+  // quoted (pick('x'), fxv('x')) or read off a params object (P.direction, g.tdTint)
+  const unread = keys.filter((k) => !new RegExp(`['"]${k}['"]|\\.${k}\\b`).test(rest));
+  check('every declared dial is read by the renderer', () => {
+    return unread.length === 0
+      ? [true, `${keys.length} dials, all wired`]
+      : [false, `never read: ${unread.join(', ')}`];
   });
 }
 
