@@ -35,7 +35,8 @@ function requireFile(name, minBytes) {
 }
 
 console.log('— assets —');
-const haveModel = requireFile('depth-anything-v2-small-int8.onnx', 20 * 1048576);
+const MODEL_FILE = 'depth-anything-v2-small-fp16.onnx';
+const haveModel = requireFile(MODEL_FILE, 40 * 1048576);
 requireFile('ort.wasm.min.mjs', 20000);
 requireFile('ort-wasm-simd-threaded.mjs', 10000);
 requireFile('ort-wasm-simd-threaded.wasm', 10 * 1048576);
@@ -50,7 +51,7 @@ ort.env.wasm.numThreads = 1;
 
 console.log('\n— model —');
 const t0 = Date.now();
-const session = await ort.InferenceSession.create(fs.readFileSync(path.join(VENDOR, 'depth-anything-v2-small-int8.onnx')), {
+const session = await ort.InferenceSession.create(fs.readFileSync(path.join(VENDOR, 'depth-anything-v2-small-fp16.onnx')), {
   executionProviders: ['wasm'],
   graphOptimizationLevel: 'all'
 });
@@ -223,6 +224,36 @@ console.log('\n— shipped worker module —');
   globalThis.fetch = realFetch;
 }
 
-console.log(`\nmodel ${(fs.statSync(path.join(VENDOR, 'depth-anything-v2-small-int8.onnx')).size / 1048576).toFixed(0)} MB · load ${loadMs} ms · infer ${inferMs} ms (single WASM thread)`);
+// ---- phase 3: the 2x high-detail pass ------------------------------------
+// Same model, 1036 px long side. Slower (~4x) but it must still return a sane,
+// correctly-shaped map, and the worker must report the bigger model grid.
+console.log('\n— high-detail (2×) pass —');
+{
+  const replies2 = [];
+  globalThis.postMessage = (m) => replies2.push(m);
+  const started = Date.now();
+  globalThis.onmessage({ data: { type: 'infer', id: 1234, data: new Uint8ClampedArray(rgba).buffer, width: MW, height: MH, mapW: 480, mapH: 270, quality: 'high' } });
+  const hit = await new Promise((resolve, reject) => {
+    const iv = setInterval(() => {
+      const m = replies2.find((r) => r && (r.type === 'infer' || r.type === 'error'));
+      if (m) { clearInterval(iv); resolve(m); }
+      else if (Date.now() - started > 180000) { clearInterval(iv); reject(new Error('high-detail pass timed out')); }
+    }, 100);
+  });
+  check('high-detail pass completes', hit.type === 'infer', hit.message);
+  check('high-detail pass uses the 1036 px grid', hit.quality === 'high' && hit.modelW >= 1030, `${hit.modelW}x${hit.modelH}`);
+  const hm = hit.map instanceof Float32Array ? hit.map : new Float32Array(hit.map);
+  let hbad = 0;
+  for (const v of hm) if (!Number.isFinite(v)) hbad++;
+  check('high-detail map is finite everywhere', hbad === 0, hbad + ' non-finite');
+  check('high-detail map is the requested size', hm.length === 480 * 270, hm.length);
+  const hat = (x, y) => hm[Math.round(y) * 480 + Math.round(x)];
+  const hBlock = (hat(360, 216) + hat(384, 190)) / 2;
+  const hSky = (hat(240, 27) + hat(96, 40)) / 2;
+  check('high-detail keeps the near object nearest', hBlock < hSky, `${hBlock.toFixed(3)} vs ${hSky.toFixed(3)}`);
+  console.log(`      high-detail round trip ${hit.ms} ms`);
+}
+
+console.log(`\nmodel ${(fs.statSync(path.join(VENDOR, MODEL_FILE)).size / 1048576).toFixed(0)} MB · load ${loadMs} ms · infer ${inferMs} ms (single WASM thread)`);
 console.log(fails === 0 ? '\nall AI depth checks passed' : `\n${fails} AI depth check(s) failed`);
 process.exit(fails === 0 ? 0 : 1);

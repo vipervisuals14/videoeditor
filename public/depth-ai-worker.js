@@ -20,9 +20,10 @@
 // build would drag in the 25 MB WebGPU/JSEP backend, which this tool never uses.
 import * as ort from './vendor/depth/ort.wasm.min.mjs';
 
-const MODEL_URL = 'vendor/depth/depth-anything-v2-small-int8.onnx';
+const MODEL_URL = 'vendor/depth/depth-anything-v2-small-fp16.onnx';
 const WASM_DIR = 'vendor/depth/';
-const INPUT_SIZE = 518;      // long side, as the model's preprocessor expects
+const INPUT_SIZE = 518;      // long side at standard quality
+const INPUT_SIZE_HQ = 1036;  // 2x long side for the high-detail pass (~4x compute)
 const SIZE_MULTIPLE = 14;    // patch size of the ViT backbone
 
 // A host may provide an explicit path (used by the test harness); browsers
@@ -91,9 +92,12 @@ async function ensureSession() {
   }
 }
 
-// Aspect-preserving size with both dimensions a multiple of 14.
-function modelSize(w, h) {
-  const s = INPUT_SIZE / Math.max(w, h);
+// Aspect-preserving size with both dimensions a multiple of 14. `quality` is
+// 'high' for the 2x-resolution pass: same model, more spatial detail, ~4x the
+// compute — which is why it is a separate choice rather than the default.
+function modelSize(w, h, quality) {
+  const target = quality === 'high' ? INPUT_SIZE_HQ : INPUT_SIZE;
+  const s = target / Math.max(w, h);
   const nw = Math.max(SIZE_MULTIPLE, Math.round((w * s) / SIZE_MULTIPLE) * SIZE_MULTIPLE);
   const nh = Math.max(SIZE_MULTIPLE, Math.round((h * s) / SIZE_MULTIPLE) * SIZE_MULTIPLE);
   return { nw, nh };
@@ -180,7 +184,7 @@ function resampleTo(src, sw, sh, dw, dh) {
 async function infer(msg) {
   const t0 = Date.now();
   const session = await ensureSession();
-  const { nw, nh } = modelSize(msg.width, msg.height);
+  const { nw, nh } = modelSize(msg.width, msg.height, msg.quality);
   const input = toInputTensor(new Uint8ClampedArray(msg.data), msg.width, msg.height, nw, nh);
   const feeds = { pixel_values: new ort.Tensor('float32', input, [1, 3, nh, nw]) };
   const result = await session.run(feeds);
@@ -192,7 +196,17 @@ async function infer(msg) {
   const ow = dims[dims.length - 1];
   const map = normalise(first.data, ow * oh);
   const sized = resampleTo(map, ow, oh, msg.mapW || ow, msg.mapH || oh);
-  post({ type: 'infer', id: msg.id, map: sized, width: msg.mapW || ow, height: msg.mapH || oh, ms: Date.now() - t0 }, [sized.buffer]);
+  post({
+    type: 'infer',
+    id: msg.id,
+    map: sized,
+    width: msg.mapW || ow,
+    height: msg.mapH || oh,
+    ms: Date.now() - t0,
+    quality: msg.quality || 'standard',
+    modelW: nw,
+    modelH: nh
+  }, [sized.buffer]);
 }
 
 self.onmessage = async (e) => {

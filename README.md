@@ -303,12 +303,13 @@ the browser's own compositing, so what you see is what the graph builds.
 like a lens or like a smudge. There are now two engines, and the tab says which one produced the
 map you are looking at.
 
-| | **🧠 AI depth** (default) | **⚡ Fast estimate** |
-|---|---|---|
-| How | **Depth Anything V2 Small**, int8 ONNX, executed in the browser | image heuristics (position, colour, texture) |
-| Look | crisp silhouettes, smooth interiors, correct ground plane | approximate; brightness bleeds into depth |
-| Cost | one-time **40 MB** download, then cached; ~5 s per frame on one WASM thread | instant, no download |
-| Honest use | anything that will be exported or graded | a rough read, and the fallback |
+| | **🧠 AI depth** (default) | **🔬 AI high detail** | **⚡ Fast estimate** |
+|---|---|---|---|
+| How | Depth Anything V2 Small, fp16 ONNX, 518 px | the same model at **1036 px** | image heuristics |
+| Look | crisp silhouettes, smooth interiors, correct ground plane | resolves facial structure, hair strands, foliage | approximate; brightness bleeds into depth |
+| Speed | ~2.5 s per frame | ~19 s per frame | instant |
+| Cost | one-time **49 MB** cached download | **no extra download** | none |
+| Honest use | live work, anything exported | a still you are about to finish | a rough read, and the fallback |
 
 ![Fast estimate versus Depth Anything V2](docs/depth-ai-vs-fast.png)
 
@@ -316,13 +317,37 @@ map you are looking at.
 slats as "near" and the subject's face as "far". Bottom: the AI model, which returns the subject's
 volume, her face relief, the wall behind her and the window recessed to the right.*
 
+![Standard versus high detail](docs/depth-ai-high-detail.png)
+
+*The same model at 518 px and 1036 px. The 2× pass separates the jaw, the nose bridge and the
+edge of the hair from the wall behind; the standard pass reads the head as one soft mass.*
+
+`AI high detail` is a **still-frame tool**: it does not auto-refresh while the clip plays, because
+a 19-second pass per frame would leave the tab permanently busy and never catch the picture. Press
+`↻ Re-scan plate` (or switch a slider) to re-read the frame you are parked on.
+
+### Why fp16 and not int8
+
+An int8 build (26 MB) shipped first and was then removed — it lost on both axes at once:
+
+| | int8 (26 MB) | **fp16 (49 MB)** |
+|---|---|---|
+| Agreement with a 1036 px reference | 0.8376 | **0.8585** |
+| Detail vs that reference | 2.688× (quantisation noise, not detail) | **1.376×** |
+| Inference, one WASM thread | 4.2 s | **2.5 s** |
+| Session load | 594 ms | **371 ms** |
+
+The smaller file was slower *and* grainier, so keeping it as a "budget" option would have made the
+product worse while adding 26 MB to the repo.
+
 ### What runs where
 
 - `public/depth-ai-worker.js` — a **module worker** that imports the vendored ONNX Runtime, feeds
   the model, and posts back a `Float32Array`. Runs off the main thread, so the 60 fps monitor and
   the lyric animation keep going.
-- `public/vendor/depth/` — the int8 model (26 MB), ONNX Runtime Web (52 KB of JS), its WASM backend
-  (14 MB) and `NOTICE.md` with provenance and licences (Apache-2.0 model, MIT runtime).
+- `public/vendor/depth/` — the fp16 model (49 MB), ONNX Runtime Web (52 KB of JS), its WASM backend
+  (14 MB) and `NOTICE.md` with provenance, licences (Apache-2.0 model, MIT runtime) and the
+  measurements above.
 - The model is **not** downloaded at page load. It is fetched when you open the depth tab, switch a
   depth effect on, or click the AI card — and only once, because the browser caches it.
 
@@ -337,7 +362,8 @@ on a procedurally rendered perspective scene:
 | All values finite | yes (a 3-D/4-D mix-up is exactly how this used to fail) |
 | Ordering | block **8.61** > near floor **5.30** > sky **0.00** |
 | Panel convention (0 = near) | block **0.016**, sky **1.000** |
-| Session load / inference | 0.6 s / 5.4 s on one WASM thread |
+| Session load / inference | 0.8 s / 3.2 s on one WASM thread |
+| High-detail (2×) pass | completes, uses the 1036 px grid, correct ordering |
 
 Against the fp32 Python reference on a real photograph, the browser path correlates **0.9991**
 (mean absolute error 0.0104); the whole residual is image resampling, PIL bicubic versus canvas.

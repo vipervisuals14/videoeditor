@@ -28,7 +28,7 @@ const VENDOR_FILES = [
   'ort.wasm.min.mjs',
   'ort-wasm-simd-threaded.mjs',
   'ort-wasm-simd-threaded.wasm',
-  'depth-anything-v2-small-int8.onnx',
+  'depth-anything-v2-small-fp16.onnx',
   'NOTICE.md'
 ];
 

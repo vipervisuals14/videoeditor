@@ -247,8 +247,13 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 - **Pick an engine first.** Two cards sit at the top of the tab:
   - **🧠 AI depth** (default) — runs **Depth Anything V2** in your browser. This is the real thing:
     it understands what is in the picture, so faces, hair and object edges come out sharp and the
-    ground recedes properly. The first time you use it, it downloads a **40 MB model** — once. A
+    ground recedes properly. The first time you use it, it downloads a **49 MB model** — once. A
     progress bar shows the download, then it is cached and starts instantly after that.
+  - **🔬 AI high detail** — the same model looking at the picture at **twice** the resolution. It
+    pulls apart detail the normal pass smooths over: the line of a jaw, strands of hair, leaves.
+    Nothing extra to download. The catch is speed: several seconds for **one** frame, so it is for
+    a still you are about to finish, not for playback while you scrub. It does not refresh by
+    itself — press **`↻ Re-scan plate`** when you move the playhead.
   - **⚡ Fast estimate** — no download, instant. It guesses from position, colour and texture, so
     it is fine for a quick look and wrong often enough that you should not export from it.
 - In a browser that blocks background workers (a few locked-down setups), the AI card says
