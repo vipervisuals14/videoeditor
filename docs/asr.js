@@ -221,14 +221,21 @@
       }
       report('transcribing', 0.05, 'Transcribing…');
       var t0 = Date.now();
-      return pipe(pcm, {
+      // Let the browser paint the "Transcribing…" state before the WASM starts:
+      // inference blocks the main thread, and a panel that looks frozen reads as
+      // broken even when it is working.
+      var painted = new Promise(function (resolve) {
+        if (global.requestAnimationFrame) global.requestAnimationFrame(function () { setTimeout(resolve, 32); });
+        else setTimeout(resolve, 32);
+      });
+      return painted.then(function () { return pipe(pcm, {
         language: o.language || 'en',
         task: 'transcribe',
         chunk_length_s: 30,
         stride_length_s: 5,
         return_timestamps: 'word',
         condition_on_previous_text: false
-      }).then(function (out) {
+      }); }).then(function (out) {
         var words = wordsFromChunks(out.chunks, pcm.length / 16000);
         var text = String(out.text || '').replace(/^\s+/, '').replace(/\s+$/, '');
         report('done', 1, 'Transcribed.');
