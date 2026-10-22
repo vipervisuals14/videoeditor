@@ -72,6 +72,18 @@ const buttonOf = (card) => card.querySelector('.vfx-apply-btn');
 // the page polls the bridge and loads recipes on boot; those are not edits
 const edits = () => calls.filter((c) => String(c.url).includes('dispatch'));
 check('the card button says Stack, not Apply', () => /Stack/.test(buttonOf(cards[0]).textContent));
+check('the Stack key is a sibling of the text block, not inside it', () => {
+  const card = $$('#tab-vfx .vfx-card')[0];
+  const foot = card.querySelector('.vfx-card-foot');
+  return !!foot && foot.parentElement === card
+    ? true : `parent=${foot && foot.parentElement.className}`;
+});
+check('each row is exactly three tracks', () => {
+  const card = $$('#tab-vfx .vfx-card')[0];
+  const kids = [...card.children].map((el) => el.className.split(' ')[0]);
+  return kids.join(',') === 'vfx-thumb,vfx-card-body,vfx-card-foot'
+    ? true : `children=${kids.join(',')}`;
+});
 check('booting the page sends nothing to Resolve', () => edits().length === 0, `dispatches=${edits().length}`);
 
 const firstId = cards[0].dataset.id;

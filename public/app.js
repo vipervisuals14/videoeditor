@@ -1888,11 +1888,13 @@ function renderVfxGrid() {
             <button class="card-kf-btn ${kfs.length ? 'has-kfs' : ''}" data-kf="${p.id}"
               title="Add / update intensity keyframe at playhead">◆ KF${kfs.length ? ' ' + kfs.length : ''}</button>
           </div>
-          <div class="vfx-card-foot">
-            <span class="vfx-node-tag">${p.node}</span>
-            <button class="vfx-apply-btn ${inStack ? 'in-stack' : ''}" data-apply="${p.id}"
-              title="${inStack ? 'Add another copy of this look on top of the stack' : 'Add this look to the stack'}">${inStack ? '+ Stack again' : '+ Stack'}</button>
-          </div>
+        </div>
+        <!-- the key is a sibling of the text block, not a child of it: it owns
+             its own column so it can never push the title around -->
+        <div class="vfx-card-foot">
+          <span class="vfx-node-tag">${p.node}</span>
+          <button class="vfx-apply-btn ${inStack ? 'in-stack' : ''}" data-apply="${p.id}"
+            title="${inStack ? 'Add another copy of this look on top of the stack' : 'Add this look to the stack'}">${inStack ? 'Stack +' : 'Stack'}</button>
         </div>
       </div>
     `;

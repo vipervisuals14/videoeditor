@@ -4790,3 +4790,209 @@ input[type="range"]:disabled { opacity: 0.4; }
   .stage-lower { height: clamp(150px, 26vh, 210px); }
   .viewer-topbar { row-gap: 4px; }
 }
+
+/* ============================================================================
+   PRESET ROW, FINAL — one flex row, three fixed tracks, nothing can collide
+   ----------------------------------------------------------------------------
+   The previous attempt put the Stack key inside the text block and then asked
+   for "grid-column: 3", which created two phantom columns inside that block.
+   That is what squeezed the art to a sliver and clipped every title.
+   Here the row is a flex row with explicit sizes: 72px art, a text column that
+   is allowed to shrink, and a 66px key. Text clips horizontally only.
+   ==========================================================================*/
+.popup-panel #tab-vfx .vfx-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  height: 66px;
+  min-height: 66px;
+  padding: 9px 10px;
+  overflow: hidden;
+  background: #171b1e;
+  border: 0;
+  border-bottom: 1px solid #000;
+  border-radius: 0;
+}
+.popup-panel #tab-vfx .vfx-card:hover { background: #1e2327; }
+.popup-panel #tab-vfx .vfx-card.selected {
+  background: linear-gradient(180deg, #1b2a35, #16222a);
+  box-shadow: inset 0 0 0 1px var(--blue), inset 0 0 18px rgba(76, 159, 216, 0.12);
+}
+.popup-panel #tab-vfx .vfx-card::after { content: none; }
+
+/* art: a real 46px box, canvas fills it in flow (not absolutely positioned) */
+.popup-panel #tab-vfx .vfx-card .vfx-thumb {
+  position: relative;
+  display: block;
+  flex: 0 0 72px;
+  width: 72px;
+  height: 46px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #000;
+  border-radius: 3px;
+  background: #0a0c0d;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+.popup-panel #tab-vfx .vfx-card .vfx-thumb .vfx-thumb-canvas,
+.popup-panel #tab-vfx .vfx-card .vfx-thumb-canvas {
+  position: static;
+  display: block;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  opacity: 0.92;
+  object-fit: cover;
+}
+
+/* text: the only track that may shrink */
+.popup-panel #tab-vfx .vfx-card .vfx-card-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-card-title {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  color: #e4eaed;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.popup-panel #tab-vfx .vfx-card.selected .vfx-card-title { color: #fff; }
+.popup-panel #tab-vfx .vfx-card .vfx-card-desc {
+  display: block;
+  font-size: 9.5px;
+  line-height: 1.35;
+  color: #7f8a90;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-card-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 1px 0 0;
+  min-width: 0;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-card-slider-row .int-lbl {
+  flex: 0 0 auto;
+  font: 700 7.5px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: #5d676b;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-card-slider-row input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 24px;
+  max-width: 110px;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-card-slider-row .int-val {
+  flex: 0 0 30px;
+  font: 700 9px/1 var(--font-mono);
+  color: var(--blue);
+  text-align: right;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-card-slider-row .card-kf-btn {
+  flex: 0 0 auto;
+  padding: 3px 5px;
+  font-size: 7px;
+  letter-spacing: 0.05em;
+  border-radius: 3px;
+}
+
+/* key: its own track, never inside the text */
+.popup-panel #tab-vfx .vfx-card .vfx-card-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  flex: 0 0 66px;
+  width: 66px;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-card-foot .vfx-node-tag { display: none; }
+.popup-panel #tab-vfx .vfx-card .vfx-apply-btn {
+  width: 66px;
+  padding: 8px 0;
+  font-size: 7.5px;
+  letter-spacing: 0.09em;
+  text-align: center;
+  border-radius: 4px;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-stack-badge {
+  left: 4px;
+  top: 4px;
+  min-width: 15px;
+  height: 15px;
+  font-size: 8.5px;
+}
+
+/* a wider rail: 384px was squeezing three tracks into 362px */
+.app-window { grid-template-columns: 412px minmax(0, 1fr); }
+body:has(.workspace.compact-dock) { grid-template-columns: 460px minmax(0, 1fr); }
+
+/* final row metrics: 72px tall, 78x52 art, 68px key — the reference's rhythm */
+.popup-panel #tab-vfx .vfx-card {
+  height: 72px;
+  min-height: 72px;
+  padding: 10px 10px;
+  gap: 11px;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-thumb {
+  flex: 0 0 78px;
+  width: 78px;
+  height: 52px;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-card-foot {
+  flex: 0 0 68px;
+  width: 68px;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-apply-btn {
+  width: 68px;
+  padding: 9px 0;
+  font-size: 8px;
+}
+.popup-panel #tab-vfx .vfx-card .vfx-card-title { font-size: 11px; }
+.popup-panel #tab-vfx .vfx-card .vfx-card-desc { font-size: 9.5px; }
+.popup-panel #tab-vfx .vfx-card .vfx-card-body { gap: 4px; }
+
+/* stack bar at 412px: chips on their own line so the keys keep one row */
+.popup-panel .stack-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  padding: 8px 10px;
+}
+.popup-panel .stack-headline { display: flex; align-items: baseline; gap: 8px; }
+.popup-panel .stack-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.popup-panel .stack-actions {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr);
+  gap: 4px;
+  margin: 0;
+}
+.popup-panel .stack-actions .btn-primary { text-align: center; }
+.popup-panel .stack-actions .btn-mini,
+.popup-panel .stack-actions .btn-primary {
+  padding: 6px 6px;
+  font-size: 7.5px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}

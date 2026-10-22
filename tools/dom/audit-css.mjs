@@ -42,6 +42,47 @@ for (const sel of rules) {
 }
 console.log(`rules: ${seen.size}   matching nothing: ${dead}`);
 console.log(deadList.slice(0, 40).join('\n'));
+// The preset row has been rebuilt twice; these assert the LAST word in the file
+// is the sane one, so a stale earlier rule can never quietly win again.
+// Tiny cascade model: for a target selector variant, find every rule whose
+// selector list contains it and let specificity decide, with source order as
+// the tie-break. Good enough to catch "a stale rule still wins".
+const spec = (sel) => {
+  const id = (sel.match(/#[\w-]+/g) || []).length;
+  const cls = (sel.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g) || []).length;
+  const tag = (sel.match(/(^|[\s>+~])[a-z][\w-]*/g) || []).length;
+  return id * 100 + cls * 10 + tag;
+};
+function computedFor(target, prop) {
+  const body = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const blocks = [...body.matchAll(/([^{}]+)\{([^}]*)\}/g)];
+  let best = null;
+  blocks.forEach(([, selList, decls], order) => {
+    const sels = selList.split(',').map((x) => x.trim());
+    const exact = sels.filter((x) => x === target);
+    if (!exact.length) return;
+    const m = decls.match(new RegExp('(?:^|;)\\s*' + prop + '\\s*:\\s*([^;]+)'));
+    if (!m) return;
+    const score = [Math.max(...exact.map(spec)), order];
+    if (!best || score[0] > best.score[0] || (score[0] === best.score[0] && score[1] > best.score[1])) {
+      best = { value: m[1].trim(), score };
+    }
+  });
+  return best && best.value;
+}
+const rowDisplay = computedFor('.popup-panel #tab-vfx .vfx-card', 'display');
+const rowHeight = computedFor('.popup-panel #tab-vfx .vfx-card', 'height');
+const footTrack = computedFor('.popup-panel #tab-vfx .vfx-card .vfx-card-foot', 'flex');
+const checks = [
+  ['preset rows resolve to a flex row', rowDisplay === 'flex', rowDisplay],
+  ['preset rows resolve to 72px tall', /^72px$/.test(String(rowHeight)), rowHeight],
+  ['the Stack key resolves to its own 68px track', /0 0 68px/.test(String(footTrack)), footTrack]
+];
+for (const [label, ok, got] of checks) {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${ok ? '' : ` (got ${got})`}`);
+  if (!ok) process.exitCode = 1;
+}
+
 const missing = critical.filter((sel) => doc.querySelectorAll(sel).length === 0);
 console.log('\ncritical selectors missing from the DOM:', missing.length ? missing : 'none');
 process.exit(missing.length ? 1 : 0);
