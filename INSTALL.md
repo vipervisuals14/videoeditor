@@ -182,6 +182,48 @@ Two things to check, in this order:
 
 ---
 
+## Part 6b — The native-effects route (no console, no pasting)
+
+This is the other way to use the looks, and it is the one that behaves like a plugin: the effects
+live **inside Resolve's own Effects Library**, and their controls are **native Inspector controls**
+that keyframe with Resolve's own buttons.
+
+The installer in Part 3 already put them there. To use one:
+
+1. Open the **Edit** page.
+2. Open the **Effects Library** (the panel on the top left, next to the Media Pool).
+3. Click **Templates**, then **PulseVFX**.
+4. **Drag a look onto a clip** on your timeline.
+5. Select that clip and open the **Inspector** — the look's controls are listed there, grouped,
+   with Resolve's own keyframe diamonds beside each slider.
+
+Why this works on Resolve **Free**: these are Fusion macros (`.setting` files) placed in your user
+Templates folder, which both Free and Studio read. They are not OpenFX plugins, so nothing is
+locked behind the $295 licence and nothing needs to be signed.
+
+Where they live on disk (the **Copy folder path** button copies this):
+
+```
+~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Templates/Edit/Effects/PulseVFX
+```
+
+If the folder is empty or the menu is missing, re-run **Mac 1 - Install Resolve Bridge.command**,
+then quit Resolve and reopen it once.
+
+**Downloading them somewhere else:** the hosted panel's **01 • Effects** tab has a
+**Download effects** button that saves all the macros as a zip. Unzip it into the folder above.
+
+**Which route should I use?**
+
+| | Native effects (this part) | Panel + Apply (Part 7) |
+| --- | --- | --- |
+| Where the controls are | Resolve's Inspector | the floating panel |
+| Keyframes | Resolve's own | `BezierSpline` written for you |
+| Best for | one or two looks on a few clips | building a whole pass, layers, lyric cards |
+| Console pasting | none | one paste per Apply |
+
+---
+
 ## Part 7 — Your first effect in 60 seconds
 
 1. In Resolve, on the **Edit page**, put a clip on **V1**.
@@ -437,8 +479,8 @@ Enter — that does the same thing by hand and always works.
 ## Uninstalling
 
 1. Drag the **PulseVFX** folder to the Bin.
-2. In Finder press **⇧⌘G**, paste this, press Return, and delete the `VFXKit Free` folder:
-   `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Templates/Edit/Effects/VFXKit Free`
+2. In Finder press **⇧⌘G**, paste this, press Return, and delete the `PulseVFX` folder:
+   `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Templates/Edit/Effects/PulseVFX`
 3. Same again for:
    `~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Scripts/Utility/VFXKit_ResolveFree_Bridge.lua`
 4. Optional: delete the folder `~/.vfxkit-resolve-free`.

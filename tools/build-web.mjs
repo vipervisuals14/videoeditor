@@ -82,6 +82,17 @@ async function main() {
     path.join(OUT, 'VFXKit_ResolveFree_Bridge.lua')
   );
 
+  // The Fusion macros, zipped, so the hosted page can hand them to anyone who
+  // wants the native-effects route without cloning the repo.
+  const effectsZip = path.join(OUT, 'PulseVFX-Effects.zip');
+  try {
+    await rm(effectsZip, { force: true });
+    execFileSync('zip', ['-qr', effectsZip, '.', '-i', '*.setting'], { cwd: path.join(ROOT, 'fusion-macros') });
+    console.log('\n  PulseVFX-Effects.zip written (' + ((await stat(effectsZip)).size / 1024).toFixed(0) + ' KB)');
+  } catch (err) {
+    console.warn('\n  (skipped PulseVFX-Effects.zip: ' + (err && err.message) + ')');
+  }
+
   // A ready-to-upload zip, so "deploy" can be: download one file, drag it onto
   // a host. Built with the system zip binary (present on macOS + CI images).
   const zipPath = path.join(ROOT, 'web-deploy.zip');

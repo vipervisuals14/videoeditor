@@ -18,6 +18,7 @@
           <h1 class="brand-title">PULSEVFX</h1>
           <span class="badge-version">Resolve Free 21.1.1 · macOS</span>
         </div>
+        <div class="brand-strap">Optical · Film lab · Depth · Type</div>
       </div>
     </div>
 
@@ -157,6 +158,30 @@
       <!-- TAB 1: EFFECTS — the grid first, the rest on demand                 -->
       <!-- ================================================================== -->
       <div class="tab-pane active" id="tab-vfx">
+        <!-- How the looks get INTO Resolve: native effects, Glaze-style -->
+        <div class="install-strip" id="installStrip">
+          <div class="install-copy">
+            <span class="install-kicker">Inside DaVinci Resolve</span>
+            <p>
+              The looks install as <b>native effects</b>, like a plugin: run the installer once, then
+              <b>Effects Library → Templates → PulseVFX</b>, drag one onto a clip, and its controls
+              are in the <b>Inspector</b>. No console, no pasting.
+            </p>
+          </div>
+          <div class="install-actions">
+            <button class="btn-secondary" id="copyEffectsPathBtn" title="Copy the folder the installer writes to">Copy folder path</button>
+            <a class="btn-primary" href="PulseVFX-Effects.zip" download>Download effects</a>
+            <button class="btn-mini" id="installStepsBtn" aria-expanded="false">Steps</button>
+          </div>
+        </div>
+        <ol class="install-steps hidden" id="installSteps">
+          <li><b>Quit Resolve</b> (the installer needs the folder to itself).</li>
+          <li>Double-click <b>Mac 1 - Install Resolve Bridge.command</b> in the PulseVFX folder.</li>
+          <li>Reopen Resolve, open the <b>Edit</b> page, and open the <b>Effects Library</b>.</li>
+          <li>Choose <b>Templates → PulseVFX</b> and drag a look onto a clip.</li>
+          <li>With the clip selected, adjust it in the <b>Inspector</b> — every control is native and keyframeable.</li>
+        </ol>
+
         <!-- Shown until an effect is picked; the editor itself stays hidden -->
         <div class="kf-placeholder" id="kfPlaceholder">
           <span>◆</span>

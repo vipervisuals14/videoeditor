@@ -1723,6 +1723,30 @@ function revealKeyframeEditor() {
 function initVfxTab() {
   renderVfxGrid();
 
+  // "How it gets into Resolve" strip
+  const stepsBtn = document.getElementById('installStepsBtn');
+  const stepsEl = document.getElementById('installSteps');
+  if (stepsBtn && stepsEl) {
+    stepsBtn.addEventListener('click', () => {
+      const open = stepsEl.classList.toggle('hidden') === false;
+      stepsBtn.textContent = open ? 'Hide steps' : 'Steps';
+      stepsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  }
+  const pathBtn = document.getElementById('copyEffectsPathBtn');
+  if (pathBtn) {
+    pathBtn.addEventListener('click', () => {
+      const p = '~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion/Templates/Edit/Effects/PulseVFX';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(p)
+          .then(() => showToast('Effects folder path copied'))
+          .catch(() => showToast('Copy failed — the path is in the Steps list', 'warn'));
+      } else {
+        showToast('Copy is not available here', 'warn');
+      }
+    });
+  }
+
   const advBtn = document.getElementById('advancedToolsBtn');
   const advBody = document.getElementById('advancedTools');
   if (advBtn && advBody) {

@@ -51,7 +51,7 @@ function getResolvePaths() {
       platform: 'macOS',
       baseDir: base,
       scriptsDir: path.join(base, 'Fusion/Scripts/Utility'),
-      effectsDir: path.join(base, 'Fusion/Templates/Edit/Effects/VFXKit Free'),
+      effectsDir: path.join(base, 'Fusion/Templates/Edit/Effects/PulseVFX'),
       prefsFile: path.join(base, 'Fusion/Profiles/Default/Fusion.prefs'),
       stateDir: STATE_DIR
     };
@@ -62,7 +62,7 @@ function getResolvePaths() {
       platform: 'Windows',
       baseDir: base,
       scriptsDir: path.join(base, 'Fusion/Scripts/Utility'),
-      effectsDir: path.join(base, 'Fusion/Templates/Edit/Effects/VFXKit Free'),
+      effectsDir: path.join(base, 'Fusion/Templates/Edit/Effects/PulseVFX'),
       prefsFile: path.join(base, 'Fusion/Profiles/Default/Fusion.prefs'),
       stateDir: STATE_DIR
     };
@@ -72,7 +72,7 @@ function getResolvePaths() {
     platform: 'Linux',
     baseDir: base,
     scriptsDir: path.join(base, 'Fusion/Scripts/Utility'),
-    effectsDir: path.join(base, 'Fusion/Templates/Edit/Effects/VFXKit Free'),
+    effectsDir: path.join(base, 'Fusion/Templates/Edit/Effects/PulseVFX'),
     prefsFile: path.join(base, 'Fusion/Profiles/Default/Fusion.prefs'),
     stateDir: STATE_DIR
   };
