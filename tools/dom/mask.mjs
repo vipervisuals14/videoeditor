@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { boot, makeCheck, PUB } from './harness.mjs';
+import { readPng } from './png.mjs';
 
 const { window, document } = boot({ beforeScripts: (w) => { w.__PULSE_TEST__ = true; } });
 const check = makeCheck();
@@ -125,8 +126,10 @@ verify('the masker samples the frame on screen, not a demo plate', () => {
 verify('the matte is solved from the real per-frame pixels, not a drift offset', () => {
   const src = fs.readFileSync(path.join(PUB, 'app.js'), 'utf8');
   const body = src.slice(src.indexOf('async function maskTrackFrames'), src.indexOf('function maskKeyframeMatte'));
-  const solved = /maskSolveFromPixels\(/.test(body);
-  const drift = /drift|0\.0016/.test(body);
+  const solved = /maskTemplateAt\(/.test(body) && /maskShiftMaskSub\(/.test(body);
+  // the old implementation moved the matte by a fixed trigonometric offset that
+  // had nothing to do with the picture
+  const drift = /\*\s*0\.0016|Math\.(sin|cos)\([^)]*\)\s*\*\s*[0-9.]+\)?\s*;\s*\/\/ drift/.test(body);
   return [solved && !drift, `solves=${solved} fakeDrift=${drift}`];
 });
 
@@ -458,6 +461,127 @@ verify('the mask panel gives four numbered steps', () => {
   const steps = [...document.querySelectorAll('.mask-steps li')];
   return [steps.length === 4, `steps=${steps.length}`];
 });
+// ---- real footage: the frame the editor reported the bug on ------------------
+// A dark-graded stage shot with a person in it, a bright blurry stage area on
+// the left, and the subject's clothes almost the same colour as the room.
+const fixture = readPng(path.join(PUB, '..', 'tools/dom/fixtures/click-subject.png'));
+const FW = fixture.width;
+const FH = fixture.height;
+const shifted = (dx) => {
+  const d = new Uint8ClampedArray(FW * FH * 4);
+  for (let y = 0; y < FH; y++) {
+    for (let x = 0; x < FW; x++) {
+      const sx = Math.min(FW - 1, Math.max(0, x - dx));
+      const s = (y * FW + sx) * 4;
+      const i = (y * FW + x) * 4;
+      d[i] = fixture.data[s];
+      d[i + 1] = fixture.data[s + 1];
+      d[i + 2] = fixture.data[s + 2];
+      d[i + 3] = 255;
+    }
+  }
+  return d;
+};
+const boxOf = (buf) => {
+  let n = 0;
+  let x0 = FW;
+  let y0 = FH;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < FH; y++) {
+    for (let x = 0; x < FW; x++) {
+      if (buf[y * FW + x] <= 110) continue;
+      n++;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  return { n, cov: n / (FW * FH), x0, y0, x1, y1 };
+};
+
+verify('on real footage, one click selects the subject and not the frame', () => {
+  const out = T.maskClickSelect(fixture.data, { x: 165 / (FW - 1), y: 120 / (FH - 1) });
+  const b = boxOf(out);
+  const onSubject = out[120 * FW + 165] > 110;
+  const blob = out[55 * FW + 60] > 110;
+  return [b.cov > 0.02 && b.cov < 0.25 && onSubject && !blob,
+    `cov=${(b.cov * 100).toFixed(1)}% onSubject=${onSubject} blob=${blob}`];
+});
+
+verify('the click works anywhere on the subject, not just one lucky pixel', () => {
+  const pts = [[158, 88], [165, 95], [172, 105], [160, 120], [170, 130], [165, 145]];
+  const bad = [];
+  pts.forEach(([x, y]) => {
+    const out = T.maskClickSelect(fixture.data, { x: x / (FW - 1), y: y / (FH - 1) });
+    const b = boxOf(out);
+    const tall = (b.y1 - b.y0) > (b.x1 - b.x0) * 0.9;
+    if (!(b.cov > 0.02 && b.cov < 0.25 && tall && out[55 * FW + 60] <= 110)) {
+      bad.push(`${x},${y}:${(b.cov * 100).toFixed(1)}%`);
+    }
+  });
+  return [bad.length === 0, 'failed clicks: ' + bad.join(' ')];
+});
+
+// the same footage, panning 5px a frame — the matte must ride with it
+const rm = T.ensureMaskState();
+rm.seeds = [];
+rm.strokes = [];
+rm.tracked = [];
+rm.soft = null;
+rm.raw = null;
+rm.mode = 'subject';
+rm.feather = 4;
+st.scene = 'custom_video';
+st.totalDurSec = 6;
+st.playheadSec = 0;
+rm.raw = T.maskClickSelect(fixture.data, { x: 165 / (FW - 1), y: 120 / (FH - 1) });
+T.maskRebuild();
+const startX = centroidOf(rm.polygon).x * FW;
+const realFirstCov = rm.coverage;
+window.maskSampleFrame = (sec) => Promise.resolve({
+  data: shifted(Math.round((Number(sec) || 0) * 5)),
+  width: FW,
+  height: FH
+});
+await T.maskTrackFrames(1);
+const realTracked = rm.tracked.slice();
+const realErr = realTracked.map((f) => Math.abs(centroidOf(f.polygon).x * FW - (startX + f.sec * 5)));
+const realSteps = [];
+for (let i = 1; i < realTracked.length; i++) {
+  const a = centroidOf(realTracked[i - 1].polygon);
+  const b = centroidOf(realTracked[i].polygon);
+  realSteps.push(Math.hypot((b.x - a.x) * FW, (b.y - a.y) * FH));
+}
+
+verify('on real footage the matte rides a pan instead of drifting off',
+  () => [realTracked.length > 40 && realErr.length > 0 && Math.max(...realErr) < 12,
+    `tracked=${realTracked.length} worst drift=${realErr.length ? Math.max(...realErr).toFixed(1) : 'n/a'}px`]);
+
+verify('on real footage no frame jumps',
+  () => [realSteps.length > 20 && Math.max(...realSteps) < 14,
+    `largest step=${realSteps.length ? Math.max(...realSteps).toFixed(1) : 'n/a'}px`]);
+
+verify('on real footage the matte keeps its size while following',
+  () => {
+    const covs = realTracked.map((f) => f.coverage);
+    const lo = Math.min(...covs);
+    const hi = Math.max(...covs);
+    return [lo > realFirstCov * 0.55 && hi < realFirstCov * 1.6,
+      `coverage ${(lo * 100).toFixed(1)}-${(hi * 100).toFixed(1)}% vs first ${(realFirstCov * 100).toFixed(1)}%`];
+  });
+
+verify('the matte is person-shaped: taller than it is wide, centred on the click',
+  () => {
+    const out = T.maskClickSelect(fixture.data, { x: 165 / (FW - 1), y: 120 / (FH - 1) });
+    const bb = boxOf(out);
+    const w = bb.x1 - bb.x0;
+    const h = bb.y1 - bb.y0;
+    return [h > w * 1.1 && Math.abs((bb.x0 + bb.x1) / 2 - 165) < 40,
+      `box=${bb.x0},${bb.y0}-${bb.x1},${bb.y1}`];
+  });
+
 
 check.summary('mask');
 window.close();
