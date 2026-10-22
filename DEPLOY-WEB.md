@@ -6,6 +6,29 @@ DaVinci Resolve.
 
 ---
 
+## Get it online in three steps (no code, no terminal)
+
+You need one file: **`web-deploy.zip`** (49 MB, in the project folder). It already contains the
+whole site, including the depth model.
+
+1. **Drag that zip onto <https://app.netlify.com/drop>.** Drop the **zip itself** — do not unzip it
+   first. A grey box on that page says "Drag and drop your site folder here"; the zip works there.
+2. **Wait about a minute.** The page shows a progress bar, then a green "Site deploy in progress"
+   notice, then your link: something like `https://cheerful-panda-1a2b3c.netlify.app`.
+3. **Click that link.** That is your website. Bookmark it.
+
+**Claim the site or it expires.** A deploy you make without logging in is temporary and sits behind
+a password. Sign in with Google/GitHub first ("Claim this site" / "Sign up" on the Netlify page),
+and the link becomes permanent and public. This is free.
+
+To update it later, drag a new zip onto the same site's **Deploys** tab — same link, new files.
+
+> Why not just host it here? The preview link in this chat only opens inside this workspace — it
+> asks for an access token and shows `403 Forbidden` anywhere else. Netlify gives you a real,
+> public, permanent address. That is the difference between "a preview" and "your website".
+
+---
+
 ## What works, and what changes
 
 | Feature | Desktop build (bridge) | **Web build** |
