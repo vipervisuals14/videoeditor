@@ -755,7 +755,8 @@ const state = {
   activeTab: 'vfx',
   selectedVfxCat: 'ALL',
   vfxSearch: '',
-  activePreset: VFX_PRESETS[0], // 500T Halation Bloom
+  activePreset: null,          // nothing is picked until you press Stack or a card
+  presetPicked: false,         // false = the monitor shows the plate untouched
   masterIntensity: 100, // global scale for all per-effect intensities
   bpm: 142,
   mixShakes: 70,
@@ -1173,7 +1174,10 @@ async function dispatchToResolve(action, payload, toastMsg) {
 // A "module" is any element carrying data-module. Several elements may share an
 // id (the effect browser is a tab bar + a grid), and they hide together.
 // ============================================================================
-const UI_PREFS_KEY = 'pulsevfx.ui.v2';
+// v3: v2 stored which panels were hidden, and an old build let "Effect Layers"
+// be hidden -- which would now hide the stack bar and look like a bug. Bumping
+// the key starts everyone from "everything visible" once.
+const UI_PREFS_KEY = 'pulsevfx.ui.v3';
 
 function moduleRegistry() {
   const groups = new Map();
@@ -1513,6 +1517,10 @@ function setStageLoaded(kind, label, durationSec) {
   const overlay = document.getElementById('emptyStage');
   if (overlay) overlay.classList.add('hidden');
 
+  // Loading footage must not bring a look with it. The only exception is a
+  // stack the editor has already built, which keeps rendering on the new clip.
+  resetLookToNone();
+
   // the panel header reports the real output size, not a marketing number
   const out = document.getElementById('previewOutputLabel');
   if (out) {
@@ -1606,8 +1614,7 @@ function clearStage() {
   }
   const durLabel = document.getElementById('transportDurLabel');
   if (durLabel) durLabel.textContent = '0:00.0 / 0:00.0';
-  const pill = document.getElementById('activeFxPill');
-  if (pill) pill.textContent = 'No effect applied';
+  resetLookToNone();
   const out = document.getElementById('previewOutputLabel');
   if (out) out.textContent = 'Video output · 640 × 360 stage';
   resetImageLabel();
@@ -1737,6 +1744,32 @@ function revealKeyframeEditor() {
   const hint = document.getElementById('kfPlaceholder');
   if (box) box.classList.remove('hidden');
   if (hint) hint.classList.add('hidden');
+}
+
+// The detail strip goes back to its "pick a look" state, so a fresh upload
+// never leaves the previous look's curve on screen.
+function hideKeyframeEditor() {
+  const box = document.getElementById('keyframeEditorBox');
+  const hint = document.getElementById('kfPlaceholder');
+  if (box) box.classList.add('hidden');
+  if (hint) hint.classList.remove('hidden');
+}
+
+// Back to a clean monitor: no look selected, nothing applied, unless the editor
+// has already stacked looks -- a stack belongs to the edit, not to one clip.
+function resetLookToNone() {
+  const live = ensureLayers().filter((l) => l.enabled);
+  state.activePreset = null;
+  state.presetPicked = live.length > 0;
+  hideKeyframeEditor();
+  const pill = document.getElementById('activeFxPill');
+  if (pill) {
+    pill.textContent = live.length
+      ? `${live.length} stacked look${live.length === 1 ? '' : 's'}`
+      : 'No look picked';
+  }
+  renderVfxGrid();
+  renderStackChips();
 }
 
 function initVfxTab() {
@@ -1947,14 +1980,8 @@ function renderVfxGrid() {
 
   grid.querySelectorAll('.vfx-card').forEach((card) => {
     const preset = VFX_PRESETS.find((x) => x.id === card.dataset.id);
-    card.addEventListener('mouseenter', () => {
-      if (preset) {
-        state.activePreset = preset;
-        document.getElementById('activeFxPill').textContent = `Preview: ${preset.name}`;
-        syncKeyframeInspector();
-      }
-    });
-
+    // No hover preview: moving the pointer down a list of 72 looks must not
+    // repaint the monitor. Only a click or a Stack press changes what renders.
     // Clicking a card PREVIEWS it. Nothing is applied and nothing lands on the
     // timeline until a look is stacked and the stack is sent.
     card.addEventListener('click', (e) => {
@@ -3570,9 +3597,9 @@ function rbFormat() {
  * the target surface and size as arguments so it can render 4K off-screen.
  */
 function composeExportFrame(ctx, w, h, t) {
-  const preset = state.activePreset || VFX_PRESETS[0];
-  const effectType = preset.effectType || 'opt_halation';
-  const intensity = effectiveIntensity(preset.id, state.playheadSec) / 100;
+  const preset = state.activePreset;
+  const effectType = preset ? (preset.effectType || 'opt_halation') : null;
+  const intensity = preset ? effectiveIntensity(preset.id, state.playheadSec) / 100 : 0;
   const grainAmount = state.mixStylized / 100;
   const beatPhase = (t * (state.bpm / 60)) % 1;
   const onBeatPulse = Math.pow(Math.max(0, 1 - beatPhase * 3.5), 2.2);
@@ -3614,7 +3641,7 @@ function composeExportFrame(ctx, w, h, t) {
   // No effect picked yet: the plate goes up untouched. Skipping the call (rather
   // than passing an unknown type) matters — the shader's finishing pass would
   // otherwise overwrite the frame with black.
-  if (state.presetPicked) {
+  if (state.presetPicked && effectType) {
     drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
   }
   applyDepthStackTiled(ctx, w, h, t, preset);
@@ -6583,10 +6610,10 @@ function drawMonitorFrame(t) {
     offscreenCtx = offscreenBuffer.getContext('2d');
   }
 
-  const preset = state.activePreset || VFX_PRESETS[0];
-  const effectType = preset.effectType || 'opt_halation';
+  const preset = state.activePreset;
+  const effectType = preset ? (preset.effectType || 'opt_halation') : null;
   // per-effect intensity (keyframed curve or slider) × global master scale
-  const intensity = effectiveIntensity(preset.id, state.playheadSec) / 100;
+  const intensity = preset ? effectiveIntensity(preset.id, state.playheadSec) / 100 : 0;
   const grainAmount = (state.mixStylized / 100);
   const beatPhase = (t * (state.bpm / 60)) % 1;
   const onBeatPulse = Math.pow(Math.max(0, 1 - beatPhase * 3.5), 2.2);
@@ -6641,7 +6668,7 @@ function drawMonitorFrame(t) {
   drawCinematicPlate(ctx, w, h, renderTime, onBeatPulse);
 
   // Apply Non-Corny Optical, Shutter & Film Lab Shader Pass
-  if (state.splitCompare) {
+  if (state.splitCompare && effectType) {
     ctx.save();
     ctx.beginPath();
     ctx.rect(w / 2, 0, w / 2, h);
@@ -6664,7 +6691,7 @@ function drawMonitorFrame(t) {
     ctx.fillText('RAW LOG', 20, 25);
     ctx.fillStyle = '#fecdd3';
     ctx.fillText('GRADED FX', w - 84, 25);
-  } else if (state.presetPicked) {
+  } else if (state.presetPicked && effectType) {
     drawCinemaOpticalShader(ctx, w, h, renderTime, effectType, intensity, onBeatPulse, grainAmount);
   }
 

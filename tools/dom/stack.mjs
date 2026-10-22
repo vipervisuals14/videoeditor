@@ -26,6 +26,15 @@ check('the keyframe editor was moved under the preview', () => {
   const detail = $('#stageDetail');
   return !!box && !!detail && detail.contains(box) && $('.stage-wrap').contains(detail);
 });
+check('the stack bar cannot be hidden by an old panel preference', () => {
+  const panel = document.getElementById('stackPanel');
+  const mod = panel.getAttribute('data-module');
+  // a stored "layers: hidden" from the previous build must not reach it
+  const prefsKey = window.localStorage.getItem('pulsevfx.ui.v2');
+  return mod === 'stack' && prefsKey === null
+    ? true : `data-module=${mod} oldPrefs=${prefsKey}`;
+});
+
 check('the stack bar is the first thing in the effects tab', () => {
   const pane = $('#tab-vfx');
   const first = [...pane.children].find((el) => el.id && el.id !== 'installSteps');
@@ -33,6 +42,27 @@ check('the stack bar is the first thing in the effects tab', () => {
 });
 check('the preset list scrolls inside the rail', () =>
   $('#tab-vfx').classList.contains('active') && !!$('#vfxPresetGrid'));
+
+check('nothing is picked or applied when the page opens', () => {
+  const sel = document.querySelectorAll('#tab-vfx .vfx-card.selected');
+  const pill = document.getElementById('activeFxPill').textContent;
+  return sel.length === 0 && /no look/i.test(pill) ? true : `selected=${sel.length} pill="${pill}"`;
+});
+
+check('picking a look reveals its curve', () => {
+  const card = document.querySelector('#tab-vfx .vfx-card');
+  card.click();
+  return !document.getElementById('keyframeEditorBox').classList.contains('hidden');
+});
+check('clearing the stage leaves nothing selected or applied', () => {
+  document.getElementById('clearPlateBtn').click();
+  const sel = document.querySelectorAll('#tab-vfx .vfx-card.selected');
+  const editorHidden = document.getElementById('keyframeEditorBox').classList.contains('hidden');
+  const hintShown = !document.getElementById('kfPlaceholder').classList.contains('hidden');
+  const pill = document.getElementById('activeFxPill').textContent;
+  return sel.length === 0 && editorHidden && hintShown && /no look/i.test(pill)
+    ? true : `selected=${sel.length} editorHidden=${editorHidden} hint=${hintShown} pill="${pill}"`;
+});
 
 // ---- stacking -------------------------------------------------------------
 const cards = $$('#tab-vfx .vfx-card');
@@ -44,9 +74,13 @@ const edits = () => calls.filter((c) => String(c.url).includes('dispatch'));
 check('the card button says Stack, not Apply', () => /Stack/.test(buttonOf(cards[0]).textContent));
 check('booting the page sends nothing to Resolve', () => edits().length === 0, `dispatches=${edits().length}`);
 
+const firstId = cards[0].dataset.id;
 cards[0].click();
-check('clicking a card only previews', () =>
-  edits().length === 0 && cards[0].classList.contains('selected') && $$('#laneV3 .tl-clip').length === 0);
+check('clicking a card only previews', () => {
+  const live = document.querySelector(`#tab-vfx .vfx-card[data-id="${firstId}"]`);
+  return edits().length === 0 && !!live && live.classList.contains('selected')
+    && $$('#laneV3 .tl-clip').length === 0;
+});
 
 buttonOf(cards[0]).click();
 buttonOf(cards[1]).click();
@@ -122,6 +156,14 @@ check('a pass can be moved earlier in the chain', () => {
   const names = $$('#stackChips .stack-chip span').map((n) => n.textContent);
   return names[1] === rows[2].querySelector('.layer-name').textContent
     ? true : `order=${names.join(' > ')}`;
+});
+
+// a stack that outlives the clip keeps rendering after a new upload
+check('a built stack keeps rendering when new footage loads', () => {
+  const before = $$('#stackChips .stack-chip').length;
+  document.getElementById('clearPlateBtn').click();      // stands in for a fresh load
+  const cards = $$('#tab-vfx .vfx-card');
+  return before >= 2 && $$('#stackChips .stack-chip').length === before ? true : `before=${before}`;
 });
 
 $('#clearLayersBtn').click();
