@@ -455,6 +455,69 @@ warm/cool) · `parallax` · `relight` · `slices` (stepped depth bands) · `cont
 isolation lines) · `pointcloud` · `anaglyph` · `echo` · `slice` (isolate one depth range and
 flatten everything outside it).
 
+## Lyrics — it listens to the clip
+
+`02 • Lyrics` used to split whatever you pasted into N equal slices. That is arithmetic, not
+timing: eight lines over 36 seconds, whether or not anybody sang them. It now reads the clip's
+own audio track and puts the words where they belong.
+
+**One button: `◉ Detect from clip`.**
+
+1. Load your clip on the stage (the preview at the top).
+2. Open **`02 • Lyrics`** and press **`◉ Detect from clip`**.
+3. The panel decodes the file's audio, measures it, and fills the timed blocks.
+
+Nothing is uploaded. There is no model download and no account: it is FFT analysis running on
+the page.
+
+### It works out what kind of clip it is looking at
+
+| | Talking head | Music video |
+|---|---|---|
+| What it measures | speech phrases (hysteresis voice-activity detection), pauses, speech time | tempo (autocorrelation of the onset envelope), beat phase, vocal entries |
+| What you get | one block per thing said, placed on the exact phrase | your lines snapped to the beat grid and the vocal entries |
+| Readout | `Speech · 14 phrases · 12.4 s of speech · 6 pauses` | `Music · 96.0 BPM · 8 vocal entries · 2 pauses` |
+
+`Auto` decides between the two, and says when it is unsure (`not sure — pick a mode`).
+`Talking head` and `Music video` force a path — useful for a talking head over a music bed,
+which honestly looks like music on paper.
+
+Octave errors are handled: a 96 BPM track whose hi-hats autocorrelate twice as fast reports
+**96**, not 192. The detected tempo is written into the panel's shared beat clock, so the beat
+pulse on every effect follows your actual song instead of the old fixed 142.
+
+### The words themselves
+
+Detection measures *where* words are. It does not invent *what* they were — that needs a speech
+model, and this page deliberately ships none: no 50 MB download, no upload, no API key. In
+practice you already have the words:
+
+| Your situation | What to do |
+|---|---|
+| Music video | paste the song lyrics, one line per phrase → `◉ Detect from clip` |
+| Talking head, you wrote the script | paste the script → `◉ Detect from clip` (lines land on the phrase starts) |
+| Talking head, no script | press `◉ Detect from clip` and get one empty block per spoken phrase, already timed. Click a block, type over it. The timing stays. |
+| You already have a transcript (phone captions, CapCut, a client .srt) | `Load .srt / .txt` → `◉ Detect from clip` to retime it to this clip |
+
+Typing over a block **keeps its measured start and end** — you are correcting a word, not
+re-timing a caption. Every block also stores per-word timings, so the kinetic typography lands
+each word on its own beat instead of dividing the line evenly.
+
+### What changed underneath
+
+| Before | Now |
+|---|---|
+| N lines ÷ clip duration | lines placed on measured speech phrases / beat grid / vocal entries |
+| `0.0s – 0.0s` for every block with no clip loaded | `not timed`, with a message saying what to do |
+| `.SRT` export of zero-length blocks | export refuses until something is actually timed |
+| silence list hardcoded (`36.0s`, `31%`, five invented pauses) | the same measurement, per clip — dashes until measured |
+| a generated sine drawn as the "waveform" | the clip's real level envelope, with cut zones over it |
+
+The same engine now drives **`Cut Silences ▸ ◉ Detect pauses`**: talking runs and dead air are
+measured from the audio, the waveform is the real envelope, and the stats (`original`, `tight
+cut`, `% removed`, `cuts`) are computed from what was heard. Nothing is cut until you press the
+button.
+
 ## Lyrics are opt-in
 
 The monitor used to start with LYRC typography already burned onto the picture, and a saved
@@ -506,7 +569,7 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 | 4K render bay (import metadata, tiling, memory guard, ZIP, native snippet) | `node /tmp/domtest/render.js` | pass |
 | **Pixel suite** (real 2D canvas: lyrics, depth, transport, every effect) | `node /tmp/domtest/visual.js` | pass |
 | **Live-depth worker** (protocol, transferable buffer, map range) | `node /tmp/domtest/liveworker.js` | pass |
-| Effect layers · Depth · Mask · Parameters (31) · Stack & shell (48) | `node tools/dom/{stack,params,depth,mask}.mjs` | pass |
+| Effect layers · Depth · Mask · Parameters (32) · Stack & shell (48) · **Lyrics auto-detect (36)** | `node tools/dom/{stack,params,depth,mask,lyrics}.mjs` | pass |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified

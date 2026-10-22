@@ -1076,35 +1076,6 @@ const CAPTION_STYLES = [
   }
 ];
 
-const DEFAULT_LYRICS_TEXT = `Blame it all on you when the midnight city fades
-We been driving past the redline through the neon haze
-Every single word is tiled across the studio frame
-Duet trading emphasis while they calling out our name
-Turn a fifteen second snippet to a million views
-Lock the song template once and let the footage move
-From Spotify straight into DaVinci Resolve Free
-Zero third party plugins, built the whole suite`;
-
-const DEFAULT_TALKING_TEXT = `Stop spending ten hours editing talking head videos by hand
-First we automatically strip out every awkward pause and silence
-Then we punch in eight percent on jump cuts to keep retention high
-Next we layer dynamic word by word captions right in the center
-And finally we pull B-roll straight from your Resolve Media Pool
-All running inside DaVinci Resolve Free 21.1.1 with zero paid plugins`;
-
-const INITIAL_SILENCE_SEGMENTS = [
-  { id: 1, start: 0.0, end: 4.2, db: -14, type: 'speech', label: 'Hook: "Stop spending 10 hours editing by hand..."', forceKeep: false },
-  { id: 2, start: 4.2, end: 6.1, db: -41, type: 'silence', label: 'Dead Air / Breath Pause (1.9s)', forceKeep: false },
-  { id: 3, start: 6.1, end: 11.4, db: -12, type: 'speech', label: 'Point 1: "First we strip out every awkward pause..."', forceKeep: false },
-  { id: 4, start: 11.4, end: 13.0, db: -38, type: 'silence', label: 'Looking at notes pause (1.6s)', forceKeep: false },
-  { id: 5, start: 13.0, end: 18.5, db: -11, type: 'speech', label: 'Point 2: "Then we punch in 8% on jump cuts..."', forceKeep: false },
-  { id: 6, start: 18.5, end: 20.8, db: -44, type: 'silence', label: 'Room noise / cough pause (2.3s)', forceKeep: false },
-  { id: 7, start: 20.8, end: 26.2, db: -13, type: 'speech', label: 'Point 3: "Next we layer word-by-word captions..."', forceKeep: false },
-  { id: 8, start: 26.2, end: 28.9, db: -36, type: 'silence', label: 'Retake hesitation pause (2.7s)', forceKeep: false },
-  { id: 9, start: 28.9, end: 33.3, db: -12, type: 'speech', label: 'Outro: "All inside DaVinci Resolve Free 21.1.1!"', forceKeep: false },
-  { id: 10, start: 33.3, end: 36.0, db: -46, type: 'silence', label: 'Tail dead air before camera stop (2.7s)', forceKeep: false }
-];
-
 const INITIAL_MEDIA_POOL = [
   { id: 'mp_1', name: 'A_CAM_AlexaMini_Anamorphic_01.mov', bin: 'Performance', duration: '00:02:14', frames: 3216, fps: 24, res: '3840x2160', color: '#e11d48', included: true },
   { id: 'mp_2', name: 'B_CAM_16mm_Arriflex_LowAngle.mov', bin: 'Performance', duration: '00:01:48', frames: 2592, fps: 24, res: '3840x2160', color: '#a855f7', included: true },
@@ -1180,6 +1151,13 @@ const state = {
   fontScale: 105,
   posY: 52,
   cues: [],
+  // Auto-detect: measured from the clip's own audio, not guessed from a BPM box
+  lyricAnalysis: null,
+  lyricDetectMode: 'auto',   // auto | speech | music
+  lyricDetecting: false,
+  lyricTempoSource: 'default',
+  measuredAnalysis: null,   // last measurement from either tab
+  plateFile: null,
 
   // Media Pool Auto-Editor state
   directorMode: 'music_video',
@@ -1914,6 +1892,8 @@ function initSceneSwitcher() {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       const url = URL.createObjectURL(file);
+      state.plateFile = file;      // kept so the lyrics tab can listen to it
+      state.lyricAnalysis = null;  // a new clip means the old timing is gone
       videoEl.src = url;
       videoEl.pause();
       const trackAspect = () => {
@@ -2015,6 +1995,8 @@ function clearStage() {
   customImageEl = null;
   customImageInfo = null;
   lastPlateAspect = 0;
+  state.plateFile = null;
+  state.lyricAnalysis = null;
   state.scene = 'empty';
   state.isPlaying = false;
   state.playheadSec = 0;
@@ -2062,6 +2044,11 @@ function resetImageLabel() {
 // so every route ends up with the same state.
 function loadImageAsPlate(file) {
   if (!file) return Promise.resolve(null);
+  // A still has no audio: drop the previous clip's track so nothing is timed
+  // against footage that is no longer on the stage.
+  state.plateFile = null;
+  state.lyricAnalysis = null;
+  state.measuredAnalysis = null;
   if (!/^image\//.test(file.type) && !/\.(png|jpe?g|webp|tiff?|bmp|avif)$/i.test(file.name)) {
     showToast('That is not an image file', 'warn');
     return Promise.resolve(null);
@@ -2151,6 +2138,8 @@ function initMonitorDropZone() {
       }
       const vid = document.getElementById('customVideoElement');
       if (vid) {
+        state.plateFile = file;
+        state.lyricAnalysis = null;
         vid.src = URL.createObjectURL(file);
         if (state.motion && state.isPlaying) vid.play().catch(() => {});
         state.scene = 'custom_video';
@@ -3116,8 +3105,69 @@ function initSilenceTab() {
 
   document.getElementById('applySilenceCutBtn').addEventListener('click', executeSilenceCut);
 
+  const detectBtn = document.getElementById('silenceDetectBtn');
+  if (detectBtn) {
+    detectBtn.addEventListener('click', async () => {
+      const status = document.getElementById('silenceDetectStatus');
+      const say = (msg, kind) => {
+        if (status) { status.textContent = msg; status.dataset.kind = kind || 'idle'; }
+      };
+      if (!window.AudioLab) { say('The listening engine did not load — reload the page.', 'bad'); return; }
+      if (!lyricHasSource()) { say('Load a clip on the stage first — then I can hear where the talking stops.', 'warn'); showToast('Load a clip first'); return; }
+      detectBtn.disabled = true;
+      const label = detectBtn.textContent;
+      detectBtn.textContent = '◉ Listening…';
+      try {
+        say('Reading the clip…', 'busy');
+        const audio = await readPlateAudio((p) => {
+          if (p.phase === 'fallback') say('No decodable audio track — listening through the player once…', 'busy');
+          else say(p.phase === 'listening' ? `Listening… ${Math.round((p.pct || 0) * 100)}%` : 'Decoding the audio track…', 'busy');
+        });
+        const analysis = window.AudioLab.analyze(audio.samples, audio.sampleRate, {
+          mode: 'speech',
+          thresholdDb: state.silenceThresholdDb,
+          minMs: state.silenceMinMs,
+          padMs: state.silencePadMs
+        });
+        state.measuredAnalysis = analysis;
+        state.silenceSegments = segmentsFromAnalysis(analysis);
+        if (!state.totalDurSec) state.totalDurSec = analysis.durationSec;
+        renderSilenceSegments();
+        drawSilenceWaveform();
+        const dead = state.silenceSegments.filter((sg) => isSegmentCut(sg));
+        const deadSec = dead.reduce((a, sg) => a + (sg.end - sg.start), 0);
+        say(analysis.mode === 'silent'
+          ? 'That clip has no audible audio — there is nothing to cut.'
+          : `Measured ${analysis.speechSegments.length} talking runs and ${dead.length} pause${dead.length === 1 ? '' : 's'} (${deadSec.toFixed(1)}s of dead air at ${state.silenceThresholdDb} dB).`,
+        analysis.mode === 'silent' ? 'warn' : 'good');
+        showToast(dead.length ? `Found ${dead.length} pauses to cut` : 'No pauses longer than your minimum');
+      } catch (err) {
+        say(`Could not read that clip: ${err && err.message ? err.message : err}`, 'bad');
+        showToast('Could not read that clip');
+      } finally {
+        detectBtn.disabled = false;
+        detectBtn.textContent = label;
+      }
+    });
+  }
+
   renderSilenceSegments();
   drawSilenceWaveform();
+}
+
+function silenceTimelineDuration() {
+  const a = state.measuredAnalysis || state.lyricAnalysis;
+  if (a && a.durationSec > 0) return a.durationSec;
+  if (state.totalDurSec > 0) return state.totalDurSec;
+  const last = state.silenceSegments.reduce((a, s) => Math.max(a, s.end || 0), 0);
+  return last;
+}
+
+function formatClock(sec) {
+  const s = Math.max(0, Number(sec) || 0);
+  const m = Math.floor(s / 60);
+  const r = s - m * 60;
+  return `${String(m).padStart(2, '0')}:${r.toFixed(1).padStart(4, '0')}s`;
 }
 
 function isSegmentCut(seg) {
@@ -3131,10 +3181,16 @@ function renderSilenceSegments() {
   if (listEl && !state.silenceSegments.length) {
     // Nothing is detected until the user asks. Showing invented dead air would
     // get edits applied to footage that was never analysed.
-    listEl.innerHTML = '<p class="empty-hint">No analysis yet — load footage and press <b>Detect silence</b>. '
+    listEl.innerHTML = '<p class="empty-hint">No analysis yet — load footage and press <b>◉ Detect pauses</b>. '
       + 'Nothing is cut, and nothing is added to your timeline, until you do.</p>';
     const stat = document.getElementById('silenceSavedStat');
     if (stat) stat.textContent = '0.0s';
+    ['silenceOrigDur', 'silenceNewDur', 'silenceSavedPct'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '—';
+    });
+    const count = document.getElementById('silenceCutCount');
+    if (count) count.textContent = '0 cuts';
     return;
   }
   let keptSec = 0;
@@ -3163,14 +3219,15 @@ function renderSilenceSegments() {
     `;
   }).join('');
 
-  const orig = 36.0;
+  const orig = silenceTimelineDuration();
   const saved = Math.max(0, orig - keptSec);
-  const pct = Math.round((saved / orig) * 100);
+  const pct = orig > 0 ? Math.round((saved / orig) * 100) : 0;
 
-  document.getElementById('silenceOrigDur').textContent = `00:${orig.toFixed(1)}s`;
-  document.getElementById('silenceNewDur').textContent = `00:${keptSec.toFixed(1)}s`;
-  document.getElementById('silenceSavedPct').textContent = `${pct}% (-${saved.toFixed(1)}s)`;
-  document.getElementById('silenceCutCount').textContent = `${cutCount} cuts`;
+  // Never print a number this clip did not produce.
+  document.getElementById('silenceOrigDur').textContent = orig > 0 ? formatClock(orig) : '—';
+  document.getElementById('silenceNewDur').textContent = orig > 0 ? formatClock(keptSec) : '—';
+  document.getElementById('silenceSavedPct').textContent = orig > 0 ? `${pct}% (-${saved.toFixed(1)}s)` : '—';
+  document.getElementById('silenceCutCount').textContent = `${cutCount} cut${cutCount === 1 ? '' : 's'}`;
 
   listEl.querySelectorAll('.segment-row').forEach((row) => {
     row.addEventListener('click', () => {
@@ -3196,24 +3253,43 @@ function drawSilenceWaveform() {
   ctx.fillStyle = '#07090e';
   ctx.fillRect(0, 0, w, h);
 
-  const totalDur = 36.0;
+  const totalDur = silenceTimelineDuration();
+  if (!totalDur || !state.silenceSegments.length) {
+    ctx.fillStyle = '#5d676c';
+    ctx.font = '600 11px ui-monospace, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('No measurement yet — press ◉ Detect pauses above', w / 2, h / 2 + 4);
+    ctx.textAlign = 'left';
+    return;
+  }
+
+  // Cut / keep zones first, then the measured level on top of them.
   state.silenceSegments.forEach((seg) => {
     const x1 = (seg.start / totalDur) * w;
     const x2 = (seg.end / totalDur) * w;
     const cut = isSegmentCut(seg);
-
-    ctx.fillStyle = cut ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.08)';
+    ctx.fillStyle = cut ? 'rgba(168, 68, 59, 0.22)' : 'rgba(106, 196, 101, 0.07)';
     ctx.fillRect(x1, 0, x2 - x1, h);
-
-    const bars = Math.max(4, Math.floor((x2 - x1) / 4));
-    for (let i = 0; i < bars; i++) {
-      const bx = x1 + i * 4;
-      const normAmp = cut ? 0.11 : (0.42 + 0.45 * Math.abs(Math.sin(bx * 0.17 + i)));
-      const bh = normAmp * (h * 0.78);
-      ctx.fillStyle = cut ? '#ef4444' : '#e11d48';
-      ctx.fillRect(bx, (h - bh) / 2, 2.5, bh);
-    }
   });
+
+  const measured = state.measuredAnalysis || state.lyricAnalysis;
+  const db = measured && measured.features && measured.features.db;
+  if (db && db.length) {
+    // the shape is the clip's own level envelope, frame by frame
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < db.length; i++) { if (db[i] < lo) lo = db[i]; if (db[i] > hi) hi = db[i]; }
+    const span = Math.max(6, hi - lo);
+    const step = Math.max(1, Math.floor(db.length / Math.max(1, w)));
+    for (let x = 0; x < w; x++) {
+      const idx = Math.min(db.length - 1, Math.floor((x / w) * db.length));
+      const norm = Math.max(0.02, Math.min(1, (db[idx] - lo) / span));
+      const bh = norm * (h * 0.82);
+      const t = (x / w) * totalDur;
+      const seg = state.silenceSegments.find((sg) => t >= sg.start && t <= sg.end);
+      ctx.fillStyle = seg && isSegmentCut(seg) ? 'rgba(216, 118, 108, 0.55)' : '#e2e7ea';
+      ctx.fillRect(x, (h - bh) / 2, Math.max(1, w / Math.max(1, step)), bh);
+    }
+  }
 
   const normThresh = Math.min(0.9, Math.max(0.1, (state.silenceThresholdDb + 55) / 42));
   const ty = h - normThresh * (h * 0.8);
@@ -3338,26 +3414,43 @@ function initCaptionsTab() {
     state.backdropMode = e.target.value;
   });
 
-  document.getElementById('loadSampleLyricsBtn').addEventListener('click', () => {
-    rawInput.value = DEFAULT_LYRICS_TEXT;
-    state.scene = 'music_video';
-    syncLyricsToBeatCues();
-    showToast('Loaded Artist Music Video Hook Lyrics');
-  });
+  // ---- auto-detect: the listening controls ------------------------------
+  const detectBtn = document.getElementById('lyricsDetectBtn');
+  if (detectBtn) detectBtn.addEventListener('click', () => { lyricsDetect(); });
 
-  document.getElementById('loadSampleTalkingBtn').addEventListener('click', () => {
-    rawInput.value = DEFAULT_TALKING_TEXT;
-    state.scene = 'talking_head';
-    const hormozi = CAPTION_STYLES.find((s) => s.id === 'hormozi_pop');
-    if (hormozi) selectLyrcPreset(hormozi);
-    syncLyricsToBeatCues();
-    showToast('Loaded Talking-Head Brand Script');
-  });
+  const modeRow = document.getElementById('lyrcDetectModes');
+  if (modeRow) {
+    modeRow.addEventListener('click', (e) => {
+      const btn = e.target.closest('.lyrc-mode-btn');
+      if (!btn) return;
+      setLyricDetectMode(btn.dataset.lmode);
+    });
+  }
+
+  const transcriptBtn = document.getElementById('lyricsTranscriptBtn');
+  const transcriptInput = document.getElementById('lyricsTranscriptInput');
+  if (transcriptBtn && transcriptInput) {
+    transcriptBtn.addEventListener('click', () => transcriptInput.click());
+    transcriptInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      loadTranscriptFile(file);
+      e.target.value = '';
+    });
+  }
 
   rawInput.addEventListener('input', () => syncLyricsToBeatCues());
   document.getElementById('autoSyncLyricsBtn').addEventListener('click', () => {
+    if (!state.lyricAnalysis) {
+      lyricSetStatus('Press ◉ Detect from clip first — that measures the beat and the phrase positions on this clip.', 'warn');
+      showToast('Press Detect from clip first');
+      if (typeof syncLyricsToBeatCues === 'function') syncLyricsToBeatCues();
+      return;
+    }
     syncLyricsToBeatCues();
-    showToast(`Beat-synced ${state.cues.length} lyric phrases at ${state.bpm} BPM`);
+    const a = state.lyricAnalysis;
+    showToast(a.bpm
+      ? `Re-synced ${state.cues.length} blocks to ${a.bpm.toFixed(1)} BPM${state.lyricDetectMode === 'speech' ? '' : ' grid'}`
+      : `Re-synced ${state.cues.length} blocks to the speech positions`);
   });
 
   document.getElementById('capPrimaryColor').addEventListener('input', (e) => {
@@ -3375,6 +3468,11 @@ function initCaptionsTab() {
 
   document.getElementById('pushCaptionsResolveBtn').addEventListener('click', () => {
     syncLyricsToBeatCues();
+    if (!state.cues.some((c) => c.timed !== false && String(c.text || '').trim())) {
+      lyricSetStatus('Nothing timed to send yet — load a clip, press ◉ Detect from clip, then place it on the timeline.', 'warn');
+      showToast('Nothing timed to send yet');
+      return;
+    }
     renderTimelineTracks();
     dispatchToResolve('add_captions_lyrics', {
       presetId: state.captionStyle.id,
@@ -3457,49 +3555,397 @@ function renderCaptionStyleStrip() {
   });
 }
 
-function syncLyricsToBeatCues() {
-  const raw = document.getElementById('lyricsRawInput').value || '';
-  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-  const slotDur = state.totalDurSec / Math.max(1, lines.length);
+// ---------------------------------------------------------------------------
+// The cue list — real times, editable in place
+// ---------------------------------------------------------------------------
+function cueTimeLabel(c) {
+  if (c.timed === false) return 'not timed';
+  return `${c.startSec.toFixed(1)}–${c.endSec.toFixed(1)}s`;
+}
 
-  state.cues = lines.map((text, idx) => ({
-    index: idx + 1,
-    startSec: Number((idx * slotDur).toFixed(2)),
-    endSec: Number(((idx + 1) * slotDur).toFixed(2)),
-    text
-  }));
+function escapeAttr(text) {
+  return String(text == null ? '' : text)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
-  document.getElementById('cueCountBadge').textContent = `${state.cues.length} Phrases`;
+function renderCueList() {
+  const listEl = document.getElementById('captionCuesList');
+  if (!listEl) return;
+  const badge = document.getElementById('cueCountBadge');
+  const n = state.cues.length;
+  if (badge) badge.textContent = `${n} ${n === 1 ? 'Block' : 'Blocks'}`;
 
-  if (!lines.length) {
-    const emptyList = document.getElementById('captionCuesList');
-    if (emptyList) {
-      emptyList.innerHTML = '<p class="empty-hint">No lyrics yet — paste them above and each line becomes a timed block.</p>';
-    }
+  if (!n) {
+    listEl.innerHTML = '<p class="empty-hint">Nothing timed yet. Load a clip on the stage and press <strong>◉ Detect from clip</strong>, or type your lines on the left — one line per phrase.</p>';
+    return;
   }
 
-  const listEl = document.getElementById('captionCuesList');
   listEl.innerHTML = state.cues.map((c) => `
-    <div class="cue-item" data-start="${c.startSec}">
-      <span class="cue-time">${c.startSec.toFixed(1)}s – ${c.endSec.toFixed(1)}s</span>
-      <span class="cue-text">${c.text}</span>
+    <div class="cue-item${c.placeholder ? ' is-empty' : ''}${c.timed === false ? ' is-untimed' : ''}"
+         data-index="${c.index}" data-start="${c.startSec}">
+      <button class="cue-time" data-start="${c.startSec}" ${c.timed === false ? 'disabled' : ''}
+              title="${c.timed === false ? 'No timing yet' : 'Jump the playhead to this block'}">${cueTimeLabel(c)}</button>
+      <input class="cue-input" data-index="${c.index}" value="${escapeAttr(c.text)}"
+             placeholder="${c.placeholder ? 'type what was said here' : 'caption text'}"
+             title="Type over this block — the timing stays" />
+      <span class="cue-dur">${c.timed === false ? '—' : `${Math.max(0, c.endSec - c.startSec).toFixed(1)}s`}</span>
     </div>
   `).join('');
 
-  listEl.querySelectorAll('.cue-item').forEach((item) => {
-    item.addEventListener('click', () => {
-      state.playheadSec = Number(item.dataset.start) + 0.1;
+  listEl.querySelectorAll('.cue-time').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const at = Number(btn.dataset.start);
+      if (!Number.isFinite(at)) return;
+      if (typeof seekTo === 'function') seekTo(at + 0.03);
+      else state.playheadSec = at + 0.03;
     });
   });
 
-  // Lyric blocks belong on the timeline only while lyrics are actually on.
+  listEl.querySelectorAll('.cue-input').forEach((input) => {
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('input', () => {
+      const cue = state.cues.find((c) => String(c.index) === input.dataset.index);
+      if (!cue) return;
+      cue.text = input.value;
+      cue.placeholder = false;
+      // keep the word timings in step with what was typed
+      if (window.AudioLab && cue.timed !== false) {
+        cue.words = window.AudioLab.wordTimes(cue.text, cue.startSec, cue.endSec, 0.25);
+      }
+      lyricPushTimeline();
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    });
+  });
+}
+
+function lyricPushTimeline() {
   const cueSpan = Math.max(1, state.totalDurSec || 1);
-  state.timelineTracks.sub = state.showLyricsOverlay ? state.cues.map((c) => ({
-    left: Math.round((c.startSec / cueSpan) * 100),
-    width: Math.max(6, Math.round(((c.endSec - c.startSec) / cueSpan) * 100) - 1),
-    label: `${state.captionStyle.name}: ${c.text}`
-  })) : [];
+  state.timelineTracks.sub = state.showLyricsOverlay ? state.cues
+    .filter((c) => c.timed !== false)
+    .map((c) => ({
+      left: Math.round((c.startSec / cueSpan) * 100),
+      width: Math.max(6, Math.round(((c.endSec - c.startSec) / cueSpan) * 100) - 1),
+      label: `${state.captionStyle.name}: ${c.text || '(untitled block)'}`
+    })) : [];
   renderTimelineTracks();
+}
+
+// ---------------------------------------------------------------------------
+// Timing: measured when there is audio, honest when there is not
+// ---------------------------------------------------------------------------
+function lyricLines() {
+  const raw = (document.getElementById('lyricsRawInput').value || '');
+  return raw.split('\n').map((l) => l.trim()).filter(Boolean);
+}
+
+function syncLyricsToBeatCues() {
+  const lines = lyricLines();
+  const Lib = window.AudioLab;
+  const a = state.lyricAnalysis;
+  const fallbackMode = state.scene === 'talking_head' ? 'speech' : 'music';
+
+  if (Lib && a && a.mode !== 'silent') {
+    const mode = a.mode === 'speech' ? 'speech' : 'music';
+    if (lines.length) {
+      state.cues = Lib.cuesFromLines(lines, a, { mode });
+    } else {
+      // No transcript yet: one block per thing that was actually said.
+      state.cues = Lib.cuesFromPhrases(a).map((c) => ({ ...c, timed: true }));
+    }
+    if (a.bpm && state.lyricTempoSource !== 'detected') {
+      state.bpm = Math.round(a.bpm * 10) / 10;
+      state.lyricTempoSource = 'detected';
+    }
+  } else if (lines.length) {
+    // No analysis: spread evenly, over a real duration. Never invent 0.0s blocks.
+    const span = state.totalDurSec > 0 ? state.totalDurSec : 0;
+    const weighted = lines.map((text) => Math.max(1, text.split(/\s+/).filter(Boolean).length));
+    const totalW = weighted.reduce((x, y) => x + y, 0);
+    let cursor = 0;
+    state.cues = lines.map((text, idx) => {
+      const share = weighted[idx] / totalW;
+      const cue = {
+        index: idx + 1,
+        text,
+        startSec: span > 0 ? +(cursor * span).toFixed(2) : 0,
+        endSec: span > 0 ? +((cursor + share) * span).toFixed(2) : 0,
+        timed: span > 0,
+        words: []
+      };
+      if (span > 0 && Lib) cue.words = Lib.wordTimes(text, cue.startSec, cue.endSec, 0.25);
+      cursor += share;
+      return cue;
+    });
+  } else {
+    state.cues = [];
+  }
+
+  renderCueList();
+  lyricPushTimeline();
+  const hint = document.getElementById('lyricsTabHint');
+  if (hint && state.cues.length) {
+    const timed = state.cues.filter((c) => c.timed !== false);
+    hint.textContent = timed.length
+      ? `${timed.length} timed block${timed.length === 1 ? '' : 's'} from this clip${state.lyricAnalysis && state.lyricAnalysis.bpm ? ` · ${state.lyricAnalysis.bpm.toFixed(1)} BPM` : ''}`
+      : `Hidden — your footage plays clean. Turn it on when you want the typography.`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-detect — the listening itself
+// ---------------------------------------------------------------------------
+function lyricSetStatus(message, kind, pct) {
+  const el = document.getElementById('lyrcDetectStatus');
+  if (el) {
+    el.textContent = message;
+    el.dataset.kind = kind || 'idle';
+  }
+  const bar = document.getElementById('lyrcDetectProgress');
+  if (bar) bar.style.width = `${pct === undefined || pct === null ? 0 : Math.round(Math.max(0, Math.min(1, pct)) * 100)}%`;
+}
+
+function lyricSetChips(items) {
+  const box = document.getElementById('lyrcDetectChips');
+  if (!box) return;
+  box.innerHTML = (items || [])
+    .map((c) => `<span class="lyrc-chip${c.tone ? ` is-${c.tone}` : ''}">${c.text}</span>`)
+    .join('');
+}
+
+function lyricHasSource() {
+  if (state.plateFile) return true;
+  const vid = document.getElementById('customVideoElement');
+  return !!(vid && typeof videoHasSource === 'function' && videoHasSource(vid));
+}
+
+function lyricDescribe(a) {
+  const bits = [];
+  if (a.mode === 'silent') return 'That clip has no audible audio — nothing to detect.';
+  if (a.mode === 'music') {
+    bits.push(a.bpm ? `Music, ${a.bpm.toFixed(1)} BPM` : 'Music, no steady pulse');
+    bits.push(`${a.vocalSegments.length} vocal entr${a.vocalSegments.length === 1 ? 'y' : 'ies'}`);
+  } else {
+    bits.push('Talking');
+    bits.push(`${a.speechSegments.length} speech phrase${a.speechSegments.length === 1 ? '' : 's'}`);
+    bits.push(`${a.speechTimeSec.toFixed(1)} s of speech`);
+  }
+  bits.push(`${a.silences.length} pause${a.silences.length === 1 ? '' : 's'}`);
+  return bits.join(' · ');
+}
+
+// Measure the clip and place the words. Split out from the file plumbing so the
+// same path runs whether the audio was decoded from a file or captured live.
+function lyricAnalyzeAudio(audio) {
+  const Lib = window.AudioLab;
+  // A 60-minute file would lock the page while it crunched. Cap the pass and say
+  // so, rather than silently hanging: the first 15 minutes are what a reel needs.
+  const MAX_ANALYSIS_SEC = 900;
+  let truncated = false;
+  if (audio.samples.length > MAX_ANALYSIS_SEC * audio.sampleRate) {
+    audio = {
+      ...audio,
+      samples: audio.samples.subarray(0, MAX_ANALYSIS_SEC * audio.sampleRate),
+      durationSec: MAX_ANALYSIS_SEC
+    };
+    truncated = true;
+  }
+  const analysis = Lib.analyze(audio.samples, audio.sampleRate, {
+    mode: state.lyricDetectMode,
+    thresholdDb: state.silenceThresholdDb,
+    minMs: state.silenceMinMs,
+    padMs: state.silencePadMs
+  });
+  analysis.source = audio.source || 'decoded';
+  analysis.truncated = truncated;
+  analysis.analyzedAt = Date.now();
+  state.lyricAnalysis = analysis;
+  state.measuredAnalysis = analysis;
+
+  if (analysis.durationSec > 0 && (!state.totalDurSec || state.totalDurSec < 0.1)) {
+    state.totalDurSec = analysis.durationSec;
+  }
+  if (analysis.bpm) {
+    state.bpm = Math.round(analysis.bpm * 10) / 10;
+    state.lyricTempoSource = 'detected';
+  }
+
+  // The cut tools read the same measurement instead of their own guess.
+  state.silenceSegments = segmentsFromAnalysis(analysis);
+  renderSilenceSegments();
+  drawSilenceWaveform();
+
+  const chips = [];
+  if (analysis.mode === 'silent') {
+    chips.push({ text: 'No audio', tone: 'bad' });
+  } else {
+    chips.push({ text: analysis.mode === 'music' ? 'Music' : 'Speech', tone: 'good' });
+    if (analysis.bpm) chips.push({ text: `${analysis.bpm.toFixed(1)} BPM` });
+    if (analysis.mode === 'music') chips.push({ text: `${analysis.vocalSegments.length} vocal entries` });
+    else chips.push({ text: `${analysis.speechSegments.length} phrases` });
+    chips.push({ text: `${analysis.silences.length} pauses` });
+    chips.push({ text: `${analysis.durationSec.toFixed(1)} s` });
+    if (analysis.truncated) chips.push({ text: 'first 15 min only', tone: 'warn' });
+    if (analysis.requestedMode === 'auto' && analysis.modeConfidence < 0.5) {
+      chips.push({ text: 'not sure — pick a mode', tone: 'warn' });
+    }
+  }
+  lyricSetChips(chips);
+
+  const hadLines = lyricLines().length > 0;
+  syncLyricsToBeatCues();
+  lyricSetStatus(
+    hadLines
+      ? `${lyricDescribe(analysis)}. Your lines are placed on those positions — check the blocks and fix the text if a line landed early.`
+      : `${lyricDescribe(analysis)}. Each block is a place where something was said — click one and type it.`,
+    analysis.mode === 'silent' ? 'warn' : 'good',
+    1
+  );
+  return analysis;
+}
+
+// One place that knows how to get audio out of the stage: decode the file the
+// user dropped, and if that is impossible, listen through the player once.
+async function readPlateAudio(onPhase) {
+  const Lib = window.AudioLab;
+  if (state.plateFile) {
+    try {
+      return await Lib.decodeFile(state.plateFile, onPhase);
+    } catch (err) {
+      onPhase({ phase: 'fallback', pct: 0.2 });
+    }
+  }
+  return Lib.captureFromElement(document.getElementById('customVideoElement'), onPhase);
+}
+
+// Whole-clip segment map: talking runs and dead air, in order, covering the
+// entire clip. The silence cutter reads this instead of inventing segments.
+function segmentsFromAnalysis(analysis) {
+  const total = analysis.durationSec || 0;
+  const out = [];
+  let cursor = 0;
+  (analysis.silences || []).forEach((seg) => {
+    const s = Math.max(cursor, Math.min(total, seg.startSec));
+    const e = Math.max(s, Math.min(total, seg.endSec));
+    if (s - cursor > 0.04) out.push({ type: 'speech', start: +cursor.toFixed(2), end: +s.toFixed(2), db: -14 });
+    if (e - s > 0.04) out.push({ type: 'silence', start: +s.toFixed(2), end: +e.toFixed(2), db: Math.round(seg.avgDb) });
+    cursor = e;
+  });
+  if (total - cursor > 0.04) out.push({ type: 'speech', start: +cursor.toFixed(2), end: +total.toFixed(2), db: -14 });
+  return out.map((seg, i) => ({
+    id: i + 1,
+    start: seg.start,
+    end: seg.end,
+    db: seg.db,
+    type: seg.type,
+    forceKeep: false,
+    label: seg.type === 'silence'
+      ? `Dead air (${(seg.end - seg.start).toFixed(1)}s)`
+      : `Talking ${out.slice(0, i + 1).filter((x) => x.type === 'speech').length}`
+  }));
+}
+
+async function lyricsDetect() {
+  const Lib = window.AudioLab;
+  if (state.lyricDetecting) return;
+  if (!Lib) {
+    lyricSetStatus('The listening engine did not load — reload the page.', 'bad');
+    return;
+  }
+  if (!lyricHasSource()) {
+    lyricSetStatus('Load a clip on the stage first, then press Detect — I need something to listen to.', 'warn');
+    showToast('Load a clip on the stage first');
+    return;
+  }
+
+  state.lyricDetecting = true;
+  const btn = document.getElementById('lyricsDetectBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('is-busy');
+    btn.textContent = '◉ Listening…';
+  }
+  lyricSetChips([]);
+  const wasPlaying = !!state.isPlaying;
+  const wasAt = state.playheadSec;
+
+  try {
+    lyricSetStatus('Reading the clip…', 'busy', 0.06);
+    const audio = await readPlateAudio((p) => {
+      if (p.phase === 'reading') lyricSetStatus('Reading the clip…', 'busy', p.pct);
+      else if (p.phase === 'decoding') lyricSetStatus('Decoding the audio track…', 'busy', p.pct);
+      else if (p.phase === 'fallback') lyricSetStatus('No decodable audio track — listening through the player once instead…', 'busy', 0.2);
+      else lyricSetStatus('Listening through the player…', 'busy', 0.2 + (p.pct || 0) * 0.6);
+    });
+
+    if (!audio || !audio.samples || !audio.samples.length) {
+      throw new Error('no audio samples came out of that clip');
+    }
+
+    lyricSetStatus('Finding words, beats and pauses…', 'busy', 0.82);
+    await new Promise((r) => setTimeout(r, 16));
+    const analysis = lyricAnalyzeAudio(audio);
+    state.isPlaying = wasPlaying;
+    state.playheadSec = wasAt;
+    showToast(analysis.mode === 'silent'
+      ? 'No audio in that clip'
+      : `Detected ${state.cues.length} timed block${state.cues.length === 1 ? '' : 's'}`);
+  } catch (err) {
+    lyricSetStatus(`Could not read that clip: ${err && err.message ? err.message : err}. If it is a very large file, trim it first.`, 'bad');
+    showToast('Auto-detect could not read that clip');
+  } finally {
+    state.lyricDetecting = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('is-busy');
+      btn.textContent = '◉ Detect from clip';
+    }
+  }
+}
+
+function setLyricDetectMode(mode) {
+  state.lyricDetectMode = mode;
+  document.querySelectorAll('#lyrcDetectModes .lyrc-mode-btn').forEach((b) => {
+    const on = b.dataset.lmode === mode;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  if (state.lyricAnalysis) {
+    // re-run only the placement, not the listening
+    const a = state.lyricAnalysis;
+    a.mode = mode === 'auto' ? a.mode : mode;
+    a.requestedMode = mode;
+    syncLyricsToBeatCues();
+    lyricSetStatus(lyricDescribe(a), 'good', 1);
+  }
+}
+
+function loadTranscriptFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = String(reader.result || '');
+    const looksSrt = /-->/.test(text);
+    const lines = looksSrt
+      ? text.split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && !/^\d+$/.test(l) && !/-->/.test(l) && !/^WEBVTT/i.test(l))
+      : text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) {
+      lyricSetStatus('That file had no lines in it.', 'warn');
+      return;
+    }
+    document.getElementById('lyricsRawInput').value = lines.join('\n');
+    syncLyricsToBeatCues();
+    lyricSetStatus(looksSrt
+      ? `Loaded ${lines.length} subtitle lines from "${file.name}". Press ◉ Detect from clip to retime them to this clip.`
+      : `Loaded ${lines.length} lines from "${file.name}". Press ◉ Detect from clip to time them to the audio.`,
+      'good', state.lyricAnalysis ? 1 : 0);
+    showToast(`Loaded ${lines.length} lines from ${file.name}`);
+  };
+  reader.readAsText(file);
 }
 
 function downloadSrtFile() {
@@ -3511,7 +3957,13 @@ function downloadSrtFile() {
     const h = Math.floor(totalS / 3600);
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
   };
-  const srt = state.cues.map((c) => `${c.index}\n${formatSrtTime(c.startSec)} --> ${formatSrtTime(c.endSec)}\n${c.text}\n`).join('\n');
+  const timed = state.cues.filter((c) => c.timed !== false && String(c.text || '').trim());
+  if (!timed.length) {
+    lyricSetStatus('There is nothing timed to export yet — load a clip, press ◉ Detect from clip, then export.', 'warn');
+    showToast('Nothing timed to export yet');
+    return;
+  }
+  const srt = timed.map((c, i) => `${i + 1}\n${formatSrtTime(c.startSec)} --> ${formatSrtTime(c.endSec)}\n${c.text}\n`).join('\n');
   const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -11092,8 +11544,22 @@ function drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse) {
   if (words.length === 0) return;
 
   const phraseProgress = Math.max(0, Math.min(0.999, (state.playheadSec - activeCue.startSec) / Math.max(0.25, activeCue.endSec - activeCue.startSec)));
-  const activeIdx = Math.floor(phraseProgress * words.length);
-  const wordSubProgress = (phraseProgress * words.length) % 1;
+  let activeIdx = Math.floor(phraseProgress * words.length);
+  let wordSubProgress = (phraseProgress * words.length) % 1;
+  // When the timing was measured from the audio, every word already has its own
+  // start time -- so the highlight lands on the word instead of on an even slice
+  // of the cue. This is what makes a lyric line read as sung, not as typed.
+  if (activeCue.timed !== false && activeCue.words && activeCue.words.length === words.length) {
+    let idx = 0;
+    for (let k = 0; k < activeCue.words.length; k++) {
+      if (state.playheadSec >= activeCue.words[k].startSec) idx = k;
+    }
+    const cur = activeCue.words[idx];
+    activeIdx = idx;
+    wordSubProgress = cur
+      ? Math.max(0, Math.min(1, (state.playheadSec - cur.startSec) / Math.max(0.08, cur.endSec - cur.startSec)))
+      : 0;
+  }
 
   const styleId = state.captionStyle.id;
   const baseScale = state.fontScale / 100;
@@ -11608,6 +12074,19 @@ function initWireStrip() {
 if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
   window.PulseTest = {
     state,
+    // lyrics auto-detect (the listening engine itself lives in audio-lab.js)
+    lyricsDetect,
+    lyricAnalyzeAudio,
+    lyricDescribe,
+    syncLyricsToBeatCues,
+    setLyricDetectMode,
+    loadTranscriptFile,
+    renderCueList,
+    segmentsFromAnalysis,
+    renderSilenceSegments,
+    drawSilenceWaveform,
+    isSegmentCut,
+
     maskSolveFromPixels,
     maskClickSelect,
     maskLuma,

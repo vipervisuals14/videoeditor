@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'dist-web');
 
-const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'depth.js', 'depth-live-worker.js', 'depth-ai-worker.js', 'render.js', 'lua-export.js'];
+const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'depth.js', 'audio-lab.js', 'depth-live-worker.js', 'depth-ai-worker.js', 'render.js', 'lua-export.js'];
 
 // The AI depth model + ONNX Runtime, copied verbatim. They are large (40 MB) and
 // deliberately not part of PUBLIC_FILES: only the depth tab ever asks for them,
@@ -37,7 +37,7 @@ const VENDOR_FILES = [
 function rewriteHtml(html, stamp) {
   // The cache-buster matters: a browser holding yesterday's app.js shows a bug
   // that was fixed, and there is no way to tell from the page.
-  const assets = '(styles\\.css|app\\.js|touchdesigner\\.js|depth\\.js|render\\.js|lua-export\\.js)';
+  const assets = '(styles\\.css|app\\.js|touchdesigner\\.js|depth\\.js|audio-lab\\.js|render\\.js|lua-export\\.js)';
   return html
     .replace(new RegExp('(href|src)="\\/?' + assets + '(\\?v=[^"]*)?"', 'g'), '$1="$2?v=' + stamp + '"')
     .replace(/\/download\/bridge\.lua/g, 'VFXKit_ResolveFree_Bridge.lua')

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine</title>
-  <link rel="stylesheet" href="styles.css?v=mvj9ftil" />
+  <link rel="stylesheet" href="styles.css?v=mvjbmmqx" />
 </head>
 <body>
  <div class="app-window">
@@ -435,6 +435,32 @@
                     title="Show or hide LYRC typography on the Live Preview and in exports">Lyrics on monitor: OFF</button>
           </div>
 
+          <!-- AUTO-DETECT: listen to the clip, place the words ------------------>
+          <div class="lyrc-detect-bar" id="lyrcDetectBar">
+            <div class="lyrc-detect-row">
+              <div class="lyrc-detect-modes" id="lyrcDetectModes" role="group" aria-label="What kind of clip is this">
+                <button class="lyrc-mode-btn active" data-lmode="auto" aria-pressed="true"
+                        title="Work it out from the audio: a talking head has pauses, music has a pulse">Auto</button>
+                <button class="lyrc-mode-btn" data-lmode="speech" aria-pressed="false"
+                        title="Force the talking-head path: find speech phrases, then time your lines to them">Talking head</button>
+                <button class="lyrc-mode-btn" data-lmode="music" aria-pressed="false"
+                        title="Force the music path: find the beat grid and the vocal entries">Music video</button>
+              </div>
+              <button class="btn-primary lyrc-detect-btn" id="lyricsDetectBtn"
+                      title="Read the audio track of the clip on the stage and place the words where they were said">
+                ◉ Detect from clip
+              </button>
+              <button class="btn-secondary" id="lyricsTranscriptBtn"
+                      title="Load a transcript you already have (.srt, .txt or .vtt) and time it to this clip">Load .srt / .txt</button>
+              <input type="file" id="lyricsTranscriptInput" accept=".srt,.txt,.vtt,text/plain" hidden />
+            </div>
+            <div class="lyrc-detect-meta">
+              <span class="lyrc-detect-status" id="lyrcDetectStatus" data-kind="idle">Load a clip on the stage, then press Detect — it listens to the clip itself, nothing is uploaded.</span>
+              <div class="lyrc-detect-track"><i id="lyrcDetectProgress"></i></div>
+            </div>
+            <div class="lyrc-detect-chips" id="lyrcDetectChips"></div>
+          </div>
+
           <!-- LYRC SONG TEMPLATE & VARIATION BAR -->
           <div class="lyrc-template-bar">
             <div class="lyrc-template-info">
@@ -505,14 +531,13 @@
           <div class="caption-editor-split">
             <div class="caption-input-col">
               <div class="col-header">
-                <span id="captionInputLabel">Paste Song Lyrics or Transcript (1 line per phrase)</span>
+                <span id="captionInputLabel">Your words — one line per phrase (paste, or load a .srt)</span>
                 <div style="display:flex; gap:5px;">
-                  <button class="btn-mini" id="loadSampleLyricsBtn">Song Hook</button>
-                  <button class="btn-mini" id="loadSampleTalkingBtn">Brand Script</button>
-                  <button class="btn-mini accent" id="autoSyncLyricsBtn">Sync to Beats</button>
+                  <button class="btn-mini accent" id="autoSyncLyricsBtn"
+                          title="Re-place these lines on the measured beats / speech phrases without listening again">Re-sync to grid</button>
                 </div>
               </div>
-              <textarea id="lyricsRawInput" class="lyrics-textarea" rows="6" placeholder="Paste your lyrics here — one line per phrase"></textarea>
+              <textarea id="lyricsRawInput" class="lyrics-textarea" rows="6" placeholder="Paste the song lyrics, or the script you read to camera — one line per phrase. Press ◉ Detect from clip above and each line lands on the beat / speech phrase it belongs to."></textarea>
               <div class="caption-customizers">
                 <label class="color-Field">
                   <span>Primary Text</span>
@@ -535,8 +560,8 @@
 
             <div class="caption-cues-col">
               <div class="col-header">
-                <span>Timed Lyric Blocks & Beat Cuts (Click to preview)</span>
-                <span class="cue-count" id="cueCountBadge">8 Phrases</span>
+                <span>Timed blocks — click the time to jump, type over the text to fix a word</span>
+                <span class="cue-count" id="cueCountBadge">0 Blocks</span>
               </div>
               <div class="cues-scroll" id="captionCuesList"></div>
             </div>
@@ -554,8 +579,15 @@
               <h3>Smart Silence & Dead-Air Cutter</h3>
               <p>Strips pauses from talking-head brand videos & vlogs and rebuilds a tight subclip timeline in Resolve Free 21.1.1.</p>
             </div>
-            <button class="btn-primary" id="applySilenceCutBtn">Cut Silences in Resolve</button>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="silenceDetectBtn"
+                      title="Listen to the clip on the stage and measure where the talking stops">◉ Detect pauses</button>
+              <button class="btn-primary" id="applySilenceCutBtn">Cut Silences in Resolve</button>
+            </div>
           </div>
+
+          <p class="lyrc-detect-status" id="silenceDetectStatus" data-kind="idle"
+             style="margin:0 0 10px;">Nothing measured yet — load a clip on the stage and press ◉ Detect pauses. The cutter only ever cuts what it has actually heard.</p>
 
           <div class="stats-strip">
             <div class="stat-box">
@@ -1125,10 +1157,11 @@
 
  </div>
 
-  <script src="lua-export.js?v=mvj9ftil"></script>
-  <script src="touchdesigner.js?v=mvj9ftil"></script>
-  <script src="depth.js?v=mvj9ftil"></script>
-  <script src="render.js?v=mvj9ftil"></script>
-  <script src="app.js?v=mvj9ftil"></script>
+  <script src="audio-lab.js?v=mvjbmmqx"></script>
+  <script src="lua-export.js?v=mvjbmmqx"></script>
+  <script src="touchdesigner.js?v=mvjbmmqx"></script>
+  <script src="depth.js?v=mvjbmmqx"></script>
+  <script src="render.js?v=mvjbmmqx"></script>
+  <script src="app.js?v=mvjbmmqx"></script>
 </body>
 </html>

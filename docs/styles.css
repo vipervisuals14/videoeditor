@@ -5406,3 +5406,146 @@ body:has(.workspace.compact-dock) { grid-template-columns: 460px minmax(0, 1fr);
   letter-spacing: 0.02em;
   color: var(--blue);
 }
+
+/* ===========================================================================
+ * LYRICS AUTO-DETECT — the listening bar
+ * A measurement panel, not a marketing panel: mode, action, status, evidence.
+ * =========================================================================*/
+#tab-captions .lyrc-detect-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: #12161a;
+  border: 1px solid #000;
+  border-radius: 7px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+#tab-captions .lyrc-detect-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+#tab-captions .lyrc-detect-modes {
+  display: inline-flex;
+  padding: 2px;
+  background: #0b0e11;
+  border: 1px solid #000;
+  border-radius: 6px;
+}
+#tab-captions .lyrc-mode-btn {
+  padding: 7px 11px;
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7d888d;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+#tab-captions .lyrc-mode-btn:hover { color: var(--paper); }
+#tab-captions .lyrc-mode-btn.active {
+  color: #eaf4fb;
+  background: #22303b;
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+#tab-captions .lyrc-detect-btn { flex: 0 0 auto; }
+#tab-captions .lyrc-detect-btn.is-busy { opacity: 0.75; cursor: progress; }
+#tab-captions .lyrc-detect-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+#tab-captions .lyrc-detect-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: 500 10.5px/1.45 var(--font-mono);
+  color: #98a3a8;
+}
+#tab-captions .lyrc-detect-status[data-kind="good"] { color: #9fd0a6; }
+#tab-captions .lyrc-detect-status[data-kind="warn"] { color: #d9b169; }
+#tab-captions .lyrc-detect-status[data-kind="bad"] { color: #d98b83; }
+#tab-captions .lyrc-detect-track {
+  flex: 0 0 96px;
+  height: 4px;
+  background: #0b0e11;
+  border-radius: 999px;
+  overflow: hidden;
+}
+#tab-captions .lyrc-detect-track i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #2f6f96, var(--blue));
+  transition: width 0.18s linear;
+}
+#tab-captions .lyrc-detect-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+#tab-captions .lyrc-chip {
+  padding: 3px 7px;
+  font: 700 9px/1.3 var(--font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #9aa4a9;
+  background: #191e22;
+  border: 1px solid #000;
+  border-radius: 4px;
+}
+#tab-captions .lyrc-chip.is-good { color: #b8e0bd; background: #18231a; }
+#tab-captions .lyrc-chip.is-warn { color: #dcc08a; background: #221d13; }
+#tab-captions .lyrc-chip.is-bad { color: #e0a49c; background: #241716; }
+
+/* the timed blocks: a time button you can click, and a text field you can type in */
+#tab-captions .cue-item {
+  justify-content: flex-start;
+  gap: 7px;
+  cursor: default;
+}
+#tab-captions .cue-item.is-empty {
+  border-style: dashed;
+  border-color: rgba(76, 159, 216, 0.4);
+}
+#tab-captions .cue-item.is-untimed { opacity: 0.65; }
+#tab-captions .cue-time {
+  flex: 0 0 auto;
+  min-width: 84px;
+  padding: 4px 6px;
+  font: 700 9.5px/1 var(--font-mono);
+  color: #9ecbe8;
+  background: #10161a;
+  border: 1px solid #000;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+#tab-captions .cue-time:hover:not(:disabled) { color: #eaf4fb; background: #1d2a33; }
+#tab-captions .cue-time:disabled { color: #6b7579; cursor: default; }
+#tab-captions .cue-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  font: 600 11.5px/1.3 var(--font-sans, -apple-system, BlinkMacSystemFont, sans-serif);
+  color: var(--paper);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+#tab-captions .cue-input:hover { border-color: #2b343a; }
+#tab-captions .cue-input:focus {
+  outline: none;
+  border-color: rgba(76, 159, 216, 0.7);
+  background: #0d1216;
+}
+#tab-captions .cue-input::placeholder { color: #5d676c; font-weight: 500; }
+#tab-captions .cue-dur {
+  flex: 0 0 auto;
+  font: 500 9px/1 var(--font-mono);
+  color: #6b7579;
+}
