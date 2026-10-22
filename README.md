@@ -246,6 +246,31 @@ bridge did not answer.
 
 ---
 
+## Magic Mask (Resolve Free has no Magic Mask — so the panel builds one)
+
+`05 • Magic Mask` reproduces the Studio-only click-to-matte workflow and ships the result as
+native Fusion nodes:
+
+| Step in the panel | What Resolve receives |
+|---|---|
+| `✦ Magic Select` click on the Live Preview | `Polygon` node carrying the traced outline (up to 48 points) |
+| `＋ Add` / `－ Subtract` brush strokes | `Paint` node with `ApplyBrush` add/subtract strokes |
+| `Feather` + `Edge softness` | `Blur` node sized in pixels next to the polygon |
+| `Invert` | `MatteControl` with `Invert` flipped |
+| `Matte opacity` + tracked frames | `Merge` node, `Blend` driven by `BezierSpline` keyframes |
+| `Track forward ▶` / `◀ Track back` | one red `MASK TRACK` marker per tracked frame |
+
+The selection itself is a colour + edge flood grow from the clicked pixels (`subject`, `skin`,
+`sky`, `luma`, `colour` predicates), then morphology (grow/shrink) and a separable box blur for
+the feathered edge. It runs at 160×90 for speed and upscales cleanly because the exported matte
+is a polygon spline, not a bitmap.
+
+**Coordinate note:** the panel works in screen space (origin top-left); every exported point is
+flipped to Fusion space (`y = 1 - y`, origin bottom-left) before it leaves the browser.
+
+Everything is exercised without Resolve: `tools/test_bridge.py` drives `mask_apply` through the
+real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over HTTP.
+
 ## Verification harnesses
 
 | Suite | Command | Result |

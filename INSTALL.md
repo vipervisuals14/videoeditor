@@ -217,7 +217,7 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 
 ---
 
-## Part 9 — The other three tabs
+## Part 9 — The five tabs
 
 **`02 • LYRC Typography`** — 20 kinetic lyric styles (Bold / Layered / Minimal / Talking).
 
@@ -237,6 +237,30 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 - **`Scan Resolve Media Pool`** reads the bins and clips in your open project.
 - **`Auto-Cut Timeline Now`** assembles a new timeline: beat-synced for music videos, or a
   rough vlog cut for talking heads.
+
+**`05 • Magic Mask`** — cut a person or object out of the shot, like Resolve's Magic Mask.
+
+That tool is Studio-only (it is one of the things the $295 unlocks), so this tab builds the same
+matte here and hands Resolve a real Fusion graph.
+
+1. Open the tab and leave **`✦ Magic Select`** highlighted.
+2. Click your subject once, right on the **Live Preview** picture. A red outline appears with
+   a dark frame around it — that is your matte. The coverage number tells you how much of the
+   picture it caught.
+3. Wrong bits? Click **`－ Subtract`** and paint over them. Missed bits? Click **`＋ Add`** and
+   paint them in. **`▭ Box`** is the quick way to just grab a rectangle.
+4. Tidy the edge with **`Feather`** (softness) and **`Grow / shrink`** (eats in or spills out).
+   **`Select sensitivity`** decides how picky the click is — raise it if the matte stops short,
+   lower it if it leaks onto the wall.
+5. Press **`Track forward ▶`** and it follows the subject across the next frames. **`◀ Track back`**
+   does the same backwards. **`＋ Keyframe`** pins the matte at the playhead.
+6. Press **`Send Mask to Resolve`**. Resolve gets `Paint → Polygon → Blur → MatteControl → Merge`
+   with BezierSpline keyframes. In the browser version you paste the snippet it copies.
+
+The **`Person` / `Skin` / `Sky` / `Brightness` / `Colour`** buttons change what the click looks
+for. **`Invert`** flips the matte (select everything *except* the subject). **`⬇ Matte as .PNG`**
+saves a 1920×1080 black-and-white matte you can drop into Fusion if you would rather paint on
+it by hand.
 
 ---
 

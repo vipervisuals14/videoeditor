@@ -355,6 +355,16 @@ def _wired_report(rt, h, req_id):
     return True, ""
 
 
+def _error_mentions(rt, h, req_id, needle):
+    data = h.decode(rt, req_id)
+    if data is None:
+        return False, f"no response for {req_id}"
+    err = str(((data.get("result") or {}).get("error")) or data.get("error") or "")
+    if needle not in err:
+        return False, f"error {err!r} does not mention {needle!r}"
+    return True, ""
+
+
 def _node_report(rt, h, req_id, expected, must_skip=None):
     data = h.decode(rt, req_id)
     if data is None:
@@ -430,6 +440,67 @@ def main():
             ("calls.node", lambda rt, h: _has_call(rt, "comp:AddTool")),
             ("calls.spline", lambda rt, h: _has_call(rt, "spline:SetKeyFrames 3 keys")),
             ("calls.marker", lambda rt, h: _has_call(rt, "item:AddMarker")),
+        ],
+    ))
+
+    results.append(scenario(
+        "mask_apply → Paint/Polygon/Blur/MatteControl/Merge matte + spline keys",
+        [{
+            "id": "mk1", "op": "mask_apply",
+            "args": {
+                "mode": "subject",
+                "feather": 8,
+                "softness": 40,
+                "expand": 2,
+                "opacity": 88,
+                "invert": False,
+                "coverage": 11.5,
+                "fps": 24,
+                "polygon": [
+                    {"x": 0.30, "y": 0.20},
+                    {"x": 0.52, "y": 0.16},
+                    {"x": 0.68, "y": 0.34},
+                    {"x": 0.61, "y": 0.62},
+                    {"x": 0.38, "y": 0.60},
+                ],
+                "tracked": [
+                    {"timeSec": 0.0, "coverage": 0.10, "polygon": []},
+                    {"timeSec": 0.25, "coverage": 0.42, "polygon": []},
+                    {"timeSec": 0.50, "coverage": 0.21, "polygon": []},
+                ],
+                "keyframes": [
+                    {"timeSec": 0.0, "value": 22},
+                    {"timeSec": 0.25, "value": 88},
+                    {"timeSec": 0.50, "value": 46},
+                ],
+                "strokes": [
+                    {"erase": False, "radius": 0.03, "points": [{"x": 0.4, "y": 0.5}, {"x": 0.45, "y": 0.55}]},
+                    {"erase": True, "radius": 0.02, "points": [{"x": 0.6, "y": 0.4}]},
+                ],
+            },
+        }],
+        [
+            chk_response("ok", True, req_id="mk1"),
+            ("no error", chk_no_error),
+            chk_nested("result", "applied", expected=True, req_id="mk1"),
+            chk_nested("result", "points", expected=5, req_id="mk1"),
+            chk_nested("result", "trackedFrames", expected=3, req_id="mk1"),
+            ("report", lambda rt, h: _node_report(rt, h, "mk1", ["Paint", "Polygon", "Blur", "MatteControl", "Merge"])),
+            ("spliced", lambda rt, h: _wired_report(rt, h, "mk1")),
+            ("calls.polygon", lambda rt, h: _has_call(rt, "Polygon")),
+            ("calls.brush", lambda rt, h: _has_call(rt, "Paint:ApplyBrush")),
+            ("calls.spline", lambda rt, h: _has_call(rt, "spline:SetKeyFrames 3 keys")),
+            ("calls.marker", lambda rt, h: _has_call(rt, "item:AddMarker")),
+        ],
+    ))
+
+    results.append(scenario(
+        "mask_apply → rejects a matte with fewer than 3 points",
+        [{"id": "mk2", "op": "mask_apply", "args": {"polygon": [{"x": 0.2, "y": 0.3}]}}],
+        [
+            chk_response("ok", True, req_id="mk2"),
+            chk_nested("result", "applied", expected=False, req_id="mk2"),
+            ("error text", lambda rt, h: _error_mentions(rt, h, "mk2", "at least 3 points")),
         ],
     ))
 

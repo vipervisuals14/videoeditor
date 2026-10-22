@@ -218,6 +218,48 @@ def main():
             "ColorCorrector" in res.get("luaSnippet", ""),
             "lua snippet does not mention the recipe chain"))
 
+        # ---- magic mask: panel-built matte becomes a native Fusion graph
+        res = post("/api/dispatch", {
+            "action": "mask_apply",
+            "payload": {
+                "mode": "subject", "feather": 8, "softness": 40, "expand": 2,
+                "opacity": 88, "invert": False, "coverage": 11.5, "fps": 24,
+                "polygon": [
+                    {"x": 0.30, "y": 0.20}, {"x": 0.52, "y": 0.16},
+                    {"x": 0.68, "y": 0.34}, {"x": 0.61, "y": 0.62},
+                    {"x": 0.38, "y": 0.60},
+                ],
+                "tracked": [
+                    {"timeSec": 0.0, "coverage": 0.10, "polygon": []},
+                    {"timeSec": 0.25, "coverage": 0.42, "polygon": []},
+                ],
+                "keyframes": [
+                    {"timeSec": 0.0, "value": 22},
+                    {"timeSec": 0.25, "value": 88},
+                ],
+                "strokes": [
+                    {"erase": False, "radius": 0.03,
+                     "points": [{"x": 0.4, "y": 0.5}, {"x": 0.45, "y": 0.55}]},
+                ],
+            },
+        })
+        mask_result = (res.get("bridgeResponse") or {}).get("result") or {}
+        mask_node = str(mask_result.get("fusionNode", ""))
+        check("mask answered live in Resolve", lambda: (
+            res.get("liveBridgeConnected") is True, f"res={str(res)[:200]}"))
+        check("mask built Paint -> Polygon -> Blur -> MatteControl -> Merge", lambda: (
+            all(tool in mask_node for tool in ("Paint", "Polygon", "Blur", "MatteControl", "Merge")),
+            f"fusionNode={mask_node!r}"))
+        check("mask matte is keyframed and spliced", lambda: (
+            mask_result.get("applied") is True and "MediaOut1" in mask_node,
+            f"result={mask_result}"))
+        check("console snippet for mask runs in Resolve Lua",
+              lambda: run_console_snippet(res.get("luaSnippet", "")))
+        check("mask lua snippet builds the matte nodes", lambda: (
+            all(tool in res.get("luaSnippet", "") for tool in
+                ('AddTool("Paint"', 'AddTool("Polygon"', 'AddTool("MatteControl"', "BezierSpline")),
+            "snippet missing mask nodes"))
+
         # ---- media pool + auto edit
         res = post("/api/dispatch", {"action": "get_media_pool", "payload": {}})
         clips = ((res.get("bridgeResponse") or {}).get("result") or {}).get("clips") or []

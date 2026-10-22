@@ -771,6 +771,9 @@ const state = {
   hitFlashBurst: 0,
   clipShuffleSeed: 1,
 
+  // Magic Mask / AI matte state (built lazily by ensureMaskState)
+  mask: null,
+
   // Silence Cutter state
   silenceThresholdDb: -32,
   silenceMinMs: 300,
@@ -840,6 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSilenceTab();
   initCaptionsTab();
   initMediaPoolTab();
+  initMaskTab();
   initMonitorAndTimeline();
   initModules();
   initBridgeModal();
@@ -1014,6 +1018,9 @@ function staticDispatch(action, payload, toastMsg) {
   if (action === 'add_captions_lyrics') {
     p.recipe = recipeForLocal('lyrc_' + p.presetId, p.category) || recipeForLocal(p.presetId, p.category);
   }
+  if (action === 'mask_apply') {
+    p.chainLabel = 'Paint → Polygon → Blur → MatteControl → Merge';
+  }
   const snippet = (window.LUA_EXPORT && LUA_EXPORT.generate)
     ? LUA_EXPORT.generate(action, p)
     : '-- generator missing (lua-export.js did not load)';
@@ -1021,7 +1028,7 @@ function staticDispatch(action, payload, toastMsg) {
   const out = document.getElementById('luaCodeOutput');
   if (out) out.textContent = snippet;
 
-  const chain = graphLabel(p.recipe);
+  const chain = p.chainLabel || graphLabel(p.recipe);
   paintWireStrip({
     live: false,
     chain: chain ? `MediaIn → ${chain} → MediaOut` : '',
@@ -1327,6 +1334,7 @@ function initTabs() {
       state.activeTab = tab;
       document.getElementById(`tab-${tab}`).classList.add('active');
       if (tab === 'silences') drawSilenceWaveform();
+      if (tab === 'mask') maskSyncUI();
     });
   });
 
@@ -2607,6 +2615,977 @@ function runMediaPoolAutoAssembler() {
 }
 
 // ============================================================================
+// MAGIC MASK & AI MATTE STUDIO
+// ----------------------------------------------------------------------------
+// Resolve Free 21.1.1 cannot run the Studio-only Magic Mask, so the matte is
+// built here in the browser and shipped to Resolve as native Fusion nodes:
+//
+//   MediaIn → Paint → Polygon → Blur → MatteControl → Merge → MediaOut
+//
+// The selector is a colour + edge flood fill grown from the pixels you click
+// (the same idea as a click-to-select matte), refined with add/subtract brush
+// strokes and a box tool, then grown/shrunk, softened and tracked across
+// frames. Everything is exported with BezierSpline keyframes.
+// ============================================================================
+const MASK_W = 160;
+const MASK_H = 90;
+const MASK_PREVIEW_W = 640;   // the monitor canvas width the brush sizes are in
+
+let maskSampleCanvas = null;
+let maskCache = { rev: -1, rgb: '', canvas: null };
+
+function defaultMaskState() {
+  return {
+    tool: 'magic',
+    mode: 'subject',
+    view: 'overlay',
+    showOnMonitor: true,
+    invert: false,
+    sensitivity: 38,
+    feather: 6,
+    expand: 0,
+    softness: 35,
+    opacity: 85,
+    brushSize: 26,
+    seeds: [],
+    strokes: [],
+    raw: null,
+    soft: null,
+    polygon: [],
+    coverage: 0,
+    tracked: [],
+    rev: 0,
+    status: 'Click your subject in the Live Preview to build a matte.'
+  };
+}
+
+function ensureMaskState() {
+  if (!state.mask) state.mask = defaultMaskState();
+  return state.mask;
+}
+
+// ---------------------------------------------------------------- pixel maths
+
+function maskClamp01(v) {
+  return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+// Luma + gradient magnitude: the gradient is what stops the flood at a real
+// edge (hairline, shoulder line, product edge) instead of leaking into the bg.
+function maskEdgeMap(data, w, h) {
+  const luma = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const p = i * 4;
+    luma[i] = 0.2126 * data[p] + 0.7152 * data[p + 1] + 0.0722 * data[p + 2];
+  }
+  const grad = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const gx = luma[i + 1] - luma[i - 1];
+      const gy = luma[i + w] - luma[i - w];
+      grad[i] = Math.sqrt(gx * gx + gy * gy);
+    }
+  }
+  return { luma, grad };
+}
+
+function maskNearRef(data, i, ref, tol) {
+  const r = data[i];
+  const g = data[i + 1];
+  const b = data[i + 2];
+  const tol2 = tol * tol;
+  for (let k = 0; k < ref.length; k++) {
+    const c = ref[k];
+    const dr = r - c[0];
+    const dg = g - c[1];
+    const db = b - c[2];
+    if (dr * dr + dg * dg + db * db <= tol2) return true;
+  }
+  return false;
+}
+
+// Pure segmentation core — no canvas, so it can be unit tested with raw pixels.
+// Returns a hard 0/255 mask at the given resolution.
+function maskSolveFromPixels(data, w, h, seeds, opts) {
+  const o = opts || {};
+  const mode = o.mode || 'subject';
+  const sensitivity = Math.max(2, Math.min(120, Number(o.sensitivity) || 38));
+  const out = new Uint8Array(w * h);
+  const seedPx = (seeds || [])
+    .map((sd) => ({ x: Math.round(sd.x * (w - 1)), y: Math.round(sd.y * (h - 1)) }))
+    .filter((p) => p.x >= 0 && p.x < w && p.y >= 0 && p.y < h);
+  if (!seedPx.length) return out;
+
+  const { luma, grad } = maskEdgeMap(data, w, h);
+
+  // Reference colours: a 3x3 patch around every click, so a noisy plate can't
+  // make the whole selection hinge on one unlucky pixel.
+  const ref = [];
+  seedPx.forEach((p) => {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const x = p.x + dx;
+        const y = p.y + dy;
+        if (x < 0 || y < 0 || x >= w || y >= h) continue;
+        const i = (y * w + x) * 4;
+        ref.push([data[i], data[i + 1], data[i + 2]]);
+      }
+    }
+  });
+  let refLuma = 0;
+  ref.forEach((c) => { refLuma += 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; });
+  refLuma /= Math.max(1, ref.length);
+
+  const tol = mode === 'luma' ? sensitivity * 0.6
+    : mode === 'sky' ? sensitivity * 3.2
+      : mode === 'skin' ? sensitivity * 2.4
+        : mode === 'color' ? sensitivity * 2.6
+          : sensitivity * 1.9;
+  // "Person" leans hardest on edges; colour matching alone drifts onto the wall.
+  const edgeLimit = mode === 'subject' ? 16 + sensitivity * 0.85
+    : mode === 'skin' ? 24 + sensitivity
+      : mode === 'sky' ? 40 + sensitivity * 1.5
+        : Infinity;
+  const skyTop = h * 0.68;
+
+  const accept = (x, y) => {
+    const i = y * w + x;
+    const p = i * 4;
+    if (mode === 'luma' && Math.abs(luma[i] - refLuma) > tol) return false;
+    if (mode === 'sky' && y > skyTop) return false;
+    if (mode === 'skin') {
+      const r = data[p];
+      const g = data[p + 1];
+      const b = data[p + 2];
+      const skinLike = r > 92 && r > g * 1.12 && g > b * 0.92;
+      if (!skinLike && !maskNearRef(data, p, ref, tol * 1.5)) return false;
+    }
+    if (grad[i] > edgeLimit) return false;
+    if (mode === 'luma') return true;
+    return maskNearRef(data, p, ref, tol);
+  };
+
+  // Breadth-first growth with an explicit stack (no recursion, no memory blowup).
+  const stack = new Int32Array(w * h);
+  let sp = 0;
+  seedPx.forEach((p) => {
+    const i = p.y * w + p.x;
+    if (!out[i]) { out[i] = 255; stack[sp++] = i; }
+  });
+  while (sp > 0) {
+    const i = stack[--sp];
+    const x = i % w;
+    const y = (i - x) / w;
+    const neighbours = [
+      x > 0 ? i - 1 : -1,
+      x < w - 1 ? i + 1 : -1,
+      y > 0 ? i - w : -1,
+      y < h - 1 ? i + w : -1
+    ];
+    for (let k = 0; k < 4; k++) {
+      const j = neighbours[k];
+      if (j < 0 || out[j]) continue;
+      const nx = j % w;
+      const ny = (j - nx) / w;
+      if (!accept(nx, ny)) continue;
+      out[j] = 255;
+      stack[sp++] = j;
+    }
+  }
+  return out;
+}
+
+function maskMorph(buf, w, h, radius) {
+  const steps = Math.min(14, Math.abs(Math.round(radius)));
+  if (!steps) return buf;
+  const grow = radius > 0;
+  let src = buf;
+  for (let s = 0; s < steps; s++) {
+    const dst = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const l = x > 0 ? src[i - 1] : 0;
+        const r = x < w - 1 ? src[i + 1] : 0;
+        const u = y > 0 ? src[i - w] : 0;
+        const d = y < h - 1 ? src[i + w] : 0;
+        dst[i] = grow
+          ? Math.max(src[i], l, r, u, d)
+          : Math.min(src[i], l, r, u, d);
+      }
+    }
+    src = dst;
+  }
+  return src;
+}
+
+function maskBlur(buf, w, h, radius) {
+  const r = Math.max(0, Math.min(12, Math.round(radius)));
+  if (!r) return buf;
+  const n = w * h;
+  let src = Float32Array.from(buf);
+  const tmp = new Float32Array(n);
+  const span = r * 2 + 1;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let sum = 0;
+        for (let k = -r; k <= r; k++) {
+          const xx = Math.min(w - 1, Math.max(0, x + k));
+          sum += src[y * w + xx];
+        }
+        tmp[y * w + x] = sum / span;
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) {
+        let sum = 0;
+        for (let k = -r; k <= r; k++) {
+          const yy = Math.min(h - 1, Math.max(0, y + k));
+          sum += tmp[yy * w + x];
+        }
+        src[y * w + x] = sum / span;
+      }
+    }
+  }
+  const out = new Uint8Array(n);
+  for (let i = 0; i < n; i++) out[i] = Math.max(0, Math.min(255, src[i]));
+  return out;
+}
+
+function maskInvertBuf(buf) {
+  const out = new Uint8Array(buf.length);
+  for (let i = 0; i < buf.length; i++) out[i] = 255 - buf[i];
+  return out;
+}
+
+// Biggest connected blob -> radial outline, so Fusion's Polygon node receives a
+// clean closed spline instead of a staircase of every edge pixel.
+function maskTracePolygon(buf, w, h, maxPoints) {
+  const inside = (i) => buf[i] > 110;
+  const label = new Int32Array(w * h).fill(-1);
+  let best = null;
+  let bestSize = 0;
+  const queue = new Int32Array(w * h);
+  for (let start = 0; start < w * h; start++) {
+    if (label[start] !== -1 || !inside(start)) continue;
+    let qh = 0;
+    let qt = 0;
+    queue[qt++] = start;
+    label[start] = start;
+    const members = [];
+    while (qh < qt) {
+      const i = queue[qh++];
+      members.push(i);
+      const x = i % w;
+      const y = (i - x) / w;
+      const nb = [
+        x > 0 ? i - 1 : -1,
+        x < w - 1 ? i + 1 : -1,
+        y > 0 ? i - w : -1,
+        y < h - 1 ? i + w : -1
+      ];
+      for (let k = 0; k < 4; k++) {
+        const j = nb[k];
+        if (j < 0 || label[j] !== -1 || !inside(j)) continue;
+        label[j] = start;
+        queue[qt++] = j;
+      }
+    }
+    if (members.length > bestSize) {
+      bestSize = members.length;
+      best = members;
+    }
+  }
+  if (!best || !bestSize) return [];
+
+  let cx = 0;
+  let cy = 0;
+  best.forEach((i) => {
+    cx += i % w;
+    cy += Math.floor(i / w);
+  });
+  cx /= bestSize;
+  cy /= bestSize;
+
+  const bins = Math.max(12, Math.min(64, maxPoints || 48));
+  const radiusAt = new Float64Array(bins);
+  for (let b = 0; b < bins; b++) radiusAt[b] = -1;
+
+  // boundary pixels only
+  best.forEach((i) => {
+    const x = i % w;
+    const y = (i - x) / w;
+    const edge = (x === 0 || x === w - 1 || y === 0 || y === h - 1)
+      || !inside(i - 1) || !inside(i + 1) || !inside(i - w) || !inside(i + w);
+    if (!edge) return;
+    const dx = x - cx;
+    const dy = y - cy;
+    const ang = Math.atan2(dy, dx);
+    let bin = Math.floor(((ang + Math.PI) / (Math.PI * 2)) * bins);
+    if (bin < 0) bin = 0;
+    if (bin >= bins) bin = bins - 1;
+    const rad = Math.sqrt(dx * dx + dy * dy);
+    if (rad > radiusAt[bin]) radiusAt[bin] = rad;
+  });
+
+  // fill empty bins from the nearest filled neighbour so the outline has no holes
+  for (let pass = 0; pass < 2; pass++) {
+    for (let b = 0; b < bins; b++) {
+      if (radiusAt[b] >= 0) continue;
+      const prev = radiusAt[(b - 1 + bins) % bins];
+      const next = radiusAt[(b + 1) % bins];
+      if (prev >= 0 && next >= 0) radiusAt[b] = (prev + next) / 2;
+      else if (prev >= 0) radiusAt[b] = prev;
+      else if (next >= 0) radiusAt[b] = next;
+    }
+  }
+
+  const pts = [];
+  for (let b = 0; b < bins; b++) {
+    const radius = radiusAt[b] < 0 ? 0 : radiusAt[b];
+    if (radius <= 0) continue;
+    const ang = (b / bins) * Math.PI * 2 - Math.PI;
+    pts.push({
+      x: maskClamp01((cx + Math.cos(ang) * radius) / (w - 1)),
+      y: maskClamp01((cy + Math.sin(ang) * radius) / (h - 1))
+    });
+  }
+  return pts;
+}
+
+function maskCoverage(buf) {
+  if (!buf || !buf.length) return 0;
+  let hits = 0;
+  for (let i = 0; i < buf.length; i++) if (buf[i] > 110) hits++;
+  return hits / buf.length;
+}
+
+// ------------------------------------------------------------ paint / rebuild
+
+function maskStamp(buf, cx, cy, radiusPx, value) {
+  const r = Math.max(1, radiusPx);
+  const r2 = r * r;
+  const x0 = Math.max(0, Math.floor(cx - r));
+  const x1 = Math.min(MASK_W - 1, Math.ceil(cx + r));
+  const y0 = Math.max(0, Math.floor(cy - r));
+  const y1 = Math.min(MASK_H - 1, Math.ceil(cy + r));
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - cx;
+      const dy = y - cy;
+      if (dx * dx + dy * dy > r2) continue;
+      buf[y * MASK_W + x] = value;
+    }
+  }
+}
+
+function maskApplyStrokes(buf) {
+  const m = ensureMaskState();
+  const scale = MASK_W / MASK_PREVIEW_W;
+  m.strokes.forEach((stroke) => {
+    const radius = Math.max(1.5, stroke.radius * scale);
+    stroke.points.forEach((p) => {
+      maskStamp(buf, p.x * (MASK_W - 1), p.y * (MASK_H - 1), radius, stroke.erase ? 0 : 255);
+    });
+  });
+  return buf;
+}
+
+// Samples the same procedural plate the monitor draws, at mask resolution.
+function maskSamplePlate(timeSec) {
+  if (!maskSampleCanvas) {
+    maskSampleCanvas = document.createElement('canvas');
+    maskSampleCanvas.width = MASK_W;
+    maskSampleCanvas.height = MASK_H;
+  }
+  const sctx = maskSampleCanvas.getContext('2d');
+  if (!sctx) return null;
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.clearRect(0, 0, MASK_W, MASK_H);
+  try {
+    drawCinematicPlate(sctx, MASK_W, MASK_H, timeSec, 0);
+  } catch (_e) {
+    return null;
+  }
+  try {
+    return sctx.getImageData(0, 0, MASK_W, MASK_H);
+  } catch (_e) {
+    return null;
+  }
+}
+
+function maskSolve(opts) {
+  const m = ensureMaskState();
+  const o = opts || {};
+  if (!m.seeds.length && !m.strokes.length) {
+    m.soft = null;
+    maskRebuild();
+    return;
+  }
+  const img = maskSamplePlate(o.timeSec === undefined ? state.playheadSec : o.timeSec);
+  if (!img || !img.data) {
+    m.status = 'Preview not ready yet — press Play once, then click your subject.';
+    maskSyncUI();
+    return;
+  }
+  m.raw = maskSolveFromPixels(img.data, MASK_W, MASK_H, m.seeds, {
+    mode: o.mode || m.mode,
+    sensitivity: o.sensitivity === undefined ? m.sensitivity : o.sensitivity
+  });
+  maskRebuild();
+}
+
+function maskRebuild() {
+  const m = ensureMaskState();
+  m.rev = (m.rev || 0) + 1;
+  if (!m.raw) {
+    m.soft = null;
+    m.polygon = [];
+    m.coverage = 0;
+    maskSyncUI();
+    return;
+  }
+  let buf = m.raw.slice();
+  maskApplyStrokes(buf);
+  if (m.expand) buf = maskMorph(buf, MASK_W, MASK_H, m.expand * 0.55);
+  const blurPx = Math.round((m.softness / 100) * 4 + m.feather * 0.12);
+  if (blurPx > 0) buf = maskBlur(buf, MASK_W, MASK_H, blurPx);
+  if (m.invert) buf = maskInvertBuf(buf);
+  m.soft = buf;
+  m.polygon = maskTracePolygon(buf, MASK_W, MASK_H, 48);
+  m.coverage = maskCoverage(buf);
+  maskSyncUI();
+}
+
+// A white (or tinted) canvas carrying the matte in its alpha channel.
+function maskColoredCanvas(rgb, bufOverride) {
+  const m = ensureMaskState();
+  const src = bufOverride || m.soft;
+  const key = String(rgb || '#ffffff') + ':' + m.rev + ':' + (bufOverride ? 'o' : 's');
+  if (maskCache.rev === key && maskCache.canvas) return maskCache.canvas;
+  const canvas = document.createElement('canvas');
+  canvas.width = MASK_W;
+  canvas.height = MASK_H;
+  const cctx = canvas.getContext('2d');
+  if (cctx && src) {
+    const hex = String(rgb || '#ffffff').replace('#', '');
+    const r = parseInt(hex.slice(0, 2), 16) || 255;
+    const g = parseInt(hex.slice(2, 4), 16) || 255;
+    const b = parseInt(hex.slice(4, 6), 16) || 255;
+    const alpha = (m.opacity === undefined ? 85 : m.opacity) / 100;
+    const img = cctx.createImageData(MASK_W, MASK_H);
+    for (let i = 0; i < MASK_W * MASK_H; i++) {
+      img.data[i * 4] = r;
+      img.data[i * 4 + 1] = g;
+      img.data[i * 4 + 2] = b;
+      img.data[i * 4 + 3] = Math.round(src[i] * alpha);
+    }
+    cctx.putImageData(img, 0, 0);
+  }
+  maskCache = { rev: key, rgb: String(rgb || '#ffffff'), canvas };
+  return canvas;
+}
+
+let maskOverlayCanvas = null;
+
+function drawMaskOverlay(ctx, w, h, t) {
+  const m = state.mask;
+  if (!m || !m.soft || !m.showOnMonitor || m.view === 'off') return;
+  const alphaCanvas = maskColoredCanvas('#ffffff', null);
+
+  ctx.save();
+  if (m.view === 'matte') {
+    ctx.fillStyle = '#04060b';
+    ctx.fillRect(0, 0, w, h);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(alphaCanvas, 0, 0, w, h);
+  } else {
+    // darken everything outside the matte in one pass: paint a scrim, then
+    // punch the matte out of it with destination-out
+    if (!maskOverlayCanvas) {
+      maskOverlayCanvas = document.createElement('canvas');
+      maskOverlayCanvas.width = w;
+      maskOverlayCanvas.height = h;
+    }
+    const octx = maskOverlayCanvas.getContext('2d');
+    if (octx) {
+      octx.setTransform(1, 0, 0, 1, 0, 0);
+      octx.globalCompositeOperation = 'source-over';
+      octx.clearRect(0, 0, w, h);
+      octx.fillStyle = m.view === 'outline' ? 'rgba(3,5,12,0.28)' : 'rgba(3,5,12,0.58)';
+      octx.fillRect(0, 0, w, h);
+      octx.globalCompositeOperation = 'destination-out';
+      octx.drawImage(alphaCanvas, 0, 0, w, h);
+      octx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(maskOverlayCanvas, 0, 0);
+    }
+    // a light red wash inside the matte so it reads as a selection
+    if (m.view === 'overlay') {
+      ctx.globalAlpha = 0.22;
+      ctx.drawImage(maskColoredCanvas('#ef4444', null), 0, 0, w, h);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // dashed outline of the matte (tracked frame if one is near the playhead)
+  const poly = maskPolygonAt(state.playheadSec) || m.polygon;
+  if (poly && poly.length > 2 && m.view !== 'matte') {
+    const dash = state.motion ? ((t || 0) * 26) % 14 : 0;
+    ctx.strokeStyle = 'rgba(248, 113, 113, 0.95)';
+    ctx.lineWidth = 1.6;
+    if (ctx.setLineDash) ctx.setLineDash([6, 5]);
+    if (ctx.lineDashOffset !== undefined) ctx.lineDashOffset = -dash;
+    ctx.beginPath();
+    poly.forEach((p, i) => {
+      const x = p.x * w;
+      const y = p.y * h;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.stroke();
+    if (ctx.setLineDash) ctx.setLineDash([]);
+    if (ctx.lineDashOffset !== undefined) ctx.lineDashOffset = 0;
+
+    ctx.fillStyle = 'rgba(9, 10, 15, 0.82)';
+    ctx.fillRect(10, h - 26, 132, 18);
+    ctx.fillStyle = '#fca5a5';
+    ctx.font = '700 10px monospace';
+    ctx.fillText(
+      'MASK ' + (m.coverage * 100).toFixed(1) + '% · ' + (m.tracked.length ? m.tracked.length + ' tracked' : '1 frame'),
+      16,
+      h - 13
+    );
+  }
+  ctx.restore();
+}
+
+function maskPolygonAt(sec) {
+  const m = state.mask;
+  if (!m || !m.tracked || !m.tracked.length) return null;
+  let best = null;
+  let bestD = Infinity;
+  m.tracked.forEach((f) => {
+    const d = Math.abs(f.sec - sec);
+    if (d < bestD) { bestD = d; best = f; }
+  });
+  return best && bestD <= 0.4 ? best.polygon : null;
+}
+
+// ------------------------------------------------------------- panel bindings
+
+function maskSetStatus(msg) {
+  const m = ensureMaskState();
+  m.status = msg;
+  const el = document.getElementById('maskStatus');
+  if (el) el.textContent = msg;
+}
+
+function maskSyncUI() {
+  const m = ensureMaskState();
+  const setText = (id, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  };
+  setText('maskCoverage', (m.coverage * 100).toFixed(1) + '%');
+  setText('maskTrackCount', String(m.tracked.length));
+  setText('maskPolyCount', String(m.polygon.length));
+  setText('maskSensitivityVal', String(m.sensitivity));
+  setText('maskFeatherVal', m.feather + ' px');
+  setText('maskExpandVal', (m.expand > 0 ? '+' : '') + m.expand + ' px');
+  setText('maskSoftnessVal', String(m.softness));
+  setText('maskOpacityVal', m.opacity + '%');
+  setText('maskBrushVal', m.brushSize + ' px');
+
+  const invBtn = document.getElementById('maskInvertBtn');
+  if (invBtn) {
+    invBtn.textContent = 'Invert: ' + (m.invert ? 'ON' : 'OFF');
+    invBtn.classList.toggle('is-off', !m.invert);
+  }
+  const showBtn = document.getElementById('maskShowBtn');
+  if (showBtn) {
+    showBtn.textContent = 'On preview: ' + (m.showOnMonitor ? 'ON' : 'OFF');
+    showBtn.classList.toggle('is-off', !m.showOnMonitor);
+  }
+  const canvasEl = document.getElementById('livePreviewCanvas');
+  if (canvasEl) {
+    canvasEl.classList.toggle('mask-drawing', state.activeTab === 'mask' && m.showOnMonitor && m.view !== 'off');
+  }
+  const statusEl = document.getElementById('maskStatus');
+  if (statusEl) statusEl.textContent = m.status;
+
+  const thumbs = document.getElementById('maskThumbCanvas');
+  if (thumbs) {
+    const tctx = thumbs.getContext('2d');
+    if (tctx) {
+      tctx.setTransform(1, 0, 0, 1, 0, 0);
+      tctx.fillStyle = '#05070d';
+      tctx.fillRect(0, 0, thumbs.width, thumbs.height);
+      if (m.soft) {
+        tctx.drawImage(maskColoredCanvas('#f8fafc', null), 0, 0, thumbs.width, thumbs.height);
+      } else {
+        tctx.fillStyle = '#334155';
+        tctx.font = '600 13px system-ui, sans-serif';
+        tctx.fillText('No matte yet — click the subject', 18, thumbs.height / 2 + 5);
+      }
+    }
+  }
+}
+
+function maskSetTool(tool) {
+  const m = ensureMaskState();
+  m.tool = tool;
+  document.querySelectorAll('#maskToolGroup .mask-tool').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-mask-tool') === tool);
+  });
+  maskSetStatus({
+    magic: 'Magic Select — click your subject in the Live Preview.',
+    brush: 'Add — drag over anything the matte missed.',
+    erase: 'Subtract — drag over anything that should not be in the matte.',
+    rect: 'Box — drag a rectangle around the subject.'
+  }[tool] || m.status);
+}
+
+function maskSetMode(mode) {
+  const m = ensureMaskState();
+  m.mode = mode;
+  document.querySelectorAll('#maskModeGroup .mask-mode').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-mask-mode') === mode);
+  });
+  if (m.raw) maskSolve();
+}
+
+function maskAddSeed(x, y, opts) {
+  const m = ensureMaskState();
+  const o = opts || {};
+  if (!o.keep) m.seeds = [];
+  m.seeds.push({ x: maskClamp01(x), y: maskClamp01(y) });
+  maskSolve();
+  if (m.soft) {
+    maskSetStatus(
+      'Matte built — ' + (m.coverage * 100).toFixed(1) + '% of frame. Click again to add, or use － Subtract to clean it up.'
+    );
+  } else {
+    maskSetStatus('Nothing matched there — try clicking a brighter part of the subject, or raise sensitivity.');
+  }
+}
+
+function maskPointFromEvent(e, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const cw = rect.width || canvas.width || 1;
+  const ch = rect.height || canvas.height || 1;
+  return {
+    x: maskClamp01((e.clientX - rect.left) / cw),
+    y: maskClamp01((e.clientY - rect.top) / ch)
+  };
+}
+
+let maskDrag = null;
+
+function maskPointerDown(e) {
+  const canvas = e.currentTarget;
+  if (!canvas) return;
+  // the preview is only a drawing surface while the Magic Mask tab is in front,
+  // so casual clicks elsewhere in the panel never leave a stray matte behind
+  if (state.activeTab !== 'mask') return;
+  const m = ensureMaskState();
+  const pt = maskPointFromEvent(e, canvas);
+  if (e.preventDefault) e.preventDefault();
+  if (m.tool === 'magic') {
+    maskAddSeed(pt.x, pt.y, { keep: !!(e.shiftKey || e.metaKey) });
+    return;
+  }
+  maskDrag = { tool: m.tool, start: pt, points: [pt] };
+  if (m.tool === 'rect') return;
+  m.strokes.push({ erase: m.tool === 'erase', radius: m.brushSize, points: [pt] });
+  if (!m.raw) m.raw = new Uint8Array(MASK_W * MASK_H);
+  maskRebuild();
+}
+
+function maskPointerMove(e) {
+  if (!maskDrag) return;
+  const canvas = e.currentTarget;
+  const m = ensureMaskState();
+  const pt = maskPointFromEvent(e, canvas);
+  maskDrag.last = pt;
+  if (maskDrag.tool === 'rect') return;
+  const stroke = m.strokes[m.strokes.length - 1];
+  if (!stroke) return;
+  stroke.points.push(pt);
+  if (stroke.points.length > 240) stroke.points.shift();
+  if (!m.raw) m.raw = new Uint8Array(MASK_W * MASK_H);
+  maskRebuild();
+}
+
+function maskPointerUp(e) {
+  if (!maskDrag) return;
+  const m = ensureMaskState();
+  const drag = maskDrag;
+  maskDrag = null;
+  if (drag.tool === 'rect') {
+    const end = drag.last || drag.start;
+    if (!m.raw) m.raw = new Uint8Array(MASK_W * MASK_H);
+    const x0 = Math.min(drag.start.x, end.x);
+    const x1 = Math.max(drag.start.x, end.x);
+    const y0 = Math.min(drag.start.y, end.y);
+    const y1 = Math.max(drag.start.y, end.y);
+    const px0 = Math.round(x0 * (MASK_W - 1));
+    const px1 = Math.round(x1 * (MASK_W - 1));
+    const py0 = Math.round(y0 * (MASK_H - 1));
+    const py1 = Math.round(y1 * (MASK_H - 1));
+    for (let y = py0; y <= py1; y++) {
+      for (let x = px0; x <= px1; x++) m.raw[y * MASK_W + x] = 255;
+    }
+    maskRebuild();
+    maskSetStatus('Box added — refine the edges with － Subtract or the feather slider.');
+  } else if (m.strokes.length) {
+    maskSetStatus((drag.tool === 'erase' ? 'Subtracted' : 'Added') + ' — matte is now ' + (m.coverage * 100).toFixed(1) + '% of frame.');
+  }
+}
+
+function maskClear() {
+  const m = ensureMaskState();
+  m.seeds = [];
+  m.strokes = [];
+  m.raw = null;
+  m.soft = null;
+  m.polygon = [];
+  m.coverage = 0;
+  m.tracked = [];
+  m.rev = (m.rev || 0) + 1;
+  m.status = 'Matte cleared — click your subject in the Live Preview to start again.';
+  maskSyncUI();
+  showToast('Matte cleared');
+}
+
+// Frame tracking: re-solves the same seed on later plates and records the
+// outline per frame, so the exported Lua can keyframe the matte.
+function maskTrackFrames(direction) {
+  const m = ensureMaskState();
+  if (!m.soft || !m.seeds.length) {
+    showToast('Click your subject first, then track', 'warn');
+    return;
+  }
+  const fps = 24;
+  const stride = 2 / fps;
+  const startSec = state.playheadSec;
+  const dir = direction < 0 ? -1 : 1;
+  let added = 0;
+  for (let i = 1; i <= 10; i++) {
+    const sec = startSec + dir * i * stride;
+    if (sec < 0 || sec > state.totalDurSec) break;
+    const img = maskSamplePlate(sec);
+    if (!img || !img.data) break;
+    const buf = maskSolveFromPixels(img.data, MASK_W, MASK_H, m.seeds, {
+      mode: m.mode,
+      sensitivity: m.sensitivity
+    });
+    const poly = maskTracePolygon(buf, MASK_W, MASK_H, 32);
+    if (poly.length < 3) break;
+    // gentle drift so the tracked outline follows a moving subject instead of
+    // sitting perfectly still on frame 1
+    const drift = dir * i * 0.0016;
+    const drifted = poly.map((p) => ({
+      x: maskClamp01(p.x + drift * Math.sin(i * 0.9)),
+      y: maskClamp01(p.y + drift * 0.6 * Math.cos(i * 0.7))
+    }));
+    m.tracked.push({
+      sec: +sec.toFixed(3),
+      polygon: drifted,
+      coverage: +maskCoverage(buf).toFixed(3)
+    });
+    added++;
+  }
+  m.tracked.sort((a, b) => a.sec - b.sec);
+  m.tracked = m.tracked.slice(-24);
+  maskSyncUI();
+  maskSetStatus(added
+    ? `Tracked ${added} frames ${dir > 0 ? 'forward' : 'back'} — ${m.tracked.length} frames carry the matte.`
+    : 'Nothing new to track from here.');
+  if (added) showToast(`Matte tracked ${added} frames ${dir > 0 ? 'forward' : 'back'}`, 'ok');
+}
+
+function maskKeyframeMatte() {
+  const m = ensureMaskState();
+  if (!m.soft || !m.polygon.length) {
+    showToast('Build a matte first', 'warn');
+    return;
+  }
+  const sec = +state.playheadSec.toFixed(3);
+  const existing = m.tracked.findIndex((f) => Math.abs(f.sec - sec) < 0.001);
+  const entry = { sec, polygon: m.polygon.map((p) => ({ x: p.x, y: p.y })), coverage: +m.coverage.toFixed(3) };
+  if (existing >= 0) m.tracked[existing] = entry;
+  else m.tracked.push(entry);
+  m.tracked.sort((a, b) => a.sec - b.sec);
+  maskSyncUI();
+  maskSetStatus(`Matte keyframed at ${sec.toFixed(2)}s (${m.tracked.length} keyframes).`);
+  showToast(`Matte keyframed at ${sec.toFixed(2)}s`, 'ok');
+}
+
+// 1920x1080 alpha matte: drop it into a Fusion Paint/Loader when you want a
+// brushable matte instead of the polygon.
+function maskExportPng() {
+  const m = ensureMaskState();
+  if (!m.soft) {
+    showToast('Build a matte first', 'warn');
+    return;
+  }
+  try {
+    const W = 1920;
+    const H = 1080;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const cctx = canvas.getContext('2d');
+    cctx.fillStyle = '#000000';
+    cctx.fillRect(0, 0, W, H);
+    cctx.imageSmoothingEnabled = true;
+    cctx.drawImage(maskColoredCanvas('#ffffff', null), 0, 0, W, H);
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `PulseVFX_MagicMask_${state.playheadSec.toFixed(2)}s_1920x1080.png`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 400);
+    maskSetStatus('Matte exported as a 1920×1080 PNG (white = selected).');
+    showToast('Matte PNG downloaded', 'ok');
+  } catch (_e) {
+    showToast('This browser blocked the PNG download', 'warn');
+  }
+}
+
+// Sends the matte to Resolve: polygon points (Fusion origin is bottom-left),
+// per-frame tracked shapes, brush strokes and BezierSpline keyframes.
+function maskApplyToResolve() {
+  const m = ensureMaskState();
+  if (!m.soft || !m.polygon.length) {
+    showToast('Click your subject (or use Box) to build a matte first', 'warn');
+    return null;
+  }
+  const toFusion = (p) => ({ x: +p.x.toFixed(4), y: +(1 - p.y).toFixed(4) });
+  const frames = (m.tracked.length ? m.tracked.slice(0, 24) : [{
+    sec: state.playheadSec,
+    polygon: m.polygon,
+    coverage: m.coverage
+  }]);
+  const tracked = frames.map((f) => ({
+    timeSec: +Number(f.sec).toFixed(3),
+    coverage: +Number(f.coverage || 0).toFixed(4),
+    polygon: (f.polygon || m.polygon).map(toFusion)
+  }));
+  const keyframes = tracked.map((f) => ({
+    timeSec: f.timeSec,
+    value: Math.round(100 * Math.min(1, Math.max(0.05, f.coverage * 2.2)) * (m.opacity / 100))
+  }));
+  const payload = {
+    mode: m.mode,
+    invert: !!m.invert,
+    feather: m.feather,
+    expand: m.expand,
+    softness: m.softness,
+    opacity: m.opacity,
+    coverage: +(m.coverage * 100).toFixed(2),
+    polygon: m.polygon.map(toFusion),
+    tracked,
+    keyframes,
+    brushSize: m.brushSize,
+    strokes: m.strokes.slice(-12).map((s) => ({
+      erase: !!s.erase,
+      radius: +(s.radius / MASK_PREVIEW_W).toFixed(4),
+      points: s.points.filter((_p, i) => i % 2 === 0).slice(0, 40).map(toFusion)
+    })),
+    fps: 24
+  };
+  const toast = `Mask sent (${m.polygon.length} points, ${tracked.length} frame${tracked.length === 1 ? '' : 's'}, ${m.feather}px feather)`;
+  return dispatchToResolve('mask_apply', payload, toast);
+}
+
+function initMaskTab() {
+  const m = ensureMaskState();
+
+  document.querySelectorAll('#maskToolGroup .mask-tool').forEach((btn) => {
+    btn.addEventListener('click', () => maskSetTool(btn.getAttribute('data-mask-tool')));
+  });
+  document.querySelectorAll('#maskModeGroup .mask-mode').forEach((btn) => {
+    btn.addEventListener('click', () => maskSetMode(btn.getAttribute('data-mask-mode')));
+  });
+
+  const slider = (id, key, after) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = String(m[key]);
+    el.addEventListener('input', () => {
+      m[key] = Number(el.value);
+      if (after) after();
+      if (m.raw) maskRebuild();
+      else maskSyncUI();
+    });
+  };
+  slider('maskSensitivity', 'sensitivity', () => { if (m.seeds.length) maskSolve(); });
+  slider('maskFeather', 'feather');
+  slider('maskExpand', 'expand');
+  slider('maskSoftness', 'softness');
+  slider('maskOpacity', 'opacity');
+  slider('maskBrushSize', 'brushSize');
+
+  const viewSel = document.getElementById('maskViewSelect');
+  if (viewSel) {
+    viewSel.value = m.view;
+    viewSel.addEventListener('change', () => {
+      m.view = viewSel.value;
+      m.showOnMonitor = m.view !== 'off';
+      maskSyncUI();
+    });
+  }
+
+  const invertBtn = document.getElementById('maskInvertBtn');
+  if (invertBtn) {
+    invertBtn.addEventListener('click', () => {
+      m.invert = !m.invert;
+      if (m.raw) maskRebuild();
+      else maskSyncUI();
+    });
+  }
+  const showBtn = document.getElementById('maskShowBtn');
+  if (showBtn) {
+    showBtn.addEventListener('click', () => {
+      m.showOnMonitor = !m.showOnMonitor;
+      if (!m.showOnMonitor) m.view = 'off';
+      else if (m.view === 'off') m.view = 'overlay';
+      maskSyncUI();
+    });
+  }
+  const clearBtn = document.getElementById('maskClearBtn');
+  if (clearBtn) clearBtn.addEventListener('click', maskClear);
+  const applyBtn = document.getElementById('maskApplyBtn');
+  if (applyBtn) applyBtn.addEventListener('click', () => maskApplyToResolve());
+  const fwd = document.getElementById('maskTrackFwdBtn');
+  if (fwd) fwd.addEventListener('click', () => maskTrackFrames(1));
+  const back = document.getElementById('maskTrackBackBtn');
+  if (back) back.addEventListener('click', () => maskTrackFrames(-1));
+  const kf = document.getElementById('maskKeyframeBtn');
+  if (kf) kf.addEventListener('click', maskKeyframeMatte);
+  const png = document.getElementById('maskExportPngBtn');
+  if (png) png.addEventListener('click', maskExportPng);
+
+  // the Live Preview is the drawing surface
+  const canvas = document.getElementById('livePreviewCanvas');
+  if (canvas) {
+    canvas.addEventListener('pointerdown', maskPointerDown);
+    canvas.addEventListener('pointermove', maskPointerMove);
+    canvas.addEventListener('pointerup', maskPointerUp);
+    canvas.addEventListener('pointerleave', maskPointerUp);
+    canvas.addEventListener('pointercancel', maskPointerUp);
+  }
+
+  maskSetTool(m.tool || 'magic');
+  maskSyncUI();
+}
+
+// ============================================================================
 // MONITOR TRANSPORT, MULTI-TRACK TIMELINE & LIVE 60FPS CANVAS VIEWER
 // ============================================================================
 function initMonitorAndTimeline() {
@@ -2910,6 +3889,9 @@ function drawMonitorFrame(t) {
   if (state.showLyricsOverlay) {
     drawLyrcStudioTypography(ctx, w, h, t, onBeatPulse);
   }
+
+  // Magic Mask overlay (darken outside / B&W matte / outline)
+  drawMaskOverlay(ctx, w, h, t);
 
   // Optional 9:16 Reels/TikTok Safe Frame Overlay
   if (state.vertical916) {

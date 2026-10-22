@@ -19,7 +19,7 @@
           <span class="badge-version">RESOLVE FREE 21.1.1</span>
           <span class="badge-os" id="osBadge">macOS • Optical VFX + LYRC Engine</span>
         </div>
-        <p class="brand-subtitle">Optical & Film Lab VFX • 360° Shutter & Time • LYRC Kinetic Typography • Silence Cutter • Media Pool AI</p>
+        <p class="brand-subtitle">Optical & Film Lab VFX • 360° Shutter & Time • Magic Mask • LYRC Kinetic Typography • Silence Cutter • Media Pool AI</p>
       </div>
     </div>
 
@@ -98,6 +98,12 @@
           <div class="tab-text">
             <span class="tab-name">04 • Media Pool AI</span>
             <span class="tab-meta">Auto-Cut Timeline</span>
+          </div>
+        </button>
+        <button class="main-tab" data-tab="mask">
+          <div class="tab-text">
+            <span class="tab-name">05 • Magic Mask</span>
+            <span class="tab-meta">Click-to-Matte + Track</span>
           </div>
         </button>
       </nav>
@@ -512,6 +518,98 @@
           <div class="mediapool-grid" id="mediaPoolGrid"></div>
         </div>
       </div>
+
+      <!-- ================================================================== -->
+      <!-- TAB 5: MAGIC MASK — click-to-matte, refine, track, send to Resolve  -->
+      <!-- ================================================================== -->
+      <div class="tab-pane" id="tab-mask">
+        <div class="pane-card" data-module="mask" data-label="Magic Mask">
+          <div class="pane-card-header">
+            <div>
+              <h3>Magic Mask &amp; AI Matte Studio</h3>
+              <p>Click the person, face or object once in the Live Preview. It builds a soft matte, follows it frame by frame, and writes a real Fusion <b>Paint → Polygon → Blur → MatteControl → Merge</b> graph onto the clip.</p>
+            </div>
+            <div class="header-btn-group">
+              <button class="btn-secondary" id="maskClearBtn">Clear matte</button>
+              <button class="btn-primary" id="maskApplyBtn">Send Mask to Resolve</button>
+            </div>
+          </div>
+
+          <div class="mask-tool-row">
+            <div class="mask-tool-group" id="maskToolGroup">
+              <button class="mask-tool active" data-mask-tool="magic" title="Click your subject once — colour similarity plus edge detection builds the matte">✦ Magic Select</button>
+              <button class="mask-tool" data-mask-tool="brush" title="Paint more of the subject into the matte">＋ Add</button>
+              <button class="mask-tool" data-mask-tool="erase" title="Paint away parts the matte picked up by mistake">－ Subtract</button>
+              <button class="mask-tool" data-mask-tool="rect" title="Drag a box around the subject">▭ Box</button>
+            </div>
+            <div class="mask-mode-group" id="maskModeGroup">
+              <button class="mask-mode active" data-mask-mode="subject" title="Best for people and products">Person</button>
+              <button class="mask-mode" data-mask-mode="skin" title="Isolates skin tones such as faces and hands">Skin</button>
+              <button class="mask-mode" data-mask-mode="sky" title="Isolates the sky, so you can grade it on its own">Sky</button>
+              <button class="mask-mode" data-mask-mode="luma" title="Isolates a brightness range such as highlights">Brightness</button>
+              <button class="mask-mode" data-mask-mode="color" title="Isolates the exact colour you clicked">Colour</button>
+            </div>
+            <select id="maskViewSelect" class="mask-select" title="How the matte is shown on the Live Preview">
+              <option value="overlay">Preview: darken outside</option>
+              <option value="matte">Preview: black &amp; white matte</option>
+              <option value="outline">Preview: outline only</option>
+              <option value="off">Preview: hidden</option>
+            </select>
+          </div>
+
+          <div class="mask-body">
+            <div class="mask-sliders" id="maskSliders">
+              <label class="mask-slider">
+                <span>Select sensitivity <b id="maskSensitivityVal">38</b></span>
+                <input type="range" id="maskSensitivity" min="4" max="90" value="38" />
+              </label>
+              <label class="mask-slider">
+                <span>Feather <b id="maskFeatherVal">6 px</b></span>
+                <input type="range" id="maskFeather" min="0" max="40" value="6" />
+              </label>
+              <label class="mask-slider">
+                <span>Grow / shrink <b id="maskExpandVal">0 px</b></span>
+                <input type="range" id="maskExpand" min="-20" max="20" value="0" />
+              </label>
+              <label class="mask-slider">
+                <span>Edge softness <b id="maskSoftnessVal">35</b></span>
+                <input type="range" id="maskSoftness" min="0" max="100" value="35" />
+              </label>
+              <label class="mask-slider">
+                <span>Matte opacity <b id="maskOpacityVal">85%</b></span>
+                <input type="range" id="maskOpacity" min="0" max="100" value="85" />
+              </label>
+              <label class="mask-slider">
+                <span>Brush size <b id="maskBrushVal">26 px</b></span>
+                <input type="range" id="maskBrushSize" min="4" max="90" value="26" />
+              </label>
+            </div>
+
+            <div class="mask-side">
+              <canvas id="maskThumbCanvas" class="mask-thumb" width="320" height="180"></canvas>
+              <div class="mask-stat-strip">
+                <div class="mask-stat"><span>Frame coverage</span><strong id="maskCoverage">0.0%</strong></div>
+                <div class="mask-stat"><span>Tracked frames</span><strong id="maskTrackCount">0</strong></div>
+                <div class="mask-stat"><span>Polygon points</span><strong id="maskPolyCount">0</strong></div>
+              </div>
+              <div class="mask-toggles">
+                <button class="btn-mini" id="maskInvertBtn">Invert: OFF</button>
+                <button class="btn-mini" id="maskShowBtn">On preview: ON</button>
+              </div>
+              <div class="mask-track-row">
+                <button class="btn-secondary" id="maskTrackBackBtn">◀ Track back</button>
+                <button class="btn-secondary" id="maskTrackFwdBtn">Track forward ▶</button>
+                <button class="btn-secondary" id="maskKeyframeBtn">＋ Keyframe</button>
+              </div>
+              <div class="mask-png-row">
+                <button class="btn-mini" id="maskExportPngBtn">⬇ Matte as .PNG (1920×1080)</button>
+              </div>
+              <p class="mask-status" id="maskStatus">Click your subject in the Live Preview to build a matte.</p>
+              <p class="mask-hint">Resolve <b>Free</b> can't run Magic Mask — that tool is Studio-only. This builds the same idea here (click-to-select, add/subtract, feather, frame tracking) and then writes native Fusion nodes, with BezierSpline keyframes, so the clip keeps the matte after you export.</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- RIGHT / LIVE RESOLVE MONITOR + MULTI-TRACK TIMELINE SIMULATOR -->
@@ -534,7 +632,7 @@
 
         <!-- HTML5 REAL-TIME OPTICAL SHADER & LYRIC RENDERING CANVAS -->
         <div class="canvas-stage" id="canvasStage">
-          <canvas id="livePreviewCanvas" width="640" height="360"></canvas>
+          <canvas id="livePreviewCanvas" width="640" height="360" title="Magic Mask: click your subject to build a matte"></canvas>
           <video id="customVideoElement" loop muted playsinline hidden></video>
         </div>
 

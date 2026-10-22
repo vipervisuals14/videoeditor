@@ -610,6 +610,193 @@ Handlers.apply_vfx = function(res, _fus, args)
 end
 
 -- 4. AI Prompt VFX Pass across the timeline
+-- ---------------------------------------------------------------------------
+-- mask_apply — Magic-Mask style matte built in the panel (Resolve Free has no
+-- Magic Mask; that tool is Studio-only). The panel does the click-to-select,
+-- add/subtract strokes, feather and frame tracking in the browser, then this
+-- writes the result as native Fusion nodes:
+--     Paint -> Polygon -> Blur -> MatteControl -> Merge -> MediaOut1
+-- ---------------------------------------------------------------------------
+Handlers.mask_apply = function(res, _fus, args)
+    local pm = res:GetProjectManager()
+    local proj = pm and pm:GetCurrentProject()
+    if not proj then return { applied = false, error = "No project open" } end
+    local tl = proj:GetCurrentTimeline()
+    if not tl then return { applied = false, error = "No active timeline" } end
+
+    local item = tl:GetCurrentVideoItem()
+    if not item then
+        local list = tl:GetItemListInTrack("video", 1) or {}
+        item = list[1]
+    end
+    if not item then
+        return { applied = false, error = "No video clip found on timeline" }
+    end
+
+    local a = args or {}
+    local poly = type(a.polygon) == "table" and a.polygon or {}
+    if #poly < 3 then
+        return { applied = false, error = "Mask needs at least 3 points (build the matte in the panel first)" }
+    end
+    local tracked = type(a.tracked) == "table" and a.tracked or {}
+    local keyframes = type(a.keyframes) == "table" and a.keyframes or {}
+    local strokes = type(a.strokes) == "table" and a.strokes or {}
+    local feather = tonumber(a.feather) or 0
+    local softness = tonumber(a.softness) or 0
+    local expand = tonumber(a.expand) or 0
+    local opacity = (tonumber(a.opacity) or 85) / 100.0
+    local invert = a.invert == true
+    local mode = tostring(a.mode or "subject")
+    local coverage = tonumber(a.coverage) or 0
+    local fps = tonumber(a.fps) or 24
+
+    local comp = nil
+    pcall(function()
+        if item:GetFusionCompCount() == 0 then
+            comp = item:AddFusionComp()
+        else
+            comp = item:GetFusionCompByIndex(1)
+        end
+    end)
+
+    local built = {}
+    local shape_points = 0
+    if comp then
+        pcall(function()
+            comp:Lock()
+            local src = comp:FindTool("MediaIn1")
+            local dst = comp:FindTool("MediaOut1")
+            local paint = comp:AddTool("Paint", -32768, -32768)
+            local pn = comp:AddTool("Polygon", -32768, -32768)
+            local softn = comp:AddTool("Blur", -32768, -32768)
+            local matte = comp:AddTool("MatteControl", -32768, -32768)
+            local merge = comp:AddTool("Merge", -32768, -32768)
+
+            -- Fusion's Polygon takes { {x=..,y=..}, .. } in 0..1 frame space.
+            local shape = {}
+            for i = 1, #poly do
+                local p = poly[i]
+                if type(p) == "table" then
+                    shape[#shape + 1] = { x = tonumber(p.x) or 0, y = tonumber(p.y) or 0 }
+                end
+            end
+            shape_points = #shape
+
+            if paint then
+                pcall(function() paint.Background = src.Output end)
+                pcall(function() paint.BrushControls = 1 end)
+                for si = 1, math.min(#strokes, 12) do
+                    local stroke = strokes[si]
+                    if type(stroke) == "table" and type(stroke.points) == "table" then
+                        local r = tonumber(stroke.radius) or 0.02
+                        local dir = stroke.erase and -1 or 1
+                        for pi = 1, math.min(#stroke.points, 40) do
+                            local pt = stroke.points[pi]
+                            if type(pt) == "table" then
+                                pcall(function()
+                                    paint:ApplyBrush(tonumber(pt.x) or 0, tonumber(pt.y) or 0, r, dir)
+                                end)
+                            end
+                        end
+                    end
+                end
+                built[#built + 1] = "Paint"
+            end
+
+            if pn and shape_points >= 3 then
+                pcall(function() pn.Polygon = shape end)
+                pcall(function() pn.BorderWidth = math.max(0, math.floor(expand * 0.5 + 0.5)) end)
+                built[#built + 1] = "Polygon(" .. shape_points .. "pts)"
+            end
+
+            if softn then
+                local blur_size = feather + softness * 0.12
+                pcall(function() softn.BlurSize = blur_size end)
+                pcall(function() softn.PassThrough = false end)
+                if pn then pcall(function() softn.Background = pn.Output end) end
+                built[#built + 1] = "Blur(" .. string.format("%.1f", blur_size) .. "px)"
+            end
+
+            if matte then
+                pcall(function() matte.Background = src.Output end)
+                if softn then pcall(function() matte.Foreground = softn.Output end) end
+                pcall(function() matte.Invert = invert end)
+                pcall(function() matte.CombineOp = 0 end)
+                built[#built + 1] = "MatteControl"
+            end
+
+            if merge then
+                pcall(function() merge.Background = src.Output end)
+                if matte then pcall(function() merge.Foreground = matte.Output end) end
+                pcall(function() merge.Blend = opacity end)
+
+                -- BezierSpline keyframes: the matte strength follows each tracked frame
+                local kf_source = keyframes
+                if #kf_source == 0 and #tracked > 0 then
+                    kf_source = {}
+                    for i = 1, #tracked do
+                        local f = tracked[i]
+                        kf_source[#kf_source + 1] = {
+                            timeSec = tonumber(f.timeSec) or 0,
+                            value = math.min(100, (tonumber(f.coverage) or 0) * 220)
+                        }
+                    end
+                end
+                if #kf_source > 0 then
+                    local spline = comp:BezierSpline()
+                    if spline then
+                        local kf_table = {}
+                        for i = 1, math.min(#kf_source, 32) do
+                            local kf = kf_source[i]
+                            local frame_no = math.floor((tonumber(kf.timeSec) or 0) * fps)
+                            local v = math.max(0, math.min(1, (tonumber(kf.value) or 0) / 100.0))
+                            kf_table[frame_no] = { v }
+                        end
+                        pcall(function() merge.Blend = spline end)
+                        pcall(function() spline:SetKeyFrames(kf_table) end)
+                    end
+                end
+                built[#built + 1] = "Merge"
+            end
+
+            if dst and merge then
+                pcall(function() dst.Input = merge.Output end)
+                built[#built + 1] = "MediaOut1"
+            end
+            comp:Unlock()
+        end)
+    end
+
+    -- Stamp every tracked frame so the editor can see where the matte lives.
+    for i = 1, math.min(#tracked, 12) do
+        local f = tracked[i]
+        if type(f) == "table" then
+            pcall(function()
+                item:AddMarker(
+                    math.floor((tonumber(f.timeSec) or 0) * fps),
+                    "Red",
+                    "MASK TRACK",
+                    mode .. " | " .. string.format("%.1f", (tonumber(f.coverage) or 0) * 100) .. "% of frame",
+                    1
+                )
+            end)
+        end
+    end
+
+    return {
+        applied = true,
+        clipName = item:GetName(),
+        fusionNode = table.concat(built, " -> "),
+        points = shape_points,
+        trackedFrames = #tracked,
+        keyframes = #keyframes,
+        mode = mode,
+        invert = invert,
+        feather = feather,
+        coverage = coverage
+    }
+end
+
 Handlers.batch_ai_vfx = function(res, fus, args)
     local pm = res:GetProjectManager()
     local proj = pm and pm:GetCurrentProject()

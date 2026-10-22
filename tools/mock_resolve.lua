@@ -53,7 +53,15 @@ local function new_tool(comp, tool_type, x, y)
       local v = rawget(tbl, k)
       if v ~= nil then return v end
       if k == "Output" then return { __out = tool_type } end
+      -- Unknown members act like Fusion methods (Paint:ApplyBrush, Tracker:Track…):
+      -- keep them addressable and record the call so the harness can assert on it.
       local proxy = { __tool = tool_type, __input = k }
+      setmetatable(proxy, {
+        __call = function(_self, ...)
+          rec("Method", tool_type .. ":" .. tostring(k) .. "(" .. tostring(select("#", ...)) .. ")")
+          return true
+        end
+      })
       rawset(tbl, k, proxy)
       return proxy
     end
