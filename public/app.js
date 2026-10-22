@@ -1403,6 +1403,14 @@ function activateGroup(group) {
 function renderPaneSwitcher(group) {
   const bar = document.getElementById('paneSwitcher');
   if (!bar) return;
+  // The left menu names Masking and Depth maps directly, so the two-up switcher
+  // would be a second, redundant control. Keep it hidden whenever it is not
+  // needed, and never render it for the subject group.
+  if (group === 'subject') {
+    bar.classList.add('hidden');
+    bar.innerHTML = '';
+    return;
+  }
   const def = TAB_GROUPS[group];
   const panes = def ? def.panes : [];
   if (panes.length < 2) {
@@ -1425,12 +1433,53 @@ function renderPaneSwitcher(group) {
   });
 }
 
+// The four things the left menu actually points at. "Transitions" is not a tab
+// of its own: it is FX styles filtered to that family, which keeps one list.
+const NAV_TARGETS = {
+  fx: { group: 'vfx', cat: 'ALL' },
+  depth: { group: 'subject', pane: 'depth' },
+  mask: { group: 'subject', pane: 'mask' },
+  transitions: { group: 'vfx', cat: 'Transitions & Morphs' }
+};
+
+function setNav(name) {
+  const target = NAV_TARGETS[name];
+  if (!target) return;
+  state.activeNav = name;
+  if (target.pane) state.paneByGroup[target.group] = target.pane;
+  activateGroup(target.group);
+
+  if (target.cat) {
+    state.selectedVfxCat = target.cat;
+    const sel = document.getElementById('vfxCatSelect');
+    if (sel) sel.value = target.cat;
+    renderVfxGrid();
+  }
+
+  document.querySelectorAll('.rail-item').forEach((btn) => {
+    const on = btn.dataset.nav === name;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.querySelectorAll('.rail-sub').forEach((btn) => btn.classList.remove('active'));
+}
+
 function initTabs() {
   state.activeGroup = 'vfx';
+  state.activeNav = 'fx';
   state.paneByGroup = { vfx: 'vfx', captions: 'captions', subject: 'mask', editing: 'silences', render: 'render' };
 
-  document.querySelectorAll('.main-tab').forEach((btn) => {
-    btn.addEventListener('click', () => activateGroup(btn.dataset.group));
+  document.querySelectorAll('.rail-item').forEach((btn) => {
+    btn.addEventListener('click', () => setNav(btn.dataset.nav));
+  });
+  document.querySelectorAll('.rail-sub').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activateGroup(btn.dataset.group);
+      document.querySelectorAll('.rail-item').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('.rail-sub').forEach((b) => b.classList.toggle('active', b === btn));
+      if (btn.dataset.group === 'captions') state.activeNav = 'lyrics';
+      else state.activeNav = btn.dataset.group;
+    });
   });
 
   const compactBtn = document.getElementById('toggleCompactBtn');
@@ -1809,14 +1858,14 @@ function initVfxTab() {
     });
   }
 
-  document.querySelectorAll('.vfx-subtab').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.vfx-subtab').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.selectedVfxCat = btn.dataset.cat;
+  // Category is one select instead of ten chips: fewer rows, same filtering.
+  const catSelect = document.getElementById('vfxCatSelect');
+  if (catSelect) {
+    catSelect.addEventListener('change', () => {
+      state.selectedVfxCat = catSelect.value;
       renderVfxGrid();
     });
-  });
+  }
 
   document.getElementById('vfxSearchInput').addEventListener('input', (e) => {
     state.vfxSearch = e.target.value.trim().toLowerCase();
@@ -1863,47 +1912,32 @@ function renderVfxGrid() {
     return catMatch && searchMatch;
   });
 
-  grid.innerHTML = filtered.map((p) => {
+  grid.innerHTML = filtered.map((p, i) => {
     const isSel = state.activePreset && state.activePreset.id === p.id;
     const kfs = KF.tracks[p.id] || [];
     const val = Math.round(kfs.length ? evalKeyframes(kfs, state.playheadSec) : baseIntensity(p.id));
     const stackIdx = stackIndexOf(p.id);
     const inStack = stackIdx >= 0;
+    // A look is a name. No thumbnail: the browser is a list you can read at a
+    // glance, and the picture you are judging it on is already on screen.
     return `
       <div class="vfx-card ${isSel ? 'selected' : ''} ${inStack ? 'stacked' : ''}" data-id="${p.id}">
-        <div class="vfx-thumb">
-          <canvas class="vfx-thumb-canvas" width="180" height="62" data-thumbtype="${p.effectType}" data-accent="${p.accent}"></canvas>
-          <span class="vfx-thumb-badge">${p.category}</span>
-          <span class="vfx-thumb-spec" style="background:${p.accent};">${p.spec}</span>
-          ${inStack ? `<span class="vfx-stack-badge" title="Position in the stack">${stackIdx + 1}</span>` : ''}
+        <span class="fx-num">${String(i + 1).padStart(2, '0')}</span>
+        <span class="fx-name">${p.name}</span>
+        ${inStack ? `<span class="vfx-stack-badge" title="Position in the stack">${stackIdx + 1}</span>` : ''}
+        <div class="fx-tools">
+          <span class="int-lbl">INT</span>
+          <input class="card-intensity-slider" type="range" min="0" max="200" value="${val}"
+            data-int="${p.id}" title="Per-effect intensity (0–200%)" />
+          <strong class="int-val" data-intval="${p.id}">${val}%</strong>
+          <button class="card-kf-btn ${kfs.length ? 'has-kfs' : ''}" data-kf="${p.id}"
+            title="Add / update intensity keyframe at playhead">◆${kfs.length ? ' ' + kfs.length : ''}</button>
         </div>
-        <div class="vfx-card-body">
-          <div class="vfx-card-title">${p.name}</div>
-          <div class="vfx-card-desc">${p.desc}</div>
-          <div class="vfx-card-slider-row" data-sliderrow="${p.id}">
-            <span class="int-lbl">INT</span>
-            <input class="card-intensity-slider" type="range" min="0" max="200" value="${val}"
-              data-int="${p.id}" title="Per-effect intensity (0–200%)" />
-            <strong class="int-val" data-intval="${p.id}">${val}%</strong>
-            <button class="card-kf-btn ${kfs.length ? 'has-kfs' : ''}" data-kf="${p.id}"
-              title="Add / update intensity keyframe at playhead">◆ KF${kfs.length ? ' ' + kfs.length : ''}</button>
-          </div>
-        </div>
-        <!-- the key is a sibling of the text block, not a child of it: it owns
-             its own column so it can never push the title around -->
-        <div class="vfx-card-foot">
-          <span class="vfx-node-tag">${p.node}</span>
-          <button class="vfx-apply-btn ${inStack ? 'in-stack' : ''}" data-apply="${p.id}"
-            title="${inStack ? 'Add another copy of this look on top of the stack' : 'Add this look to the stack'}">${inStack ? 'Stack +' : 'Stack'}</button>
-        </div>
+        <button class="vfx-apply-btn ${inStack ? 'in-stack' : ''}" data-apply="${p.id}"
+          title="${inStack ? 'Add another copy of this look on top of the stack' : 'Add this look to the stack'}">${inStack ? 'Stack +' : 'Stack'}</button>
       </div>
     `;
   }).join('');
-
-  // Draw procedural optical/waveform preview on each card's thumbnail canvas
-  grid.querySelectorAll('.vfx-thumb-canvas').forEach((canv) => {
-    drawCardShaderPreview(canv, canv.dataset.thumbtype, canv.dataset.accent);
-  });
 
   // Per-card intensity sliders (0–200%) — never trigger the card's apply action
   grid.querySelectorAll('.card-intensity-slider').forEach((slider) => {
@@ -2092,7 +2126,8 @@ function drawCardShaderPreview(canvas, effectType, accent, timeSec) {
   }
 }
 
-// Animated mini-canvas card previews — updates in chunks so 56 cards stay cheap
+// The look list is text only, so this loop usually finds nothing and returns.
+// It stays because the thumbnail renderer is still used elsewhere (depth / lyrc).
 let thumbCursor = 0;
 function startCardThumbnailLoop() {
   setInterval(() => {

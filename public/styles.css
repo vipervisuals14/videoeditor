@@ -3597,43 +3597,6 @@ body.motion-off {
 }
 .popup-panel .panel-window-bar .window-fps { display: none; }
 
-/* five modes as a segmented strip with a blue live edge */
-.popup-panel .main-tabs {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0;
-  padding: 0;
-  background: #0d1012;
-  border-bottom: 1px solid #000;
-}
-.popup-panel .main-tab {
-  padding: 9px 7px 8px;
-  border: 0;
-  border-right: 1px solid rgba(0, 0, 0, 0.85);
-  border-radius: 0;
-  background: linear-gradient(180deg, #1c2023, #14181a);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  text-align: center;
-}
-.popup-panel .main-tab:last-child { border-right: 0; }
-.popup-panel .main-tab .tab-name {
-  display: block;
-  font: 700 8.5px/1.35 var(--font-mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.popup-panel .main-tab .tab-meta { display: none; }
-.popup-panel .main-tab:hover .tab-name { color: var(--muted); }
-.popup-panel .main-tab.active {
-  background: linear-gradient(180deg, #262c31, #1b2024);
-  box-shadow: inset 0 2px 0 var(--blue), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-.popup-panel .main-tab.active .tab-name { color: #fff; }
-
 .tab-pane { padding: 0; }
 .tab-pane.active {
   display: block;
@@ -4995,4 +4958,229 @@ body:has(.workspace.compact-dock) { grid-template-columns: 460px minmax(0, 1fr);
   font-size: 7.5px;
   letter-spacing: 0.05em;
   white-space: nowrap;
+}
+
+/* ============================================================================
+   LEFT MENU — four destinations, and a list of names
+   ----------------------------------------------------------------------------
+   FX styles / Depth maps / Masking / Transitions. Each is a row with a number,
+   a label and a count, and the active one is lit from the left edge. Lyrics,
+   Editing and Render stay one tap away in the slim row underneath.
+   The look list below it is text only: number, name, and a Stack key.
+   ==========================================================================*/
+.rail-nav {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  background: #0d1012;
+  border-bottom: 1px solid #000;
+}
+.rail-item {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  border-bottom: 1px solid #000;
+  border-radius: 0;
+  background: linear-gradient(180deg, #191d20, #14181a);
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  position: relative;
+}
+.rail-item:last-of-type { border-bottom: 0; }
+.rail-item:hover { background: linear-gradient(180deg, #1f2428, #171b1e); color: var(--paper); }
+.rail-item .rail-num {
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  color: #4f585c;
+}
+.rail-item .rail-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rail-item .rail-meta {
+  font: 700 8.5px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  color: #4f585c;
+}
+.rail-item.active {
+  background: linear-gradient(180deg, #20272c, #182026);
+  box-shadow: inset 3px 0 0 var(--blue), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.rail-item.active .rail-label { color: #fff; font-weight: 700; }
+.rail-item.active .rail-num,
+.rail-item.active .rail-meta { color: var(--blue); }
+
+/* the extra tools: one slim row of three */
+.rail-subnav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex: 0 0 auto;
+  border-bottom: 1px solid #000;
+  background: #0b0e10;
+}
+.rail-sub {
+  padding: 7px 6px;
+  border: 0;
+  border-right: 1px solid #000;
+  border-radius: 0;
+  background: transparent;
+  color: var(--dim);
+  font: 700 8px/1.2 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.rail-sub:last-child { border-right: 0; }
+.rail-sub:hover { color: var(--paper); background: #14181b; }
+.rail-sub.active { color: var(--blue); background: #12171b; box-shadow: inset 0 -2px 0 var(--blue); }
+
+/* ---- the list: a name, a number, a key -------------------------------- */
+#tab-vfx .fx-filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 6px;
+}
+#tab-vfx .vfx-search {
+  height: 28px;
+  margin: 0;
+  padding: 0 9px;
+  font: 500 10.5px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--paper);
+  background: #07090a;
+  border: 1px solid #000;
+  border-radius: 4px;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.7);
+}
+#tab-vfx .vfx-search::placeholder {
+  color: #4f585c;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9px;
+}
+#tab-vfx .fx-cat-select {
+  height: 28px;
+  padding: 0 6px;
+  font: 700 8.5px/1 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: #12171b;
+  border: 1px solid #000;
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.popup-panel #tab-vfx .vfx-card,
+.popup-panel #tab-vfx .vfx-card:hover,
+.popup-panel #tab-vfx .vfx-card.selected {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 8px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #0a0c0e;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+  cursor: pointer;
+}
+.popup-panel #tab-vfx .vfx-card:nth-child(odd) { background: #14181b; }
+.popup-panel #tab-vfx .vfx-card:hover { background: #1b2125; }
+.popup-panel #tab-vfx .vfx-card.selected {
+  background: #0b1418;
+  box-shadow: inset 2px 0 0 var(--blue);
+}
+.popup-panel #tab-vfx .vfx-card.stacked { box-shadow: inset 2px 0 0 rgba(76, 159, 216, 0.5); }
+.popup-panel #tab-vfx .vfx-card.selected.stacked { box-shadow: inset 2px 0 0 var(--blue); }
+
+.popup-panel #tab-vfx .fx-num {
+  font: 700 8.5px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: #454e52;
+  text-align: right;
+}
+.popup-panel #tab-vfx .fx-name {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #cfd7db;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.popup-panel #tab-vfx .vfx-card.selected .fx-name { color: #fff; font-weight: 700; }
+
+.popup-panel #tab-vfx .vfx-stack-badge {
+  position: static;
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
+  border-radius: 8px;
+  font-size: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
+}
+
+/* tools only exist on the row you are working on, so the list stays names */
+.popup-panel #tab-vfx .fx-tools { display: none; }
+.popup-panel #tab-vfx .vfx-card.selected {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "num name stack"
+    "tools tools tools";
+  height: auto;
+  min-height: 66px;
+  padding: 7px 8px;
+  row-gap: 6px;
+}
+.popup-panel #tab-vfx .vfx-card.selected .fx-num { grid-area: num; }
+.popup-panel #tab-vfx .vfx-card.selected .fx-name { grid-area: name; }
+.popup-panel #tab-vfx .vfx-card.selected .vfx-stack-badge { grid-area: stack; justify-self: end; }
+.popup-panel #tab-vfx .vfx-card.selected .vfx-apply-btn { grid-area: stack; justify-self: end; }
+.popup-panel #tab-vfx .vfx-card.selected .fx-tools {
+  grid-area: tools;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.popup-panel #tab-vfx .vfx-card.selected .fx-tools .int-lbl {
+  font: 700 7.5px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: #5d676b;
+}
+.popup-panel #tab-vfx .vfx-card.selected .fx-tools input[type="range"] { flex: 1 1 auto; min-width: 40px; }
+.popup-panel #tab-vfx .vfx-card.selected .fx-tools .int-val {
+  font: 700 9px/1 var(--font-mono);
+  color: var(--blue);
+  min-width: 30px;
+  text-align: right;
+}
+
+.popup-panel #tab-vfx .vfx-card .vfx-apply-btn {
+  width: 56px;
+  padding: 6px 0;
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+  border-radius: 4px;
+  text-align: center;
 }

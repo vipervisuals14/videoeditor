@@ -16,6 +16,12 @@ const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 // ---- the shell: picture and presets are on screen at the same time --------
 check('the effects tab sits in a fixed rail', () => !!$('.popup-panel') && !!$('#tab-vfx'));
+
+check('the left menu is four named destinations', () => {
+  const labels = $$('.rail-item .rail-label').map((n) => n.textContent.trim().toLowerCase());
+  return labels.join('|') === 'fx styles|depth maps|masking|transitions'
+    ? true : `labels=${labels.join('|')}`;
+});
 check('the preset browser lives beside the preview, not below a long page', () => {
   const rail = $('.popup-panel');
   const stage = $('.stage-wrap');
@@ -72,17 +78,22 @@ const buttonOf = (card) => card.querySelector('.vfx-apply-btn');
 // the page polls the bridge and loads recipes on boot; those are not edits
 const edits = () => calls.filter((c) => String(c.url).includes('dispatch'));
 check('the card button says Stack, not Apply', () => /Stack/.test(buttonOf(cards[0]).textContent));
-check('the Stack key is a sibling of the text block, not inside it', () => {
+check('a row is just a number, a name and a key', () => {
   const card = $$('#tab-vfx .vfx-card')[0];
-  const foot = card.querySelector('.vfx-card-foot');
-  return !!foot && foot.parentElement === card
-    ? true : `parent=${foot && foot.parentElement.className}`;
-});
-check('each row is exactly three tracks', () => {
-  const card = $$('#tab-vfx .vfx-card')[0];
-  const kids = [...card.children].map((el) => el.className.split(' ')[0]);
-  return kids.join(',') === 'vfx-thumb,vfx-card-body,vfx-card-foot'
+  const kids = [...card.children].map((el) => el.className.split(' ')[0]).filter((c) => c !== 'fx-tools');
+  return kids.join(',') === 'fx-num,fx-name,vfx-apply-btn'
     ? true : `children=${kids.join(',')}`;
+});
+check('no thumbnails or preview canvases in the look list', () => {
+  const grid = document.getElementById('vfxPresetGrid');
+  return grid.querySelectorAll('canvas, .vfx-thumb, img').length === 0
+    ? true : 'a preview element is still in the list';
+});
+check('the intensity slider appears only on the row you picked', () => {
+  const cards = $$('#tab-vfx .vfx-card');
+  const withTools = cards.filter((c) => c.querySelector('.fx-tools'));
+  return withTools.length === 1 && withTools[0].classList.contains('selected')
+    ? true : `rows with tools=${withTools.length}`;
 });
 check('booting the page sends nothing to Resolve', () => edits().length === 0, `dispatches=${edits().length}`);
 
@@ -104,7 +115,7 @@ check('three presses stack three looks', () => {
 });
 check('the order is the order they were stacked', () => {
   const names = $$('#stackChips .stack-chip span').map((n) => n.textContent);
-  const expected = [cards[0], cards[1], cards[2]].map((c) => c.querySelector('.vfx-card-title').textContent);
+  const expected = [cards[0], cards[1], cards[2]].map((c) => c.querySelector('.fx-name').textContent);
   return names.join('|') === expected.join('|') ? true : `got ${names.join(' > ')} want ${expected.join(' > ')}`;
 });
 check('stacked cards are badged with their pass number', () => {
@@ -133,7 +144,7 @@ check('the dispatch is a layer stack, not a single effect', () =>
 check('all three looks travel in order', () => {
   const layers = (payload && payload.payload && payload.payload.layers) || [];
   const got = layers.map((l) => l.name).join('|');
-  const want = [cards[0], cards[1], cards[2]].map((c) => c.querySelector('.vfx-card-title').textContent).join('|');
+  const want = [cards[0], cards[1], cards[2]].map((c) => c.querySelector('.fx-name').textContent).join('|');
   return got === want ? true : `got ${got} want ${want}`;
 });
 check('each layer carries a native recipe to build', () => {
@@ -182,6 +193,36 @@ $('#clearLayersBtn').click();
 check('Clear empties the stack', () =>
   $$('#stackChips .stack-chip').length === 0 && $('#stackSummary').textContent === 'Nothing stacked yet');
 check('Clear does not touch the timeline', () => $$('#laneV3 .tl-clip').length === 1);
+
+// ---- the left menu drives the panes --------------------------------------
+check('Depth maps opens the depth panel', () => {
+  document.querySelector('.rail-item[data-nav="depth"]').click();
+  return document.getElementById('tab-depth').classList.contains('active')
+    && document.querySelector('.rail-item[data-nav="depth"]').classList.contains('active');
+});
+check('Masking opens the mask panel', () => {
+  document.querySelector('.rail-item[data-nav="mask"]').click();
+  return document.getElementById('tab-mask').classList.contains('active');
+});
+check('Transitions filters FX styles to that family', () => {
+  document.querySelector('.rail-item[data-nav="transitions"]').click();
+  const names = $$('#tab-vfx .vfx-card .fx-name').length;
+  const sel = document.getElementById('vfxCatSelect').value;
+  return document.getElementById('tab-vfx').classList.contains('active')
+    && sel === 'Transitions & Morphs' && names > 0 && names < 72
+    ? true : `select=${sel} rows=${names}`;
+});
+check('FX styles clears the filter again', () => {
+  document.querySelector('.rail-item[data-nav="fx"]').click();
+  return document.getElementById('vfxCatSelect').value === 'ALL'
+    && $$('#tab-vfx .vfx-card').length > 60;
+});
+check('Lyrics / Editing / Render stay reachable', () => {
+  const subs = $$('.rail-sub').map((b) => b.textContent.trim().toLowerCase());
+  document.querySelector('.rail-sub[data-group="captions"]').click();
+  return subs.join('|') === 'lyrics|editing|render'
+    && document.getElementById('tab-captions').classList.contains('active');
+});
 
 // ---- the static path: no backend, so the panel must hand you real Lua -----
 check('the console generator is loaded', () => typeof window.LUA_EXPORT === 'object', 'LUA_EXPORT missing');

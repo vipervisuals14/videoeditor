@@ -280,38 +280,34 @@
 
       <!-- FIVE WORKFLOW TABS (mask+depth live under Subject, silences+media
            pool live under Editing) -->
-      <nav class="main-tabs" role="tablist">
-        <button class="main-tab active" data-group="vfx">
-          <div class="tab-text">
-            <span class="tab-name">01 • Effects</span>
-            <span class="tab-meta">72 looks · keyframes</span>
-          </div>
+      <!-- LEFT MENU: four destinations, then the extra tools as a slim row -->
+      <nav class="rail-nav" id="railNav" role="tablist" aria-label="Panel sections">
+        <button class="rail-item active" data-nav="fx" role="tab" aria-selected="true">
+          <span class="rail-num">01</span>
+          <span class="rail-label">FX styles</span>
+          <span class="rail-meta">72</span>
         </button>
-        <button class="main-tab" data-group="captions">
-          <div class="tab-text">
-            <span class="tab-name">02 • Lyrics</span>
-            <span class="tab-meta">20 styles</span>
-          </div>
+        <button class="rail-item" data-nav="depth" role="tab" aria-selected="false">
+          <span class="rail-num">02</span>
+          <span class="rail-label">Depth maps</span>
+          <span class="rail-meta">11</span>
         </button>
-        <button class="main-tab" data-group="subject">
-          <div class="tab-text">
-            <span class="tab-name">03 • Subject</span>
-            <span class="tab-meta">Mask · Depth</span>
-          </div>
+        <button class="rail-item" data-nav="mask" role="tab" aria-selected="false">
+          <span class="rail-num">03</span>
+          <span class="rail-label">Masking</span>
+          <span class="rail-meta">AI</span>
         </button>
-        <button class="main-tab" data-group="editing">
-          <div class="tab-text">
-            <span class="tab-name">04 • Editing</span>
-            <span class="tab-meta">Silences · Media Pool</span>
-          </div>
-        </button>
-        <button class="main-tab" data-group="render">
-          <div class="tab-text">
-            <span class="tab-name">05 • Render</span>
-            <span class="tab-meta">4K in · out</span>
-          </div>
+        <button class="rail-item" data-nav="transitions" role="tab" aria-selected="false">
+          <span class="rail-num">04</span>
+          <span class="rail-label">Transitions</span>
+          <span class="rail-meta">8</span>
         </button>
       </nav>
+      <div class="rail-subnav" id="railSubnav">
+        <button class="rail-sub main-tab" data-group="captions">Lyrics</button>
+        <button class="rail-sub main-tab" data-group="editing">Editing</button>
+        <button class="rail-sub main-tab" data-group="render">Render</button>
+      </div>
 
       <!-- Segmented control for tabs that hold two panels -->
       <div class="pane-switcher hidden" id="paneSwitcher" role="tablist"></div>
@@ -343,19 +339,21 @@
 
         <!-- 8 CATEGORY SUB-TABS (INCLUDING TOUCHDESIGNER TOPs & TRANSITIONS) -->
         <div class="vfx-subtabs-bar" data-module="presets" data-label="Effect Browser">
-          <div class="vfx-subtabs" id="vfxCategoryTabs">
-            <button class="vfx-subtab active" data-cat="ALL">All (72)</button>
-            <button class="vfx-subtab" data-cat="TouchDesigner TOPs">TouchDesigner TOPs (12)</button>
-            <button class="vfx-subtab" data-cat="Data & Print TOPs">Data & Print TOPs (8)</button>
-            <button class="vfx-subtab" data-cat="Glitch & Bitmap TOPs">Glitch & Bitmap TOPs (8)</button>
-            <button class="vfx-subtab" data-cat="Transitions & Morphs">Transitions & Morphs (8)</button>
-            <button class="vfx-subtab" data-cat="Optical & Glass">Optical & Glass</button>
-            <button class="vfx-subtab" data-cat="Shutter & Time">Shutter & Time</button>
-            <button class="vfx-subtab" data-cat="Film Lab & Grade">Film Lab & Grade</button>
-            <button class="vfx-subtab" data-cat="Camera Weight">Camera Weight</button>
-            <button class="vfx-subtab" data-cat="Depth & Subject">Depth & Subject</button>
+          <div class="fx-filter-row">
+            <input type="search" id="vfxSearchInput" class="vfx-search" placeholder="Search looks" />
+            <select id="vfxCatSelect" class="fx-cat-select" aria-label="Effect category">
+              <option value="ALL">All categories</option>
+              <option value="TouchDesigner TOPs">TouchDesigner TOPs</option>
+              <option value="Data &amp; Print TOPs">Data &amp; Print</option>
+              <option value="Glitch &amp; Bitmap TOPs">Glitch &amp; Bitmap</option>
+              <option value="Transitions &amp; Morphs">Transitions &amp; Morphs</option>
+              <option value="Optical &amp; Glass">Optical &amp; Glass</option>
+              <option value="Shutter &amp; Time">Shutter &amp; Time</option>
+              <option value="Film Lab &amp; Grade">Film Lab &amp; Grade</option>
+              <option value="Camera Weight">Camera Weight</option>
+              <option value="Depth &amp; Subject">Depth &amp; Subject</option>
+            </select>
           </div>
-          <input type="search" id="vfxSearchInput" class="vfx-search" placeholder="Filter TouchDesigner / Optical / Transitions..." />
         </div>
 
         <!-- LIVE MINI-CANVAS PRESET CARDS GRID (EACH WITH ITS OWN INTENSITY SLIDER + KEYFRAME BUTTON) -->

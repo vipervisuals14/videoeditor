@@ -20,10 +20,10 @@ const rules = [...flat.matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim())
 const critical = [
   '.app-window', '.win-dots', '.panel-label', '.stage-lower', '.transport-key',
   '.key-play', '.key-pause', '.key-stop', '.key-send',
-  '#tab-vfx .vfx-card .vfx-apply-btn', '#tab-vfx .vfx-card .vfx-card-body',
+  '#tab-vfx .vfx-card .vfx-apply-btn', '#tab-vfx .vfx-card .fx-name',
   '.stack-panel .layer-row', '.vfx-stack-badge', '.install-strip', '.install-steps',
   '.stage-detail .kf-body-grid', '.stage-detail .kf-canvas-wrap',
-  '.monitor-column .timeline-card', '.popup-panel .main-tab.active .tab-name'
+  '.monitor-column .timeline-card', '.rail-item.active .rail-label'
 ];
 
 let dead = 0;
@@ -72,11 +72,9 @@ function computedFor(target, prop) {
 }
 const rowDisplay = computedFor('.popup-panel #tab-vfx .vfx-card', 'display');
 const rowHeight = computedFor('.popup-panel #tab-vfx .vfx-card', 'height');
-const footTrack = computedFor('.popup-panel #tab-vfx .vfx-card .vfx-card-foot', 'flex');
 const checks = [
-  ['preset rows resolve to a flex row', rowDisplay === 'flex', rowDisplay],
-  ['preset rows resolve to 72px tall', /^72px$/.test(String(rowHeight)), rowHeight],
-  ['the Stack key resolves to its own 68px track', /0 0 68px/.test(String(footTrack)), footTrack]
+  ['preset rows resolve to a grid row', rowDisplay === 'grid', rowDisplay],
+  ['preset rows resolve to 40px', /^40px$/.test(String(rowHeight)), rowHeight]
 ];
 for (const [label, ok, got] of checks) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${ok ? '' : ` (got ${got})`}`);
