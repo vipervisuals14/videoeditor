@@ -1126,6 +1126,9 @@ const state = {
   scene: 'empty', // 'empty' | 'custom_video' | 'custom_image'
   activeTab: 'vfx',
   selectedVfxCat: 'ALL',
+  // Which section of the browser is open. null = the six section buttons.
+  // One section at a time keeps the list short instead of 72 rows deep.
+  vfxSection: null,
   vfxSearch: '',
   activePreset: null,          // nothing is picked until you press Stack or a card
   presetPicked: false,         // false = the monitor shows the plate untouched
@@ -1823,9 +1826,13 @@ function setNav(name) {
   activateGroup(target.group);
 
   if (target.cat) {
+    // FX styles is the landing screen (six sections); Transitions opens that
+    // one section directly.
     state.selectedVfxCat = target.cat;
-    const sel = document.getElementById('vfxCatSelect');
-    if (sel) sel.value = target.cat;
+    state.vfxSection = target.cat === 'ALL' ? null : target.cat;
+    state.vfxSearch = '';
+    const searchEl = document.getElementById('vfxSearchInput');
+    if (searchEl) searchEl.value = '';
     renderVfxGrid();
   }
 
@@ -2231,11 +2238,16 @@ function initVfxTab() {
     });
   }
 
-  // Category is one select instead of ten chips: fewer rows, same filtering.
-  const catSelect = document.getElementById('vfxCatSelect');
-  if (catSelect) {
-    catSelect.addEventListener('change', () => {
-      state.selectedVfxCat = catSelect.value;
+  // Sections, not a select: six buttons, one open at a time, each with its
+  // count. This is the whole "the list is too long" fix.
+  const sectionBar = document.getElementById('fxSectionBar');
+  if (sectionBar) {
+    sectionBar.addEventListener('click', (e) => {
+      const btn = e.target && e.target.closest ? e.target.closest('[data-fx-section]') : null;
+      if (!btn) return;
+      const name = btn.dataset.fxSection;
+      state.vfxSection = state.vfxSection === name ? null : name;
+      state.selectedVfxCat = state.vfxSection || 'ALL';
       renderVfxGrid();
     });
   }
@@ -2373,17 +2385,78 @@ function renderFxParamRack() {
   });
 }
 
+// The six sections, in the order the looks are authored, with real counts.
+function fxSections() {
+  const order = [];
+  const counts = new Map();
+  VFX_PRESETS.forEach((p) => {
+    if (!counts.has(p.category)) {
+      counts.set(p.category, 0);
+      order.push(p.category);
+    }
+    counts.set(p.category, counts.get(p.category) + 1);
+  });
+  return order.map((name) => ({ name, count: counts.get(name) }));
+}
+
+function renderFxSectionBar() {
+  const bar = document.getElementById('fxSectionBar');
+  if (!bar) return;
+  const searching = !!state.vfxSearch;
+  bar.textContent = '';
+  fxSections().forEach((section) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'fx-section-btn';
+    btn.dataset.fxSection = section.name;
+    const open = state.vfxSection === section.name;
+    btn.classList.toggle('is-open', open && !searching);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    const label = document.createElement('span');
+    label.className = 'fx-section-name';
+    label.textContent = section.name;
+    const count = document.createElement('span');
+    count.className = 'fx-section-count';
+    count.textContent = String(section.count);
+    btn.appendChild(label);
+    btn.appendChild(count);
+    bar.appendChild(btn);
+  });
+}
+
 function renderVfxGrid() {
   const grid = document.getElementById('vfxPresetGrid');
-  const filtered = VFX_PRESETS.filter((p) => {
-    const catMatch = state.selectedVfxCat === 'ALL' || p.category === state.selectedVfxCat;
-    const searchMatch = !state.vfxSearch ||
-      p.name.toLowerCase().includes(state.vfxSearch) ||
-      p.category.toLowerCase().includes(state.vfxSearch) ||
-      p.desc.toLowerCase().includes(state.vfxSearch) ||
-      p.node.toLowerCase().includes(state.vfxSearch);
-    return catMatch && searchMatch;
-  });
+  renderFxSectionBar();
+  const note = document.getElementById('fxResultsNote');
+  const searching = !!state.vfxSearch;
+  const allowed = (p) => {
+    if (searching) {
+      return p.name.toLowerCase().includes(state.vfxSearch) ||
+        p.category.toLowerCase().includes(state.vfxSearch) ||
+        p.desc.toLowerCase().includes(state.vfxSearch) ||
+        p.node.toLowerCase().includes(state.vfxSearch);
+    }
+    return state.vfxSection ? p.category === state.vfxSection : false;
+  };
+  const filtered = VFX_PRESETS.filter(allowed);
+  if (note) {
+    if (searching) {
+      note.textContent = `${filtered.length} match${filtered.length === 1 ? '' : 'es'}`;
+    } else if (state.vfxSection) {
+      note.textContent = `${filtered.length} looks`;
+    } else {
+      note.textContent = 'Pick a section';
+    }
+  }
+  grid.classList.toggle('is-section-landing', !searching && !state.vfxSection);
+  if (!filtered.length && !searching && !state.vfxSection) {
+    grid.innerHTML = '<p class="fx-empty-hint">Six sections, 72 looks. Pick one above — nothing is applied until you stack a look.</p>';
+    return;
+  }
+  if (!filtered.length) {
+    grid.innerHTML = '<p class="fx-empty-hint">No look matches that search. Try “halation”, “print”, “depth” or “shutter”.</p>';
+    return;
+  }
 
   grid.innerHTML = filtered.map((p, i) => {
     const isSel = state.activePreset && state.activePreset.id === p.id;
@@ -2395,7 +2468,7 @@ function renderVfxGrid() {
     // glance, and the picture you are judging it on is already on screen.
     return `
       <div class="vfx-card ${isSel ? 'selected' : ''} ${inStack ? 'stacked' : ''}" data-id="${p.id}">
-        <span class="fx-num">${String(i + 1).padStart(2, '0')}</span>
+        <span class="fx-num">${String(VFX_PRESETS.indexOf(p) + 1).padStart(2, '0')}</span>
         <span class="fx-name">${p.name}</span>
         ${inStack ? `<span class="vfx-stack-badge" title="Position in the stack">${stackIdx + 1}</span>` : ''}
         <div class="fx-tools">
@@ -4281,7 +4354,15 @@ function applyDepthStackTiled(ctx, w, h, t) {
       { data: img.data, width: tile.sw, height: tile.sh },
       depthRect,
       on.effects,
-      { focus: d.focus / 100, aperture: d.aperture, time: t }
+      {
+        focus: d.focus / 100,
+        aperture: d.aperture,
+        time: t,
+        // the slice reads the panel's depth range, so near/far are set once
+        near: (d.nearPoint || 0) / 100,
+        far: (d.farPoint === undefined ? 100 : d.farPoint) / 100,
+        feather: Math.max(0.01, (100 - (d.sliceFeather === undefined ? 15 : d.sliceFeather)) / 100 * 0.4)
+      }
     );
     const full = ctx.createImageData(tile.w, tile.h);
     for (let y = 0; y < tile.h; y++) {
@@ -4787,11 +4868,25 @@ function defaultDepthState() {
     aiReady: false,
     aiFailed: false,
     view: 'off',             // off | overlay | map | split
-    live: true,              // re-estimate from the current frame while it plays
+    // A depth map belongs to a shot, not to a frame. Default: analyse once,
+    // then use it until the footage or the frame range changes.
+    live: false,
+    follow: false,           // re-run the model while the clip plays
     invert: false,
     smooth: 2,
     contrast: 55,
     nearBias: 50,
+    // ---- the map itself (the part that makes it usable, not decorative) ---
+    nearPoint: 0,            // 0..1 — clip the near end of the raw map
+    farPoint: 100,           // 0..100 — clip the far end
+    gamma: 100,              // 40..220, % — shape the falloff
+    refine: 35,              // 0..100 — edge refinement against the picture
+    palette: 'gray',         // gray | ice | ember | viridis | cobalt | mono
+    raw: null,               // Float32Array straight from the model / file
+    rawW: 0,
+    rawH: 0,
+    mapSec: null,            // which moment of the clip this map describes
+    mapLabel: '',            // 'AI' | 'Fast' | 'Loaded' | 'Mask'
     focus: 45,
     aperture: 100,
     map: null,               // Float32Array at DEPTH_W x DEPTH_H
@@ -4830,6 +4925,59 @@ function depthSamplePlate(timeSec) {
   } catch (_e) {
     return null;
   }
+}
+
+// The raw model output is kept untouched; everything the user changes on the
+// panel (near point, far point, gamma, invert, edge refine) is a *derivation*.
+// That means dragging a slider re-shapes the map instantly — no second model
+// run, no 3-second wait to see what a control does.
+function depthDerive(optReason) {
+  const d = ensureDepthState();
+  if (!d.raw || !d.rawW || !d.rawH) return false;
+  const w = d.rawW;
+  const h = d.rawH;
+  let map = DEPTH_ENGINE.remap(d.raw, {
+    near: (d.nearPoint || 0) / 100,
+    far: (d.farPoint === undefined ? 100 : d.farPoint) / 100,
+    gamma: Math.max(0.2, (d.gamma || 100) / 100),
+    invert: !!d.invert
+  });
+  if (d.refine > 0.5) {
+    // refine against the frame the map was built from, not the current one
+    const luma = depthRefineLuma;
+    if (luma && luma.w === w && luma.h === h) {
+      map = DEPTH_ENGINE.refine(map, luma.data, w, h, d.refine, d.invert);
+    }
+  }
+  d.map = map;
+  d.mapW = w;
+  d.mapH = h;
+  d.dirty = false;
+  if (optReason) d.status = optReason;
+  return true;
+}
+
+// Keep a copy of the frame that produced the map, so edge refinement has the
+// right picture to snap to even after the clip has moved on.
+let depthRefineLuma = null;
+function depthStoreFrame(img) {
+  if (!img) { depthRefineLuma = null; return; }
+  depthRefineLuma = {
+    data: new Uint8ClampedArray(img.data),
+    w: img.width,
+    h: img.height
+  };
+}
+
+function depthSetRaw(raw, w, h, label) {
+  const d = ensureDepthState();
+  d.raw = raw;
+  d.rawW = w;
+  d.rawH = h;
+  d.mapLabel = label || d.mapLabel;
+  d.mapSec = state.playheadSec;
+  depthRefineLuma = null;
+  return d;
 }
 
 function depthRescan(opts) {
@@ -4871,11 +5019,8 @@ function depthRescan(opts) {
       depthSyncUI();
       return;
     }
-    d.map = d.loadedMap.slice();
-    d.mapW = d.loadedMapW || DEPTH_W;
-    d.mapH = d.loadedMapH || DEPTH_H;
-    d.dirty = false;
-    d.status = 'Using the loaded depth map. Every effect below is now accurate to that map.';
+    depthSetRaw(d.loadedMap.slice(), d.loadedMapW || DEPTH_W, d.loadedMapH || DEPTH_H, 'Loaded');
+    depthDerive('Using the loaded depth map. Every effect below is now accurate to that map.');
     if (!o.silent) depthSyncUI();
     return;
   }
@@ -4886,11 +5031,9 @@ function depthRescan(opts) {
       return;
     }
     const small = DEPTH_ENGINE.fromMask(m.soft, MASK_W, MASK_H, 0.35);
-    d.map = DEPTH_ENGINE.resizeDepth(small, MASK_W, MASK_H, DEPTH_W, DEPTH_H);
-    d.mapW = DEPTH_W;
-    d.mapH = DEPTH_H;
-    d.dirty = false;
-    d.status = 'Depth from the Magic Mask: subject near, everything else far.';
+    const full = DEPTH_ENGINE.resizeDepth(small, MASK_W, MASK_H, DEPTH_W, DEPTH_H);
+    depthSetRaw(full, DEPTH_W, DEPTH_H, 'Mask');
+    depthDerive('Depth from the Magic Mask: subject near, everything else far.');
     depthSyncUI();
     return;
   }
@@ -4904,25 +5047,25 @@ function depthRescan(opts) {
   // a differently-sized plate can never be read out of bounds.
   const sw = img.width || DEPTH_W;
   const sh = img.height || DEPTH_H;
-  d.map = DEPTH_ENGINE.estimate(
+  const est = DEPTH_ENGINE.estimate(
     { data: img.data, width: sw, height: sh },
     {
       smooth: d.smooth,
       contrast: d.contrast,
       nearBias: d.nearBias,
-      invert: d.invert,
+      invert: false,
       mask: m && m.soft ? m.soft : null,
       maskW: MASK_W,
       maskH: MASK_H
     }
   );
-  d.mapW = sw;
-  d.mapH = sh;
-  d.dirty = false;
-  if (o.silent) return;
+  depthSetRaw(est, sw, sh, 'Fast');
+  depthStoreFrame({ data: img.data, width: sw, height: sh });
+  depthDerive();
+  if (o.silent) { depthSyncUI(); return; }
   d.status = m && m.soft
     ? 'Depth estimated from the plate, with your Magic Mask pinning the subject to the front.'
-    : 'Depth estimated from the plate (haze, height, detail, saturation).';
+    : 'Depth estimated from the plate (haze, height, detail, saturation). Switch to AI depth for real geometry.';
   depthSyncUI();
 }
 
@@ -5042,6 +5185,7 @@ function depthLiveWanted() {
   const d = state.depth;
   if (!d || !d.live) return false;
   if (d.source !== 'estimate') return false;   // loaded / mask maps are fixed
+  if (d.engine === 'ai' && !d.follow) return false;  // locked to the shot
   if (state.activeTab !== 'depth' && !depthEffectsOn().count) return false;
   return true;
 }
@@ -5051,10 +5195,12 @@ function depthLiveTick(nowMs) {
   if (!depthLiveWanted()) return;
   const dd = ensureDepthState();
   if (dd.engine === 'ai') {
-    // a full model pass takes seconds, not milliseconds: refresh only when the
-    // worker is free and the last one is old enough to be worth replacing
+    // A model pass takes seconds, so by default the map is *locked to the
+    // shot*: the effects keep using it while the clip plays and nothing
+    // flickers. Follow mode opts into re-running, and the result is blended.
+    if (!dd.follow) return;
     if (dd.aiBusy) return;
-    if (nowMs - depthAiLastRun < DEPTH_AI_MIN_INTERVAL_MS) return;
+    if (nowMs - depthAiLastRun < DEPTH_AI_FOLLOW_MS) return;
     depthAiLastRun = nowMs;
     depthAiRun();
     return;
@@ -5120,6 +5266,12 @@ let depthAiJobId = 0;
 let depthAiPendingFrame = null;
 let depthAiLastRun = 0;
 const DEPTH_AI_MIN_INTERVAL_MS = 2500;
+// How much of a new map a follow-mode pass is allowed to contribute. Low
+// enough that consecutive passes settle instead of popping.
+const DEPTH_AI_BLEND = 0.4;
+// Follow mode is slow on purpose: one pass every few seconds keeps the depth
+// roughly on the subject without hammering a single WASM thread.
+const DEPTH_AI_FOLLOW_MS = 4200;
 
 function depthAiSetStatus(text, busy) {
   const d = ensureDepthState();
@@ -5202,10 +5354,16 @@ function depthAiOnMessage(msg) {
     d.aiReady = true;
     d.aiProgress = -1;
     if (msg.map && msg.width && msg.height) {
-      d.map = msg.map instanceof Float32Array ? msg.map : new Float32Array(msg.map);
-      d.mapW = msg.width;
-      d.mapH = msg.height;
-      d.dirty = false;
+      const fresh = msg.map instanceof Float32Array ? msg.map : new Float32Array(msg.map);
+      // Following motion? Blend the new map into the old one instead of
+      // replacing it, so a per-frame model run cannot make the effects flicker.
+      const prev = d.raw;
+      if (d.follow && prev && prev.length === fresh.length) {
+        const a = DEPTH_AI_BLEND;
+        for (let i = 0; i < fresh.length; i++) fresh[i] = prev[i] * (1 - a) + fresh[i] * a;
+      }
+      depthSetRaw(fresh, msg.width, msg.height, 'AI');
+      depthDerive();
       d.status = `AI depth from Depth Anything V2 (${((msg.ms || 0) / 1000).toFixed(1)}s). Every effect below is now driven by real geometry.`;
     }
     depthAiSetStatus('AI depth ready.', false);
@@ -5241,6 +5399,7 @@ function depthAiRun(label) {
   d.aiProgress = d.aiReady ? -1 : d.aiProgress;
   depthAiJobId += 1;
   depthAiSetStatus(d.aiReady ? 'Running the depth model…' : 'Loading Depth Anything V2 — one-time 40 MB download…', true);
+  depthStoreFrame(frame);
   try {
     const copy = new Uint8ClampedArray(frame.data);
     worker.postMessage({
@@ -5300,10 +5459,14 @@ function depthSyncUI() {
     if (el) el.textContent = txt;
   };
   setText('depthSmoothVal', String(d.smooth));
-  setText('depthContrastVal', String(d.contrast));
-  setText('depthNearVal', String(d.nearBias));
   setText('depthFocusVal', d.focus + '%');
   setText('depthApertureVal', d.aperture + '%');
+  setText('depthSliceFeatherVal', (d.sliceFeather === undefined ? 15 : d.sliceFeather) + '%');
+  setText('depthNearPtVal', Math.round(d.nearPoint || 0) + '%');
+  setText('depthFarPtVal', Math.round(d.farPoint === undefined ? 100 : d.farPoint) + '%');
+  setText('depthGammaVal', (Math.max(0.2, (d.gamma || 100) / 100)).toFixed(2));
+  setText('depthRefineVal', Math.round(d.refine || 0) + '%');
+  setText('depthRangeReadout', `${Math.round(d.nearPoint || 0)} – ${Math.round(d.farPoint === undefined ? 100 : d.farPoint)}`);
   setText('depthSourceLabel', d.source === 'mask' ? 'Magic Mask' : d.source === 'upload' ? 'Loaded map' : 'Plate');
   setText('depthEngineLabel', d.source !== 'estimate' ? '—' : d.engine === 'ai' ? 'Depth Anything V2' : 'Fast estimate');
   setText('depthActiveCount', String(depthEffectsOn().count));
@@ -5318,11 +5481,13 @@ function depthSyncUI() {
   }
   const liveBtn = document.getElementById('depthLiveBtn');
   if (liveBtn) {
-    liveBtn.textContent = 'Live depth: ' + (d.live ? 'ON' : 'OFF');
-    liveBtn.classList.toggle('is-on', !!d.live);
-    liveBtn.classList.toggle('is-off', !d.live);
-    liveBtn.setAttribute('aria-pressed', d.live ? 'true' : 'false');
+    liveBtn.textContent = 'Follow motion: ' + (d.follow ? 'ON' : 'OFF');
+    liveBtn.classList.toggle('is-on', !!d.follow);
+    liveBtn.classList.toggle('is-off', !d.follow);
+    liveBtn.setAttribute('aria-pressed', d.follow ? 'true' : 'false');
   }
+  const palSel = document.getElementById('depthPaletteSelect');
+  if (palSel && palSel.value !== (d.palette || 'gray')) palSel.value = d.palette || 'gray';
   const viewSel = document.getElementById('depthViewSelect');
   if (viewSel && viewSel.value !== d.view) viewSel.value = d.view;
 
@@ -5361,7 +5526,12 @@ function depthSyncUI() {
       tctx.fillStyle = '#05070d';
       tctx.fillRect(0, 0, thumb.width, thumb.height);
       if (d.map) {
-        const gray = DEPTH_ENGINE.toGray(d.map, d.mapW || DEPTH_W, d.mapH || DEPTH_H, false);
+        const gray = DEPTH_ENGINE.toPalette
+          ? DEPTH_ENGINE.toPalette(d.map, d.mapW || DEPTH_W, d.mapH || DEPTH_H, {
+            invert: !!d.invert,
+            palette: d.palette || 'gray'
+          })
+          : DEPTH_ENGINE.toGray(d.map, d.mapW || DEPTH_W, d.mapH || DEPTH_H, false);
         let canvas = depthThumbCache;
         if (!canvas) {
           canvas = document.createElement('canvas');
@@ -5455,7 +5625,10 @@ function drawDepthOverlay(ctx, w, h) {
   const gctx = depthGrayCanvas.getContext('2d');
   if (!gctx) return;
   const idata = gctx.createImageData(mw, mh);
-  idata.data.set(DEPTH_ENGINE.toGray(d.map, mw, mh, false));
+  idata.data.set(DEPTH_ENGINE.toPalette ? DEPTH_ENGINE.toPalette(d.map, mw, mh, {
+    invert: !!d.invert,
+    palette: d.palette || 'gray'
+  }) : DEPTH_ENGINE.toGray(d.map, mw, mh, false));
   gctx.putImageData(idata, 0, 0);
 
   ctx.save();
@@ -5599,13 +5772,18 @@ function depthExportPng() {
     small.height = mh;
     const sctx = small.getContext('2d');
     const idata = sctx.createImageData(mw, mh);
-    idata.data.set(DEPTH_ENGINE.toGray(d.map, mw, mh, false));
+    // The export follows the palette on screen, but a colourised map is not a
+    // depth map: quantise it to grayscale for anything downstream, and say so.
+    const colourised = (d.palette || 'gray') !== 'gray';
+    idata.data.set(colourised
+      ? DEPTH_ENGINE.toPalette(d.map, mw, mh, { invert: !!d.invert, palette: d.palette })
+      : DEPTH_ENGINE.toGray(d.map, mw, mh, !!d.invert));
     sctx.putImageData(idata, 0, 0);
     cctx.imageSmoothingEnabled = true;
     cctx.drawImage(small, 0, 0, W, H);
     const a = document.createElement('a');
     a.href = canvas.toDataURL('image/png');
-    a.download = `PulseVFX_DepthMap_${d.source}_1920x1080.png`;
+    a.download = `PulseVFX_DepthMap_${colourised ? d.palette : 'gray'}_${d.source}_1920x1080.png`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => a.remove(), 400);
@@ -5786,20 +5964,30 @@ function initDepthTab() {
     });
   };
   slider('depthSmooth', 'smooth', () => depthRescan());
-  slider('depthContrast', 'contrast', () => depthRescan());
-  slider('depthNear', 'nearBias', () => depthRescan());
   slider('depthFocus', 'focus');
   slider('depthAperture', 'aperture');
+  slider('depthSliceFeather', 'sliceFeather');
+  // These four reshape the map that already exists — instant, no model run.
+  slider('depthNearPoint', 'nearPoint', () => depthDerive());
+  slider('depthFarPoint', 'farPoint', () => depthDerive());
+  slider('depthGamma', 'gamma', () => depthDerive());
+  slider('depthRefine', 'refine', () => depthDerive());
+
+  const paletteSel = document.getElementById('depthPaletteSelect');
+  if (paletteSel) {
+    paletteSel.addEventListener('change', () => {
+      d.palette = paletteSel.value || 'gray';
+      depthSyncUI();
+    });
+  }
 
   const inv = document.getElementById('depthInvertBtn');
   if (inv) {
     inv.addEventListener('click', () => {
       d.invert = !d.invert;
-      if (d.source === 'upload' && d.loadedMap) {
-        // flip the loaded map in place
-        for (let i = 0; i < d.loadedMap.length; i++) d.loadedMap[i] = 1 - d.loadedMap[i];
-      }
-      depthRescan();
+      // Invert is a view of the map, not a rewrite of it: flipping the raw
+      // buffer meant pressing it twice gave you an unusable map.
+      if (!depthDerive()) depthRescan();
     });
   }
 
@@ -5808,12 +5996,13 @@ function initDepthTab() {
   const liveBtn = document.getElementById('depthLiveBtn');
   if (liveBtn) {
     liveBtn.addEventListener('click', () => {
-      d.live = !d.live;
+      d.follow = !d.follow;
+      d.live = d.follow;
       depthSyncUI();
-      if (d.live) depthRescan();
-      showToast(d.live
-        ? 'Live depth on — the map follows the current frame'
-        : 'Live depth off — the map stays where you scanned it');
+      if (d.follow) depthRescan();
+      showToast(d.follow
+        ? 'Follow motion on — the map re-reads every few seconds and blends, so it will not flicker'
+        : 'Follow motion off — the map stays locked to the shot you analysed');
     });
   }
   const exportBtn = document.getElementById('depthExportBtn');
@@ -9309,9 +9498,77 @@ const FX_PARAM_DEFS = {
   ]
 };
 
+// Every transition reads the same three story controls: where the seam sits,
+// how soft it is, and how long it holds at each end of the cut.
+const TR_PARAM_DEFS = [
+  { k: 'direction', label: 'Seam direction', min: 0, max: 360, def: 90, unit: '°' },
+  { k: 'softness', label: 'Seam softness', min: 0, max: 100, def: 45, unit: '%' },
+  { k: 'hold', label: 'Hold at ends', min: 0, max: 80, def: 15, unit: '%' }
+];
+['tr_lumawipe', 'tr_feedbackzoom', 'tr_slitwipe', 'tr_glasspush',
+  'tr_mirrorfold', 'tr_chromaslide', 'tr_rollershutter', 'tr_blobmorph'
+].forEach((k) => { FX_PARAM_DEFS[k] = TR_PARAM_DEFS; });
+
+// The TouchDesigner / data / glitch family shares one print-grade rack, read
+// by the TOP engine after its shader runs. Same defaults-neutral rule: at 100
+// / 100 / 0 the shader renders exactly as authored.
+const TD_GRADE_PARAMS = [
+  { k: 'tdContrast', label: 'TOP contrast', min: 0, max: 200, def: 100, unit: '%' },
+  { k: 'tdChroma', label: 'TOP chroma', min: 0, max: 200, def: 100, unit: '%' },
+  { k: 'tdTint', label: 'TOP tint', min: -100, max: 100, def: 0, unit: '' }
+];
+function applyTdGradeDefs() {
+  if (!window.TD_PRESETS) return;
+  window.TD_PRESETS.forEach((p) => {
+    if (p && p.effectType && !FX_PARAM_DEFS[p.effectType]) {
+      FX_PARAM_DEFS[p.effectType] = TD_GRADE_PARAMS;
+    }
+  });
+}
+applyTdGradeDefs();
+
 function fxParamDefs(effectType) {
   const own = FX_PARAM_DEFS[effectType] || [];
   return own.concat(FX_FINISH_PARAMS);
+}
+
+// Hold reshapes the clock: with 80% hold the wipe sits still for most of the
+// cycle and snaps through the middle.
+function fxTransitionTime(t, holdPct) {
+  const hold = Math.max(0, Math.min(0.8, (Number(holdPct) || 0) / 100));
+  const raw = ((t % 1) + 1) % 1;
+  if (hold <= 0.001) return t;
+  const span = 1 - hold;
+  const mid = raw < 0.5 ? raw / 0.5 : (1 - raw) / 0.5;   // 0..1..0 shape
+  const eased = mid;
+  const shaped = Math.min(1, Math.max(0, (eased - hold) / span));
+  const out = raw < 0.5 ? shaped : 1 - shaped;
+  return Math.floor(t) + out;
+}
+
+// The seam veil: a feathered directional edge over whatever the transition
+// drew. Direction rotates it, softness widens it, and both are the user's.
+function fxTransitionVeil(ctx, w, h, P, intensity) {
+  const dir = ((P && P.direction !== undefined ? P.direction : 90) * Math.PI) / 180;
+  const soft = (P && P.softness !== undefined ? P.softness : 45) / 100;
+  const span = Math.max(w, h);
+  const cx = w / 2;
+  const cy = h / 2;
+  const dx = Math.cos(dir) * span * 0.5;
+  const dy = Math.sin(dir) * span * 0.5;
+  const g = ctx.createLinearGradient(cx - dx, cy - dy, cx + dx, cy + dy);
+  const mid = 0.5;
+  const half = Math.max(0.02, soft * 0.45);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(Math.max(0, mid - half), 'rgba(0,0,0,0)');
+  g.addColorStop(mid, `rgba(220, 236, 255, ${0.16 * Math.min(1, intensity)})`);
+  g.addColorStop(Math.min(1, mid + half), 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
 }
 
 function ensureFxParams() {
@@ -9387,8 +9644,13 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
   if (window.TD_ENGINE && TD_ENGINE.hasShader(effectType)) {
     const preset = Object.assign({}, state.activePreset || { accent: '#e11d48' }, { params: P });
     // transitions scrub with the playhead so keyframed intensity reads correctly
-    const shaderTime = preset.isTransition ? state.playheadSec : t;
+    const isTransition = !!preset.isTransition || effectType.indexOf('tr_') === 0;
+    const baseTime = preset.isTransition ? state.playheadSec : t;
+    // Hold resets where in the wipe the transition sits, without moving the
+    // playhead the user set: the curve still owns the overall progress.
+    const shaderTime = isTransition ? fxTransitionTime(baseTime, pick('hold', 15)) : baseTime;
     TD_ENGINE.render(ctx, w, h, shaderTime, effectType, intensity, onBeatPulse, preset);
+    if (isTransition) fxTransitionVeil(ctx, w, h, P, intensity);
     fxFinishPass(ctx, w, h, effectType, P, before, grainAmount);
     return;
   }
@@ -9553,6 +9815,9 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
     ctx.fillStyle = heat > 0.5 ? '#ffb347' : '#2e6cff';
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
+    // thermal sensors are noisy: edge detail is what makes a FLIR frame read
+    // as instrument output rather than a blue photo
+    fxDetailPass(ctx, w, h, pick('detail', 40) / 100, intensity);
   } else if (effectType === 'lab_litho') {
     ctx.save();
     const thr = pick('threshold', 50) / 100;
@@ -9613,9 +9878,48 @@ function drawCinemaOpticalShader(ctx, w, h, t, effectType, intensity, onBeatPuls
     ctx.restore();
   } else if (effectType === 'ed_scope') {
     const barH = Math.round(h * (pick('bars', 13) / 100));
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, w, barH);
-    ctx.fillRect(0, h - barH, w, barH);
+    const feather = Math.max(0, Math.min(1, pick('edge', 0) / 100)) * barH;
+    if (barH > 0) {
+      ctx.save();
+      ctx.fillStyle = '#000000';
+      if (feather > 0.5) {
+        // a soft shoulder reads as a projected frame, a hard one as a crop
+        const top = ctx.createLinearGradient(0, 0, 0, barH + feather);
+        top.addColorStop(0, 'rgba(0,0,0,1)');
+        top.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = top;
+        ctx.fillRect(0, 0, w, barH + feather);
+        const bot = ctx.createLinearGradient(0, h, 0, h - barH - feather);
+        bot.addColorStop(0, 'rgba(0,0,0,1)');
+        bot.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = bot;
+        ctx.fillRect(0, h - barH - feather, w, barH + feather);
+      } else {
+        ctx.fillRect(0, 0, w, barH);
+        ctx.fillRect(0, h - barH, w, barH);
+      }
+      ctx.restore();
+    }
+    const guide = Math.max(0, Math.min(1, pick('guides', 0) / 100)) * intensity;
+    if (guide > 0.01) {
+      // thirds + a centre cross: a finder the operator can frame against
+      ctx.save();
+      ctx.strokeStyle = '#e2e7ea';
+      ctx.lineWidth = Math.max(1, Math.round(h / 540));
+      ctx.globalAlpha = 0.15 + guide * 0.55;
+      ctx.beginPath();
+      [1 / 3, 2 / 3].forEach((f) => {
+        ctx.moveTo(w * f, barH); ctx.lineTo(w * f, h - barH);
+        ctx.moveTo(0, h * f); ctx.lineTo(w, h * f);
+      });
+      ctx.stroke();
+      const arm = h * 0.022;
+      ctx.beginPath();
+      ctx.moveTo(w / 2 - arm, h / 2); ctx.lineTo(w / 2 + arm, h / 2);
+      ctx.moveTo(w / 2, h / 2 - arm); ctx.lineTo(w / 2, h / 2 + arm);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // 6b. TILT-SHIFT OBLIQUE PLANE (diagonal focus band + creamy defocus)
@@ -10685,6 +10989,39 @@ function fxCopyFrame(ctx, w, h) {
   return fxCopyCanvas;
 }
 let fxNoiseCanvas = null;
+let fxDetailCanvas = null;
+
+// High-pass detail: the plate minus its own blur is pure edge information.
+// Adding that back lifts micro-contrast (skin, fabric, sensor texture) without
+// brightening the picture -- the honest version of an "edge detail" slider.
+function fxDetailPass(ctx, w, h, amount, intensity) {
+  const amt = Math.max(0, Math.min(1, amount)) * Math.max(0, Math.min(1, intensity));
+  if (amt <= 0.01) return;
+  if (!fxDetailCanvas) fxDetailCanvas = document.createElement('canvas');
+  const dw = Math.max(2, Math.round(w / 2));
+  const dh = Math.max(2, Math.round(h / 2));
+  if (fxDetailCanvas.width !== dw || fxDetailCanvas.height !== dh) {
+    fxDetailCanvas.width = dw;
+    fxDetailCanvas.height = dh;
+  }
+  const dctx = fxDetailCanvas.getContext('2d');
+  if (!dctx) return;
+  dctx.setTransform(1, 0, 0, 1, 0, 0);
+  dctx.globalCompositeOperation = 'source-over';
+  dctx.globalAlpha = 1;
+  dctx.clearRect(0, 0, dw, dh);
+  dctx.filter = 'blur(1.5px)';
+  dctx.drawImage(ctx.canvas, 0, 0, dw, dh);
+  dctx.filter = 'none';
+  dctx.globalCompositeOperation = 'difference';
+  dctx.drawImage(ctx.canvas, 0, 0, dw, dh);
+  dctx.globalCompositeOperation = 'source-over';
+  ctx.save();
+  ctx.globalCompositeOperation = 'overlay';
+  ctx.globalAlpha = Math.min(0.85, amt * 0.95);
+  ctx.drawImage(fxDetailCanvas, 0, 0, w, h);
+  ctx.restore();
+}
 
 // The three controls every look shares, applied identically whatever the effect
 // is: how much of the look survives, how warm the whole frame sits, how much
@@ -11301,6 +11638,11 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     fxResetParams,
     renderFxParamRack,
     drawCinemaOpticalShader,
+    // depth map pipeline (raw → derived → effects)
+    depthDerive,
+    depthSetRaw,
+    depthEffectsOn,
+    ensureDepthState,
     effectTypes: () => Array.from(new Set(VFX_PRESETS.map((p) => p.effectType))).sort()
   };
 }

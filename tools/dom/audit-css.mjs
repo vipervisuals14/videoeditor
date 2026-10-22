@@ -8,6 +8,10 @@ import { boot, PUB } from './harness.mjs';
 const css = fs.readFileSync(path.join(PUB, 'styles.css'), 'utf8');
 // boot the real page so JS-rendered markup (cards, stack rows) exists too
 const { document: doc } = boot();
+// The browser opens on six section buttons: open one before auditing row
+// styles, or every card rule would look dead.
+const section = doc.querySelector('#fxSectionBar .fx-section-btn');
+if (section) section.click();
 const cards = doc.querySelectorAll('#tab-vfx .vfx-card');
 if (cards[0]) cards[0].querySelector('.vfx-apply-btn').click();
 if (cards[1]) cards[1].querySelector('.vfx-apply-btn').click();

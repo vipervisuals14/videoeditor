@@ -3100,7 +3100,47 @@ const TD_ENGINE = (() => {
     } finally {
       ctx.restore();
     }
+    // The TOP family shares one print-grade rack: contrast, chroma and tint.
+    // They are the three things every TOP look needs pulled in the same
+    // direction, and they run after the shader so they behave identically in
+    // the preview, the stack and the 4K export.
+    applyTopGrade(ctx, w, h, I, preset);
     return true;
+  }
+
+  // Contrast / chroma / tint, the shared TOP rack. Values are 0–200 for the
+  // first two and −100..100 for tint; defaults are neutral, so an untouched
+  // preset renders exactly as its shader authored it.
+  function applyTopGrade(ctx, w, h, I, preset) {
+    const p = (preset && preset.params) || {};
+    const contrast = p.tdContrast === undefined ? 100 : Number(p.tdContrast);
+    const chroma = p.tdChroma === undefined ? 100 : Number(p.tdChroma);
+    const tint = p.tdTint === undefined ? 0 : Number(p.tdTint);
+    const mix = clamp(I, 0, 2) * 0.5 + 0.5;
+    if (Math.abs(chroma - 100) > 1) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'saturation';
+      ctx.globalAlpha = clamp(Math.abs(chroma - 100) / 100 * 0.7 * mix, 0, 0.85);
+      ctx.fillStyle = chroma > 100 ? 'hsl(0, 100%, 50%)' : 'hsl(0, 0%, 50%)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+    if (Math.abs(contrast - 100) > 1) {
+      ctx.save();
+      ctx.globalCompositeOperation = contrast > 100 ? 'overlay' : 'soft-light';
+      ctx.globalAlpha = clamp(Math.abs(contrast - 100) / 100 * 0.65 * mix, 0, 0.8);
+      ctx.fillStyle = contrast > 100 ? '#000000' : '#9aa4a9';
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+    if (Math.abs(tint) > 1) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'overlay';
+      ctx.globalAlpha = clamp(Math.abs(tint) / 100 * 0.3 * mix, 0, 0.3);
+      ctx.fillStyle = tint > 0 ? 'rgb(255, 176, 96)' : 'rgb(110, 190, 255)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
   }
 
   function setQuality(q) { QUALITY = q === 'export' ? 'export' : 'preview'; }

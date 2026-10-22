@@ -56,8 +56,22 @@
     { id: 'anaglyph', label: 'Stereo Anaglyph', tool: 'Merge',
       desc: 'Red/cyan stereo preview built from depth parallax. Check your depth before you commit.' },
     { id: 'echo', label: 'Depth Echo', tool: 'Trails',
-      desc: 'Depth-weighted ghost copies — editorial motion echo that respects which layer is in front.' }
+      desc: 'Depth-weighted ghost copies — editorial motion echo that respects which layer is in front.' },
+    { id: 'slice', label: 'Depth Slice Isolate', tool: 'MatteControl',
+      desc: 'Keeps one depth range in full colour and lets everything nearer or further go flat and dark. Near, far and feather come from the panel, so a slice is set once and reused.' }
   ];
+
+  // Thermal palettes for inspecting and delivering a depth map. Each entry is
+  // a short ramp: the map is read at four stops and interpolated, which is
+  // plenty at 8-bit and costs nothing per frame.
+  var PALETTES = {
+    gray: [[4, 6, 10], [190, 198, 205], [255, 255, 255]],
+    ice: [[6, 10, 26], [40, 120, 190], [186, 240, 255]],
+    ember: [[10, 4, 6], [190, 60, 30], [255, 226, 150]],
+    viridis: [[30, 20, 60], [30, 130, 120], [220, 240, 60]],
+    cobalt: [[4, 8, 24], [30, 74, 200], [200, 226, 255]],
+    mono: [[0, 0, 0], [120, 120, 120], [255, 255, 255]]
+  };
 
   // ------------------------------------------------------------------ helpers
 
@@ -491,23 +505,32 @@
 
     function on(id) { return (fx[id] || 0) > 0.001; }
 
-    // ---- depth of field: three blurred copies, blended by circle of confusion
+    // ---- depth of field: five blurred copies, blended by circle of confusion.
+    // Five levels instead of three is the difference between a visible step
+    // ladder in the falloff and a smooth ramp — the first thing anyone checks
+    // on a depth-of-field pass at 4K.
     if (on('dof')) {
       var amount = fx.dof;
-      var radii = [1, 3, 6];
-      var blurred = radii.map(function (r) {
-        return boxBlurRGB(work, w, h, Math.max(1, Math.round(r * (0.6 + amount))));
-      });
+      var levelCount = 5;
+      var blurred = [];
+      for (var li = 0; li < levelCount; li++) {
+        var rr = Math.max(1, Math.round((1 + li * 2.4) * (0.55 + amount * 0.9)));
+        blurred.push(boxBlurRGB(work, w, h, rr));
+      }
       var coc = new Float32Array(n);
       for (var i = 0; i < n; i++) {
-        coc[i] = clamp01(Math.abs(depth[i] - focus) * 1.8 * amount * aperture);
+        var cd = Math.abs(depth[i] - focus);
+        // a soft knee near the focus plane, a hard ceiling at full defocus
+        coc[i] = clamp01(cd * cd * 2.2 * amount * aperture + cd * 0.35 * amount);
       }
       var outDof = new Uint8ClampedArray(work);
       for (var i2 = 0; i2 < n; i2++) {
-        var t = coc[i2] * 2.999;
-        var a = clamp(Math.floor(t), 0, 2);
-        var b = clamp(a + 1, 0, 2);
+        var t = Math.min(0.9999, coc[i2]) * (levelCount - 1);
+        var a = clamp(Math.floor(t), 0, levelCount - 2);
+        var b = a + 1;
         var f = t - a;
+        // smoothstep between levels so the transition has no band edge
+        f = f * f * (3 - 2 * f);
         var p = i2 * 4;
         for (var c = 0; c < 3; c++) {
           var va = blurred[a][i2 * 3 + c];
@@ -517,6 +540,34 @@
       }
       work = outDof;
       passes.push('dof');
+    }
+
+    // ---- depth slice: keep one range alive, flatten the rest -------------
+    if (on('slice')) {
+      var sliceAmt = fx.slice;
+      var nearCut = clamp01(o.near === undefined ? 0.2 : o.near);
+      var farCut = clamp01(o.far === undefined ? 0.6 : o.far);
+      var feather = clamp(o.feather === undefined ? 0.15 : o.feather, 0.001, 0.6);
+      if (farCut < nearCut) { var swap = nearCut; nearCut = farCut; farCut = swap; }
+      for (var iSlice = 0; iSlice < n; iSlice++) {
+        var dS = clamp01(depth[iSlice]);
+        // 0 inside the slice, 1 outside, with a linear feather on both edges
+        var outNear = (nearCut - dS) / feather;
+        var outFar = (dS - farCut) / feather;
+        var outside = clamp01(Math.max(outNear, outFar));
+        if (outside <= 0.001) continue;
+        var kS = outside * sliceAmt;
+        var pS = iSlice * 4;
+        var lS = 0.2126 * work[pS] + 0.7152 * work[pS + 1] + 0.0722 * work[pS + 2];
+        // outside the slice: flat, dark and desaturated — a held-back plate
+        var flatR = lS * 0.55 + 14;
+        var flatG = lS * 0.55 + 15;
+        var flatB = lS * 0.57 + 18;
+        work[pS] = work[pS] * (1 - kS) + flatR * kS;
+        work[pS + 1] = work[pS + 1] * (1 - kS) + flatG * kS;
+        work[pS + 2] = work[pS + 2] * (1 - kS) + flatB * kS;
+      }
+      passes.push('slice');
     }
 
     // ---- tilt-shift: blur grows away from a horizontal focus band
@@ -773,6 +824,72 @@
     return { data: work, width: w, height: h, passes: passes };
   }
 
+  // Remap a raw depth map into the panel's working range. Near/far clip what
+  // the model produced down to the part of the scene the user cares about;
+  // gamma reshapes the falloff; invert flips the near/far convention.
+  function remap(depth, opts) {
+    var o = opts || {};
+    var n = depth.length;
+    var near = clamp01(o.near === undefined ? 0 : o.near);
+    var far = clamp01(o.far === undefined ? 1 : o.far);
+    if (far - near < 1e-3) far = Math.min(1, near + 1e-3);
+    var gamma = clamp(o.gamma === undefined ? 1 : o.gamma, 0.2, 4);
+    var invert = !!o.invert;
+    var out = new Float32Array(n);
+    var span = far - near;
+    for (var i = 0; i < n; i++) {
+      var v = (clamp01(depth[i]) - near) / span;
+      v = v < 0 ? 0 : v > 1 ? 1 : v;
+      if (gamma !== 1) v = Math.pow(v, gamma);
+      out[i] = invert ? 1 - v : v;
+    }
+    return out;
+  }
+
+  // Edge-aware refinement against the colour frame: the model's soft boundary
+  // is pulled onto the real edge, which is what makes hair and thin objects
+  // usable for defocus. strength 0 = untouched, 100 = fully snapped.
+  function refine(depth, rgb, w, h, strength, invert) {
+    var k = clamp01((strength === undefined ? 0 : strength) / 100);
+    if (k <= 0.001 || !rgb) return depth;
+    var luma = new Float32Array(w * h);
+    for (var i = 0; i < w * h; i++) {
+      var p = i * 4;
+      luma[i] = (0.2126 * rgb[p] + 0.7152 * rgb[p + 1] + 0.0722 * rgb[p + 2]) / 255;
+    }
+    var smoothed = guidedSmooth(depth, luma, w, h, 3 + Math.round(k * 5), 0.02 + k * 0.08);
+    var out = new Float32Array(w * h);
+    for (var j = 0; j < w * h; j++) {
+      out[j] = depth[j] * (1 - k) + smoothed[j] * k;
+    }
+    return out;
+  }
+
+  // Thermal RGBA of a depth map, for the panel view and the PNG export.
+  function toPalette(depth, w, h, opts) {
+    var o = opts || {};
+    var invert = !!o.invert;
+    var ramp = PALETTES[o.palette] || PALETTES.gray;
+    var out = new Uint8ClampedArray(w * h * 4);
+    var stops = ramp.length;
+    for (var i = 0; i < w * h; i++) {
+      var v = clamp01(depth[i]);
+      if (!invert) v = 1 - v;          // convention: white = near
+      var t = v * (stops - 1);
+      var a = Math.floor(t);
+      if (a >= stops - 1) a = stops - 2;
+      var f = t - a;
+      var c0 = ramp[a];
+      var c1 = ramp[a + 1];
+      var p = i * 4;
+      out[p] = c0[0] + (c1[0] - c0[0]) * f;
+      out[p + 1] = c0[1] + (c1[1] - c0[1]) * f;
+      out[p + 2] = c0[2] + (c1[2] - c0[2]) * f;
+      out[p + 3] = 255;
+    }
+    return out;
+  }
+
   // Grayscale RGBA of a depth map (white = near, the usual depth-map convention)
   function toGray(depth, w, h, invert) {
     var out = new Uint8ClampedArray(w * h * 4);
@@ -796,6 +913,10 @@
     fromGray: fromGray,
     apply: apply,
     toGray: toGray,
+    toPalette: toPalette,
+    remap: remap,
+    refine: refine,
+    PALETTES: PALETTES,
     resizeDepth: resizeDepth,
     sampleDepthRect: sampleDepthRect,
     boxBlurRGB: boxBlurRGB,

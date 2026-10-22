@@ -39,10 +39,24 @@ check('an empty stage says so instead of showing fake controls', () => {
   return txt.includes('pick an effect') ? true : `rack says "${txt.slice(0, 60)}"`;
 });
 
+// ---- the browser is sections now, not one long list ---------------------
+const sections = $$('#fxSectionBar .fx-section-btn');
+check('the browser is six section buttons', () => sections.length === 6 ? true : `sections=${sections.length}`);
+check('each section wears its own count', () => {
+  const counts = $$('#fxSectionBar .fx-section-count').map((n) => Number(n.textContent));
+  const total = counts.reduce((a, b) => a + b, 0);
+  return counts.every((c) => c > 0) && total > 36 ? true : `counts=${counts.join(',')}`;
+});
+check('the browser does not dump every look on the screen at once', () => {
+  return $$('.vfx-card').length === 0 ? true : `rows=${$$('.vfx-card').length}`;
+});
+
 // ---- pick a look from the browser, like a user would --------------------
+sections[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 const cards = $$('.vfx-card');
-check('the browser lists more than the original 36 looks', () => {
-  return cards.length > 36 ? true : `cards=${cards.length}`;
+check('opening a section lists only that section', () => {
+  const open = document.querySelector('#fxSectionBar .fx-section-btn.is-open');
+  return !!open && cards.length > 3 && cards.length < 20 ? true : `cards=${cards.length}`;
 });
 
 const firstCard = cards[0];
@@ -113,21 +127,32 @@ check('reset puts every control back to its default', () => {
 const table = P.effectTypes ? P.effectTypes() : [];
 check('the page can name every effect it ships', () => table.length >= 30 ? true : `types=${table.length}`);
 
+// NOTE: a returned string is truthy, so every check below answers [ok, detail].
+// A template string here would silently pass — that bug once hid 28 effects
+// that had no dials of their own at all.
 const shallow = table.filter((t) => P.fxParamDefs(t).length < 6);
-check('no effect is down to a single strength slider', () => {
-  return shallow.length === 0 ? true : `shallow: ${shallow.map((t) => `${t}(${P.fxParamDefs(t).length})`).join(', ')}`;
-});
+check('no effect is down to a single strength slider', () =>
+  [shallow.length === 0, `shallow: ${shallow.map((t) => `${t}(${P.fxParamDefs(t).length})`).join(', ')}`]);
 
 const thin = table.filter((t) => P.fxParamDefs(t).length - 3 < 3);
-check('every effect carries at least three controls of its own', () => {
-  return thin.length === 0 ? true : `thin: ${thin.join(', ')}`;
-});
+check('every effect carries at least three controls of its own', () =>
+  [thin.length === 0, `thin: ${thin.join(', ')}`]);
 
 const unnamed = table.flatMap((t) => P.fxParamDefs(t).filter((d) => !d.label || !d.k));
-check('every control has a name a human can read', () => unnamed.length === 0);
+check('every control has a name a human can read', () =>
+  [unnamed.length === 0, `unnamed: ${unnamed.length}`]);
 
 const broken = table.flatMap((t) => P.fxParamDefs(t).filter((d) => !(d.max > d.min) || d.def < d.min || d.def > d.max));
-check('every control range and default is sane', () => broken.length === 0 ? true : broken.map((d) => d.k).join(','));
+check('every control range and default is sane', () =>
+  [broken.length === 0, broken.map((d) => d.k).join(',')]);
+
+// the two shared families must be neutral at their defaults, or an untouched
+// preset would come out graded
+const neutral = ['tdContrast', 'tdChroma', 'tdTint', 'direction', 'softness'];
+const nonNeutral = table.flatMap((t) => P.fxParamDefs(t))
+  .filter((d) => neutral.includes(d.k) && ((d.k === 'tdTint' || d.k === 'direction') ? d.def !== 0 && d.k === 'tdTint' : false));
+check('shared family defaults do not change an untouched preset', () =>
+  [nonNeutral.length === 0, nonNeutral.map((d) => d.k).join(',')]);
 
 // ---- switching looks swaps the whole control set -----------------------
 check('switching to another look swaps the controls, not just the value', () => {
@@ -210,6 +235,8 @@ check('a look with no stored settings falls back to its defaults', () => {
       ? true : `stored=${touched} layers=${layers} picked=${picked}`;
   });
   check('a fresh page still shows the full rack once a look is picked', () => {
+    fresh.document.querySelector('#fxSectionBar .fx-section-btn')
+      .dispatchEvent(new fresh.window.MouseEvent('click', { bubbles: true }));
     const card = fresh.document.querySelector('.vfx-card .vfx-apply-btn');
     card.dispatchEvent(new fresh.window.MouseEvent('click', { bubbles: true }));
     const rows = fresh.document.querySelectorAll('#fxParamRack .fx-param').length;

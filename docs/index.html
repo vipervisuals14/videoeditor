@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PulseVFX Studio — DaVinci Resolve Free 21.1.1 Optical VFX & LYRC Engine</title>
-  <link rel="stylesheet" href="styles.css?v=mvj8n6r1" />
+  <link rel="stylesheet" href="styles.css?v=mvj9ftil" />
 </head>
 <body>
  <div class="app-window">
@@ -334,20 +334,11 @@
         <!-- 8 CATEGORY SUB-TABS (INCLUDING TOUCHDESIGNER TOPs & TRANSITIONS) -->
         <div class="vfx-subtabs-bar" data-module="presets" data-label="Effect Browser">
           <div class="fx-filter-row">
-            <input type="search" id="vfxSearchInput" class="vfx-search" placeholder="Search looks" />
-            <select id="vfxCatSelect" class="fx-cat-select" aria-label="Effect category">
-              <option value="ALL">All categories</option>
-              <option value="TouchDesigner TOPs">TouchDesigner TOPs</option>
-              <option value="Data &amp; Print TOPs">Data &amp; Print</option>
-              <option value="Glitch &amp; Bitmap TOPs">Glitch &amp; Bitmap</option>
-              <option value="Transitions &amp; Morphs">Transitions &amp; Morphs</option>
-              <option value="Optical &amp; Glass">Optical &amp; Glass</option>
-              <option value="Shutter &amp; Time">Shutter &amp; Time</option>
-              <option value="Film Lab &amp; Grade">Film Lab &amp; Grade</option>
-              <option value="Camera Weight">Camera Weight</option>
-              <option value="Depth &amp; Subject">Depth &amp; Subject</option>
-            </select>
+            <input type="search" id="vfxSearchInput" class="vfx-search" placeholder="Search all looks" />
+            <span class="fx-results-note" id="fxResultsNote">Pick a section</span>
           </div>
+          <!-- Sections, not one long list: six buttons, one open at a time. -->
+          <div class="fx-section-bar" id="fxSectionBar"></div>
         </div>
 
         <!-- LIVE MINI-CANVAS PRESET CARDS GRID (EACH WITH ITS OWN INTENSITY SLIDER + KEYFRAME BUTTON) -->
@@ -829,10 +820,10 @@
           <div class="pane-card-header">
             <div>
               <h3>Depth Map &amp; Depth Effects</h3>
-              <p>Build a depth map from the plate (or load a real one), then drive 11 effects from it: depth of field, atmosphere, relight, parallax, print contours and more. Every effect has an intensity slider, keyframes, and exports native Fusion nodes.</p>
+              <p>Analyse the shot once with Depth Anything V2 — real monocular depth from ordinary footage — then drive 12 effects from it: defocus, atmosphere, relight, parallax, slice isolation, print contours and more. Near/far range, falloff and edge refinement are on the panel; every effect has an intensity slider, keyframes and exports native Fusion nodes.</p>
             </div>
             <div class="header-btn-group">
-              <button class="btn-secondary" id="depthRescanBtn" title="Re-read the plate and rebuild the depth map">↻ Re-scan plate</button>
+              <button class="btn-secondary" id="depthRescanBtn" title="Read the current frame and build a depth map for this shot">◇ Analyse shot</button>
               <button class="btn-primary" id="depthApplyAllBtn">Send Active Stack to Resolve</button>
             </div>
           </div>
@@ -874,7 +865,15 @@
               <option value="split">Preview: split compare</option>
             </select>
             <input type="file" id="depthUploadInput" accept="image/*" hidden />
-            <button class="btn-mini is-on" id="depthLiveBtn" title="Re-read the current frame while the clip plays, so the depth map always matches what you see">Live depth: ON</button>
+            <button class="btn-mini" id="depthLiveBtn" title="Keep re-reading the frame while the clip plays. A depth map belongs to a shot, so this is off by default — turn it on for moving cameras.">Follow motion: OFF</button>
+            <select id="depthPaletteSelect" class="mask-select" title="Thermal palette for inspecting the map. The effects always read the grayscale depth, never the colours.">
+              <option value="gray">View: gray</option>
+              <option value="ice">View: ice</option>
+              <option value="ember">View: ember</option>
+              <option value="viridis">View: viridis</option>
+              <option value="cobalt">View: cobalt</option>
+              <option value="mono">View: mono</option>
+            </select>
             <button class="btn-mini" id="depthInvertBtn" title="Flip near and far">Invert: OFF</button>
             <button class="btn-mini" id="depthExportBtn" title="Save the depth map as a grayscale PNG (white = near)">⬇ Depth .PNG</button>
           </div>
@@ -891,18 +890,26 @@
                 <div class="mask-stat"><span>Effects on</span><strong id="depthActiveCount">0</strong></div>
                 <div class="mask-stat"><span>Keyframes</span><strong id="depthKeyCount">0</strong></div>
               </div>
+              <div class="depth-range-head">
+                <span>Depth range</span>
+                <b id="depthRangeReadout">0 – 100</b>
+              </div>
               <div class="depth-sliders">
                 <label class="mask-slider">
-                  <span>Smoothing <b id="depthSmoothVal">2</b></span>
-                  <input type="range" id="depthSmooth" min="0" max="4" value="2" />
+                  <span>Near point <b id="depthNearPtVal">0%</b></span>
+                  <input type="range" id="depthNearPoint" min="0" max="90" value="0" />
                 </label>
                 <label class="mask-slider">
-                  <span>Depth contrast <b id="depthContrastVal">55</b></span>
-                  <input type="range" id="depthContrast" min="10" max="90" value="55" />
+                  <span>Far point <b id="depthFarPtVal">100%</b></span>
+                  <input type="range" id="depthFarPoint" min="10" max="100" value="100" />
                 </label>
                 <label class="mask-slider">
-                  <span>Near bias <b id="depthNearVal">50</b></span>
-                  <input type="range" id="depthNear" min="0" max="100" value="50" />
+                  <span>Falloff <b id="depthGammaVal">1.00</b></span>
+                  <input type="range" id="depthGamma" min="40" max="220" value="100" />
+                </label>
+                <label class="mask-slider">
+                  <span>Edge refine <b id="depthRefineVal">35%</b></span>
+                  <input type="range" id="depthRefine" min="0" max="100" value="35" />
                 </label>
                 <label class="mask-slider">
                   <span>Focus plane <b id="depthFocusVal">45%</b></span>
@@ -912,9 +919,17 @@
                   <span>Aperture <b id="depthApertureVal">100%</b></span>
                   <input type="range" id="depthAperture" min="0" max="200" value="100" />
                 </label>
+                <label class="mask-slider">
+                  <span>Slice feather <b id="depthSliceFeatherVal">15%</b></span>
+                  <input type="range" id="depthSliceFeather" min="0" max="60" value="15" />
+                </label>
+                <label class="mask-slider">
+                  <span>Estimate smooth <b id="depthSmoothVal">2</b></span>
+                  <input type="range" id="depthSmooth" min="0" max="4" value="2" />
+                </label>
               </div>
               <p class="mask-status" id="depthStatus">Press ↻ Re-scan plate to build the depth map.</p>
-              <p class="mask-hint">The estimate reads haze, height, detail and saturation — useful, not magic. For a truly production-grade depth map, load one from iPhone LiDAR, Depth Anything, MiDaS or Resolve's own Depth Map export and every effect below becomes accurate.</p>
+              <p class="mask-hint">AI depth is real geometry from a single frame (Depth Anything V2, 49 MB once, then cached). Near point, far point and falloff reshape that map without another model run, and Edge refine pulls its boundary onto the picture's real edges. Load a map from iPhone LiDAR or Resolve if you have one and every effect below is exact instead of estimated.</p>
             </div>
 
             <div class="depth-rack" id="depthEffectRack"></div>
@@ -1110,10 +1125,10 @@
 
  </div>
 
-  <script src="lua-export.js?v=mvj8n6r1"></script>
-  <script src="touchdesigner.js?v=mvj8n6r1"></script>
-  <script src="depth.js?v=mvj8n6r1"></script>
-  <script src="render.js?v=mvj8n6r1"></script>
-  <script src="app.js?v=mvj8n6r1"></script>
+  <script src="lua-export.js?v=mvj9ftil"></script>
+  <script src="touchdesigner.js?v=mvj9ftil"></script>
+  <script src="depth.js?v=mvj9ftil"></script>
+  <script src="render.js?v=mvj9ftil"></script>
+  <script src="app.js?v=mvj9ftil"></script>
 </body>
 </html>

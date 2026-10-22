@@ -150,6 +150,30 @@ smears and chroma ghosts). Same rules as the rest: intensity 0–200% + keyframe
 
 ---
 
+## The look browser is a menu, not one long list
+
+72 cards in a single scroll is a catalogue, not a tool. The browser now opens as
+**sections** — one row of buttons, nothing listed until you pick one:
+
+| Section | Looks | What lives there |
+| --- | --- | --- |
+| **Optical & Glass** | 12 | flare, streak, prism, halation, lens dirt, gate weave |
+| **Shutter & Time** | 12 | smear, echo, velocity streak, rolling shutter, step-print |
+| **Film Lab & Grade** | 13 | 2383, bleach bypass, litho, FLIR, push/pull, halation stocks |
+| **Camera Weight** | 12 | float, thump, whip, dutch, dolly punch, handheld |
+| **Depth & Subject** | 12 | subject isolation, depth haze, plane rack, spill light |
+| **Editorial Polish** | 11 | scope bars, frame guides, matte, framing, splice |
+| **Transitions & Morphs** | 8 | the TouchDesigner family (luma wipe, feedback zoom, mirror fold…) |
+
+- Each button carries its look count, so you can see where the weight is before clicking.
+- **One section open at a time.** Picking another closes the first — the grid never grows
+  past a screenful, which is the whole point.
+- The search field still spans **all** presets: type `flare` and it opens a filtered result
+  set regardless of which section you were in. `#fxResultsNote` says `Pick a section`,
+  `N looks` or `N matches` so the state is never ambiguous.
+- An effect is only ever added by clicking it. Opening a section, hovering a card, loading a
+  clip — none of those apply anything.
+
 ## 4K Export Verification (all 72 presets)
 
 Every preset was rendered at a true **3840×2160** with `TD_ENGINE.setQuality('export')`
@@ -322,7 +346,7 @@ the browser's own compositing, so what you see is what the graph builds.
 
 ## Depth map — a real model, not a guess
 
-`03 • Subject ▸ Depth Map` drives 11 effects from a depth map, so the map decides whether the result looks
+`03 • Subject ▸ Depth Map` drives 12 effects from a depth map, so the map decides whether the result looks
 like a lens or like a smudge. There are now two engines, and the tab says which one produced the
 map you are looking at.
 
@@ -399,7 +423,39 @@ Against the fp32 Python reference on a real photograph, the browser path correla
 | Effect pass | 480×270, blown up to the monitor | the monitor's own resolution |
 | Freshness | built once when the tab opened | **`Live depth: ON`** re-reads the current frame |
 
-## Lyrics are opt-in## Lyrics are opt-in
+### The depth workflow — what every control does
+
+The map is *derived*, never re-estimated, so everything below is instant and non-destructive.
+The raw model output is kept, and every control re-derives the working map from it:
+
+| Control | Range | What it changes |
+| --- | --- | --- |
+| **Engine** | AI · AI high detail · Fast estimate | which engine produces the raw map |
+| **Source** | plate · uploaded map · mask | read the depth from the picture, a PNG you supply, or the tracked matte |
+| **Near point** | 0–100 % | clips the near end — pushes foreground out of focus first |
+| **Far point** | 0–100 % | clips the far end — this is how you kill a noisy background |
+| **Falloff (gamma)** | 40–260 % | reshapes the near→far ramp without clipping either end |
+| **Edge refine** | 0–100 % | joint-bilateral sharpen against the plate: hair, foliage, thin edges |
+| **Slice feather** | 0–100 % | width of the transition at a slice boundary |
+| **Focus** | 0–100 % | where the lens plane sits in the map |
+| **Aperture** | 0–200 % | how hard the defocus falls off either side of that plane |
+| **Temporal smooth** | 0–100 % | damps frame-to-frame flicker; 0 for stills |
+| **Follow motion** | on/off | off (default) locks the map to the shot; on re-reads the frame on a 4.2 s throttle |
+| **Thermal view** | gray · ice · ember · viridis · cobalt · mono | **view only** — colourises the panel preview, never what the effects read |
+| **Invert** | toggle | a derivation flag, so pressing it twice returns exactly where you started |
+
+`Near – far` in the panel header is a live readout of the numbers the effects are actually
+receiving, so a map that looks washed out can be diagnosed instead of guessed at.
+
+**Twelve effects read that map**, each with its own intensity slider:
+
+`dof` (five blur levels, radius varies with depth — not one uniform blur) · `tilt` (oblique
+focus band) · `haze` (aerial perspective, far things lose contrast) · `grade` (depth-graded
+warm/cool) · `parallax` · `relight` · `slices` (stepped depth bands) · `contours` (topographic
+isolation lines) · `pointcloud` · `anaglyph` · `echo` · `slice` (isolate one depth range and
+flatten everything outside it).
+
+## Lyrics are opt-in
 
 The monitor used to start with LYRC typography already burned onto the picture, and a saved
 preference kept it that way. Now the overlay starts **off**: footage plays clean until you ask
@@ -444,13 +500,13 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Bridge scenarios (mock Resolve/Fusion, real bridge) | `/tmp/luaenv/bin/python tools/test_bridge.py --verbose` | **25/25** |
-| End-to-end (real server + real bridge + real prefs mailbox) | `/tmp/luaenv/bin/python tools/e2e_sim.py --verbose` | **43/43** |
+| Bridge scenarios (mock Resolve/Fusion, real bridge) | `/tmp/luaenv/bin/python tools/test_bridge.py --verbose` | **26/26** |
+| End-to-end (real server + real bridge + real prefs mailbox) | `/tmp/luaenv/bin/python tools/e2e_sim.py --verbose` | **56/56** |
 | Web-build smoke (every panel, every tab, zero console errors) | `node /tmp/domtest/smoke.js` | pass |
 | 4K render bay (import metadata, tiling, memory guard, ZIP, native snippet) | `node /tmp/domtest/render.js` | pass |
 | **Pixel suite** (real 2D canvas: lyrics, depth, transport, every effect) | `node /tmp/domtest/visual.js` | pass |
 | **Live-depth worker** (protocol, transferable buffer, map range) | `node /tmp/domtest/liveworker.js` | pass |
-| Effect layers · Depth · Magic Mask · 72 presets | `/tmp/domtest/{layers,depth,mask,presets}.js` | pass |
+| Effect layers · Depth · Mask · Parameters (31) · Stack & shell (48) | `node tools/dom/{stack,params,depth,mask}.mjs` | pass |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified

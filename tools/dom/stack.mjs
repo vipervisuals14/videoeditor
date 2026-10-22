@@ -52,7 +52,15 @@ check('the preset list scrolls inside the rail', () =>
 check('nothing is picked or applied when the page opens', () => {
   const sel = document.querySelectorAll('#tab-vfx .vfx-card.selected');
   const pill = document.getElementById('activeFxPill').textContent;
-  return sel.length === 0 && /no look/i.test(pill) ? true : `selected=${sel.length} pill="${pill}"`;
+  const cards = document.querySelectorAll('#tab-vfx .vfx-card');
+  return sel.length === 0 && cards.length === 0 && /no look/i.test(pill)
+    ? true : `selected=${sel.length} cards=${cards.length} pill="${pill}"`;
+});
+
+// the browser opens as sections; a look can only be picked once one is open
+check('a section has to be opened before there is anything to pick', () => {
+  $('#fxSectionBar .fx-section-btn').click();
+  return document.querySelectorAll('#tab-vfx .vfx-card').length > 0;
 });
 
 check('picking a look reveals its curve', () => {
@@ -70,9 +78,39 @@ check('clearing the stage leaves nothing selected or applied', () => {
     ? true : `selected=${sel.length} editorHidden=${editorHidden} hint=${hintShown} pill="${pill}"`;
 });
 
+// ---- the browser is sections: buttons, one open at a time ---------------
+check('the look browser is split into sections, not one long list', () => {
+  const sections = $$('#fxSectionBar .fx-section-btn');
+  const counts = $$('#fxSectionBar .fx-section-count').map((n) => Number(n.textContent));
+  const total = counts.reduce((a, b) => a + b, 0);
+  return sections.length >= 6 && total > 36 && counts.every((c) => c > 0)
+    ? true : `sections=${sections.length} total=${total}`;
+});
+check('one section opens at a time and lists only its looks', () => {
+  const open = $$('#fxSectionBar .fx-section-btn.is-open');
+  const cards = $$('#tab-vfx .vfx-card');
+  return open.length === 1 && cards.length > 3 && cards.length < 20
+    ? true : `open=${open.length} cards=${cards.length}`;
+});
+check('opening a second section closes the first', () => {
+  const buttons = $$('#fxSectionBar .fx-section-btn');
+  buttons[1].click();
+  const open = $$('#fxSectionBar .fx-section-btn.is-open');
+  const second = buttons[1].classList.contains('is-open');
+  const cards = $$('#tab-vfx .vfx-card');
+  return open.length === 1 && second && cards.length > 3 ? true : `open=${open.length} second=${second}`;
+});
+check('clicking the open section closes it again', () => {
+  const buttons = $$('#fxSectionBar .fx-section-btn');
+  const openBtn = buttons.find((b) => b.classList.contains('is-open'));
+  openBtn.click();
+  return $$('#tab-vfx .vfx-card').length === 0 && $$('#fxSectionBar .fx-section-btn.is-open').length === 0;
+});
+
 // ---- stacking -------------------------------------------------------------
+$('#fxSectionBar .fx-section-btn').click();
 const cards = $$('#tab-vfx .vfx-card');
-check('the browser renders looks', () => cards.length >= 60, `cards=${cards.length}`);
+check('the browser renders looks', () => cards.length >= 8, `cards=${cards.length}`);
 
 const buttonOf = (card) => card.querySelector('.vfx-apply-btn');
 // the page polls the bridge and loads recipes on boot; those are not edits
@@ -204,18 +242,24 @@ check('Masking opens the mask panel', () => {
   document.querySelector('.rail-item[data-nav="mask"]').click();
   return document.getElementById('tab-mask').classList.contains('active');
 });
-check('Transitions filters FX styles to that family', () => {
+check('Transitions opens its own section of real transitions', () => {
   document.querySelector('.rail-item[data-nav="transitions"]').click();
   const names = $$('#tab-vfx .vfx-card .fx-name').length;
-  const sel = document.getElementById('vfxCatSelect').value;
+  const open = document.querySelector('#fxSectionBar .fx-section-btn.is-open');
+  const label = open ? open.querySelector('.fx-section-name').textContent : '';
   return document.getElementById('tab-vfx').classList.contains('active')
-    && sel === 'Transitions & Morphs' && names > 0 && names < 72
-    ? true : `select=${sel} rows=${names}`;
+    && label === 'Transitions & Morphs' && names >= 6 && names < 20
+    ? true : `open=${label} rows=${names}`;
 });
-check('FX styles clears the filter again', () => {
+check('every transition row is a real transition, not a relabelled effect', () => {
+  const ids = $$('#tab-vfx .vfx-card').map((c) => c.dataset.id);
+  return ids.every((id) => id.indexOf('tr_') === 0) ? true : ids.join(',');
+});
+check('FX styles goes back to the section list', () => {
   document.querySelector('.rail-item[data-nav="fx"]').click();
-  return document.getElementById('vfxCatSelect').value === 'ALL'
-    && $$('#tab-vfx .vfx-card').length > 60;
+  const sections = $$('#fxSectionBar .fx-section-btn').length;
+  return $$('#tab-vfx .vfx-card').length === 0 && sections >= 6
+    ? true : `cards=${$$('#tab-vfx .vfx-card').length} sections=${sections}`;
 });
 check('Lyrics / Editing / Render stay reachable', () => {
   const subs = $$('.rail-sub').map((b) => b.textContent.trim().toLowerCase());
