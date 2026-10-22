@@ -7,6 +7,9 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+ <div class="app-window">
+  <div class="win-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+
   <!-- TOP APPLICATION BAR -->
   <header class="topbar">
     <div class="brand-group">
@@ -78,6 +81,13 @@
           </div>
         </div>
 
+        <!-- panel label, like every region of a hardware plugin -->
+        <div class="panel-label">
+          <span class="lamp"></span>
+          <span>Preview</span>
+          <span class="label-right" id="previewOutputLabel">Video output · 640 × 360</span>
+        </div>
+
         <!-- HTML5 REAL-TIME OPTICAL SHADER & LYRIC RENDERING CANVAS -->
         <div class="canvas-stage" id="canvasStage" title="Drop an image or a video straight onto the monitor to use it as the plate">
           <canvas id="livePreviewCanvas" width="640" height="360" title="Magic Mask: click your subject to build a matte"></canvas>
@@ -89,9 +99,23 @@
           </div>
         </div>
 
+        <!-- TRANSPORT BAR — four colour-coded keys -->
+        <div class="transport-bar">
+          <button class="transport-key key-play" id="playPauseBtn" disabled title="Play">▶</button>
+          <button class="transport-key key-pause" id="transportPauseBtn" disabled title="Pause">❚❚</button>
+          <button class="transport-key key-stop" id="transportStopBtn" disabled title="Stop and return to the start">■</button>
+          <button class="transport-key key-send" id="transportSendBtn" title="Send the stack to Resolve (same as the rail button)">●</button>
+          <div class="scrubber-wrap">
+            <input type="range" id="timelineScrubber" min="0" max="1000" value="0" disabled />
+          </div>
+          <span class="transport-dur" id="transportDurLabel">0:00.0 / 0:00.0</span>
+        </div>
+
+        <!-- lower row: detail controls beside the timeline + commit key -->
+        <div class="stage-lower">
         <!-- DETAIL CONTROLS: the picked look's curve, intensity and shape knobs.
              Sits under the preview like a plugin's inspector, not in the rail. -->
-        <div class="stage-detail" id="stageDetail">
+        <div class="stage-detail" id="stageDetail" data-module="keyframes">
         <!-- Shown until an effect is picked; the editor itself stays hidden -->
         <div class="kf-placeholder" id="kfPlaceholder">
           <span>◆</span>
@@ -168,13 +192,71 @@
 
         </div>
 
-        <!-- TRANSPORT BAR -->
-        <div class="transport-bar">
-          <button class="transport-btn" id="playPauseBtn" disabled title="Load footage first">Play</button>
-          <div class="scrubber-wrap">
-            <input type="range" id="timelineScrubber" min="0" max="1000" value="0" disabled />
+          <aside class="monitor-column" id="monitorColumn">
+    <!-- MULTI-TRACK DAVINCI RESOLVE TIMELINE PREVIEW -->
+    <div class="timeline-card" data-module="timeline" data-label="Timeline">
+      <div class="timeline-header">
+        <div class="tl-title-group">
+          <strong id="activeTimelineTitle">No timeline opened yet</strong>
+        </div>
+        <div class="tl-actions">
+          <button class="btn-mini" id="clearVfxTrackBtn">Clear FX Track</button>
+          <button class="btn-mini accent" id="openLuaDrawerBtn">Resolve 21.1.1 Lua</button>
+        </div>
+      </div>
+
+      <!-- TIMELINE TRACKS -->
+      <div class="timeline-tracks" id="timelineTracksContainer">
+        <div class="tl-empty-note" id="tlEmptyNote">No edits yet — apply an effect and its clips land here.</div>
+        <div class="tl-playhead" id="tlPlayhead" style="left: 18%;"></div>
+
+        <div class="tl-track">
+          <div class="tl-track-label vfx-label">V3 • Optical FX</div>
+          <div class="tl-track-lane" id="laneV3"></div>
+        </div>
+
+        <div class="tl-track">
+          <div class="tl-track-label sub-label">V2/ST • LYRC</div>
+          <div class="tl-track-lane" id="laneSub"></div>
+        </div>
+
+        <div class="tl-track">
+          <div class="tl-track-label v2-label">V2 • B-Roll</div>
+          <div class="tl-track-lane" id="laneV2"></div>
+        </div>
+
+        <div class="tl-track">
+          <div class="tl-track-label v1-label">V1 • Main Cut</div>
+          <div class="tl-track-lane" id="laneV1"></div>
+        </div>
+
+        <div class="tl-track">
+          <div class="tl-track-label a1-label">A1 • Master</div>
+          <div class="tl-track-lane" id="laneA1"></div>
+        </div>
+      </div>
+
+      <!-- LIVE RESOLVE LUA / BRIDGE LOG DRAWER -->
+      <div class="wire-strip" id="wireStrip" data-module="wire" data-label="Resolve Wire">
+        <span class="wire-pill" id="wireState">Bridge idle</span>
+        <span class="wire-chain" id="wireChain">No graph dispatched yet</span>
+        <span class="wire-pill" id="wireRecipeCount">-- recipes</span>
+        <button class="wire-pill wire-btn" id="wireTestBtn" title="Ask the resident Resolve bridge what it can see right now">Test bridge</button>
+      </div>
+      <div class="lua-drawer" id="luaDrawer" data-module="lua" data-label="Lua Console">
+        <div class="lua-drawer-head">
+          <span>DaVinci Resolve Free 21.1.1 Bridge & Console Snippet</span>
+          <div class="lua-drawer-btns">
+            <button class="btn-mini" id="copyLuaBtn">Copy Lua for Resolve Console</button>
+            <a class="btn-mini" href="VFXKit_ResolveFree_Bridge.lua" download="VFXKit_ResolveFree_Bridge.lua">Download Bridge .lua</a>
           </div>
-          <span class="transport-dur" id="transportDurLabel">0.0s / 0.0s</span>
+        </div>
+        <pre class="lua-code-box" id="luaCodeOutput">-- Click any Optical/Film VFX preset, LYRC style, Silence Cut, or Media Pool Auto-Edit button
+-- to dispatch directly to DaVinci Resolve Free 21.1.1 via the File-Mailbox Bridge
+-- OR copy the generated Lua snippet directly into Workspace > Console > Lua!</pre>
+      </div>
+    </div>
+          </aside>
         </div>
       </div>
 
@@ -247,10 +329,10 @@
             </div>
             <div class="stack-chips" id="stackChips"></div>
             <div class="stack-actions">
-              <button class="btn-mini" id="addLayerBtn" title="Stack the look you are previewing">+ Stack current</button>
+              <button class="btn-mini" id="addLayerBtn" title="Stack the look you are previewing">+ Stack</button>
               <button class="btn-mini" id="stackToggleBtn" aria-expanded="false" aria-controls="layerRack">Details</button>
               <button class="btn-mini" id="clearLayersBtn" title="Empty the stack (nothing in Resolve or on the timeline changes)">Clear</button>
-              <button class="btn-primary" id="applyLayersBtn" disabled>Send stack to Resolve</button>
+              <button class="btn-primary" id="applyLayersBtn" disabled>Send to Resolve</button>
             </div>
           </div>
           <div class="stack-body">
@@ -925,72 +1007,7 @@
       </div>
     </section>
 
-    <!-- RIGHT COLUMN: TIMELINE + PANEL TIPS -->
-    <aside class="monitor-column" id="monitorColumn">
-      <!-- MULTI-TRACK DAVINCI RESOLVE TIMELINE PREVIEW -->
-      <div class="timeline-card" data-module="timeline" data-label="Timeline">
-        <div class="timeline-header">
-          <div class="tl-title-group">
-            <strong id="activeTimelineTitle">No timeline opened yet</strong>
-          </div>
-          <div class="tl-actions">
-            <button class="btn-mini" id="clearVfxTrackBtn">Clear FX Track</button>
-            <button class="btn-mini accent" id="openLuaDrawerBtn">Resolve 21.1.1 Lua</button>
-          </div>
-        </div>
 
-        <!-- TIMELINE TRACKS -->
-        <div class="timeline-tracks" id="timelineTracksContainer">
-          <div class="tl-empty-note" id="tlEmptyNote">No edits yet — apply an effect and its clips land here.</div>
-          <div class="tl-playhead" id="tlPlayhead" style="left: 18%;"></div>
-
-          <div class="tl-track">
-            <div class="tl-track-label vfx-label">V3 • Optical FX</div>
-            <div class="tl-track-lane" id="laneV3"></div>
-          </div>
-
-          <div class="tl-track">
-            <div class="tl-track-label sub-label">V2/ST • LYRC</div>
-            <div class="tl-track-lane" id="laneSub"></div>
-          </div>
-
-          <div class="tl-track">
-            <div class="tl-track-label v2-label">V2 • B-Roll</div>
-            <div class="tl-track-lane" id="laneV2"></div>
-          </div>
-
-          <div class="tl-track">
-            <div class="tl-track-label v1-label">V1 • Main Cut</div>
-            <div class="tl-track-lane" id="laneV1"></div>
-          </div>
-
-          <div class="tl-track">
-            <div class="tl-track-label a1-label">A1 • Master</div>
-            <div class="tl-track-lane" id="laneA1"></div>
-          </div>
-        </div>
-
-        <!-- LIVE RESOLVE LUA / BRIDGE LOG DRAWER -->
-        <div class="wire-strip" id="wireStrip" data-module="wire" data-label="Resolve Wire">
-          <span class="wire-pill" id="wireState">Bridge idle</span>
-          <span class="wire-chain" id="wireChain">No graph dispatched yet</span>
-          <span class="wire-pill" id="wireRecipeCount">-- recipes</span>
-          <button class="wire-pill wire-btn" id="wireTestBtn" title="Ask the resident Resolve bridge what it can see right now">Test bridge</button>
-        </div>
-        <div class="lua-drawer" id="luaDrawer" data-module="lua" data-label="Lua Console">
-          <div class="lua-drawer-head">
-            <span>DaVinci Resolve Free 21.1.1 Bridge & Console Snippet</span>
-            <div class="lua-drawer-btns">
-              <button class="btn-mini" id="copyLuaBtn">Copy Lua for Resolve Console</button>
-              <a class="btn-mini" href="VFXKit_ResolveFree_Bridge.lua" download="VFXKit_ResolveFree_Bridge.lua">Download Bridge .lua</a>
-            </div>
-          </div>
-          <pre class="lua-code-box" id="luaCodeOutput">-- Click any Optical/Film VFX preset, LYRC style, Silence Cut, or Media Pool Auto-Edit button
--- to dispatch directly to DaVinci Resolve Free 21.1.1 via the File-Mailbox Bridge
--- OR copy the generated Lua snippet directly into Workspace > Console > Lua!</pre>
-        </div>
-      </div>
-    </aside>
   </main>
 
   <!-- MODAL: HOW THE RESOLVE FREE 21.1.1 MACOS BRIDGE WORKS + 1-CLICK INSTALL -->
@@ -1080,6 +1097,8 @@
   </div>
 
   <div class="toast-container" id="toastContainer"></div>
+
+ </div>
 
   <script src="web-config.js"></script>
   <script src="lua-export.js"></script>

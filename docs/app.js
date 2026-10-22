@@ -1511,6 +1511,17 @@ function setStageLoaded(kind, label, durationSec) {
   const overlay = document.getElementById('emptyStage');
   if (overlay) overlay.classList.add('hidden');
 
+  // the panel header reports the real output size, not a marketing number
+  const out = document.getElementById('previewOutputLabel');
+  if (out) {
+    const vid = document.getElementById('customVideoElement');
+    const w = vid && vid.videoWidth;
+    const h = vid && vid.videoHeight;
+    out.textContent = (kind === 'video' && w && h)
+      ? `Video output · ${w} × ${h}`
+      : (kind === 'image' ? 'Still plate · 16:9 stage' : 'Video output · 640 × 360 stage');
+  }
+
   const src = document.getElementById('stageSourceLabel');
   if (src) {
     const short = label && label.length > 34 ? label.slice(0, 31) + '…' : (label || 'Footage');
@@ -1518,10 +1529,13 @@ function setStageLoaded(kind, label, durationSec) {
     src.classList.add('is-loaded');
   }
 
+  ['playPauseBtn', 'transportPauseBtn', 'transportStopBtn'].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = false;
+  });
   const play = document.getElementById('playPauseBtn');
   if (play) {
     play.disabled = false;
-    play.textContent = 'Play';
     play.title = 'Play';
   }
   const scrub = document.getElementById('timelineScrubber');
@@ -1574,21 +1588,26 @@ function clearStage() {
     src.textContent = 'No footage loaded';
     src.classList.remove('is-loaded');
   }
+  ['playPauseBtn', 'transportPauseBtn', 'transportStopBtn'].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.remove('is-live');
+    }
+  });
   const play = document.getElementById('playPauseBtn');
-  if (play) {
-    play.disabled = true;
-    play.textContent = 'Play';
-    play.title = 'Load footage first';
-  }
+  if (play) play.title = 'Load footage first';
   const scrub = document.getElementById('timelineScrubber');
   if (scrub) {
     scrub.disabled = true;
     scrub.value = 0;
   }
   const durLabel = document.getElementById('transportDurLabel');
-  if (durLabel) durLabel.textContent = '0.0s / 0.0s';
+  if (durLabel) durLabel.textContent = '0:00.0 / 0:00.0';
   const pill = document.getElementById('activeFxPill');
   if (pill) pill.textContent = 'No effect applied';
+  const out = document.getElementById('previewOutputLabel');
+  if (out) out.textContent = 'Video output · 640 × 360 stage';
   resetImageLabel();
   if (state.depth) depthRescan({ timeSec: 0 });
 }
@@ -3372,7 +3391,7 @@ function renderLayerRack() {
   const sendBtn = document.getElementById('applyLayersBtn');
   if (sendBtn) {
     const live = layers.filter((l) => l.enabled).length;
-    sendBtn.textContent = live ? `Send stack to Resolve (${live})` : 'Send stack to Resolve';
+    sendBtn.textContent = live ? `Send to Resolve (${live})` : 'Send to Resolve';
     sendBtn.disabled = live === 0;
   }
   const countBadge = document.getElementById('layerCountBadge');
@@ -6176,20 +6195,37 @@ function initMaskTab() {
 function initMonitorAndTimeline() {
   renderTimelineTracks();
 
+  // Four keys, four jobs: play starts, pause stops the clock, stop rewinds, and
+  // the red key commits the stack. One function decides what "playing" means so
+  // the keys, the clock and the motion flag can never disagree.
   const playPauseBtn = document.getElementById('playPauseBtn');
-  playPauseBtn.addEventListener('click', () => {
-    // nothing to play yet — say so instead of animating an empty stage.
-    // Pausing is always allowed; only starting needs something to play.
-    if (!state.isPlaying && !state.totalDurSec) {
+  const pauseBtn = document.getElementById('transportPauseBtn');
+  const stopBtn = document.getElementById('transportStopBtn');
+  const sendBtn = document.getElementById('transportSendBtn');
+
+  const setPlaying = (next) => {
+    if (next && !state.totalDurSec) {
       showToast('Load footage first', 'warn');
       return;
     }
-    state.isPlaying = !state.isPlaying;
-    playPauseBtn.textContent = state.isPlaying ? 'Pause' : 'Play';
-    // pause means "stop moving", not "keep animating but stop the clock"
+    state.isPlaying = !!next;
     state.motion = state.isPlaying;
     applyMotionState(true);
+    const vid = document.getElementById('customVideoElement');
+    if (vid && videoHasSource(vid)) {
+      if (state.isPlaying) vid.play().catch(() => {});
+      else vid.pause();
+    }
+  };
+
+  if (playPauseBtn) playPauseBtn.addEventListener('click', () => setPlaying(true));
+  if (pauseBtn) pauseBtn.addEventListener('click', () => setPlaying(false));
+  if (stopBtn) stopBtn.addEventListener('click', () => {
+    setPlaying(false);
+    seekTo(0);
+    showToast('Stopped at the start');
   });
+  if (sendBtn) sendBtn.addEventListener('click', () => applyLayerStack());
 
   const hitBtn = document.getElementById('triggerHitNowBtn');
   if (hitBtn) hitBtn.addEventListener('click', () => {
@@ -6234,13 +6270,7 @@ function initMonitorAndTimeline() {
 
   const scrubber = document.getElementById('timelineScrubber');
   scrubber.addEventListener('input', (e) => {
-    state.playheadSec = (Number(e.target.value) / 1000) * state.totalDurSec;
-    const vid = document.getElementById('customVideoElement');
-    const dur = vid ? Number(vid.duration) : 0;
-    if (vid && state.scene === 'custom_video' && Number.isFinite(dur) && dur > 0.05) {
-      try { vid.currentTime = state.playheadSec % dur; } catch (_e) { /* ignore */ }
-    }
-    if (state.depth) depthRescan({ silent: true, timeSec: state.playheadSec });
+    seekTo((Number(e.target.value) / 1000) * state.totalDurSec);
   });
 
   document.getElementById('clearVfxTrackBtn').addEventListener('click', () => {
@@ -6356,7 +6386,14 @@ function renderLivePreviewLoop(now) {
   const ff = String(totalFrames % 24).padStart(2, '0');
   const ss = String(Math.floor(state.playheadSec) % 60).padStart(2, '0');
   document.getElementById('viewerTimecode').textContent = `01:00:${ss}:${ff}`;
-  document.getElementById('transportDurLabel').textContent = `${state.playheadSec.toFixed(1)}s / ${state.totalDurSec.toFixed(1)}s`;
+  const fmt = (t) => {
+    const total = Math.max(0, Number(t) || 0);
+    const mins = Math.floor(total / 60);
+    const secs = total - mins * 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs.toFixed(1)}`;
+  };
+  document.getElementById('transportDurLabel').textContent =
+    `${fmt(state.playheadSec)} / ${fmt(state.totalDurSec)}`;
 
   depthLiveTick(now);
   drawMonitorFrame(state.motion ? now / 1000 : state.frozenTime);
@@ -6399,12 +6436,30 @@ function syncVideoTransport() {
   if (p && p.catch) p.catch(() => {});
 }
 
+// One place that moves the playhead: the scrubber, the stop key and the
+// keyframe jumps all come through here, so the picture and the clock agree.
+function seekTo(seconds) {
+  const clamped = Math.max(0, Math.min(state.totalDurSec || 0, Number(seconds) || 0));
+  state.playheadSec = clamped;
+  const vid = document.getElementById('customVideoElement');
+  const dur = vid ? Number(vid.duration) : 0;
+  if (vid && state.scene === 'custom_video' && Number.isFinite(dur) && dur > 0.05) {
+    try { vid.currentTime = clamped % dur; } catch (_e) { /* ignore */ }
+  }
+  const scrub = document.getElementById('timelineScrubber');
+  if (scrub && state.totalDurSec > 0) {
+    scrub.value = String(Math.round((clamped / state.totalDurSec) * 1000));
+  }
+  if (state.depth) depthRescan({ silent: true, timeSec: clamped });
+}
+
 function applyMotionState(persist) {
   const btn = document.getElementById('toggleMotionBtn');
+  if (!state.motion) state.isPlaying = false;
   const play = document.getElementById('playPauseBtn');
-  if (!state.motion) {
-    state.isPlaying = false;
-    if (play) play.textContent = 'Play';
+  if (play) {
+    play.classList.toggle('is-live', !!state.isPlaying);
+    play.title = state.isPlaying ? 'Playing' : 'Play';
   }
   if (btn) {
     btn.textContent = state.motion ? 'Motion: ON' : 'Motion: OFF';

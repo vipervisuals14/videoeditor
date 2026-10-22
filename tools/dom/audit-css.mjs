@@ -1,0 +1,47 @@
+/* Dead-selector audit: every simple rule in styles.css is matched against the
+ * real DOM. A rule that matches nothing after a restructure is either dead
+ * weight or — worse — a sign the markup moved and the style no longer lands. */
+import fs from 'node:fs';
+import path from 'node:path';
+import { boot, PUB } from './harness.mjs';
+
+const css = fs.readFileSync(path.join(PUB, 'styles.css'), 'utf8');
+// boot the real page so JS-rendered markup (cards, stack rows) exists too
+const { document: doc } = boot();
+const cards = doc.querySelectorAll('#tab-vfx .vfx-card');
+if (cards[0]) cards[0].querySelector('.vfx-apply-btn').click();
+if (cards[1]) cards[1].querySelector('.vfx-apply-btn').click();
+
+// flatten @media blocks away, then pull every "selector { ... }" pair
+const flat = css.replace(/@[a-z-]+[^{]*\{/g, ' ');
+const rules = [...flat.matchAll(/([^{}]+)\{/g)].map((m) => m[1].trim())
+  .filter((sel) => !sel.startsWith('@') && !sel.startsWith('/*'));
+
+const critical = [
+  '.app-window', '.win-dots', '.panel-label', '.stage-lower', '.transport-key',
+  '.key-play', '.key-pause', '.key-stop', '.key-send',
+  '#tab-vfx .vfx-card .vfx-apply-btn', '#tab-vfx .vfx-card .vfx-card-body',
+  '.stack-panel .layer-row', '.vfx-stack-badge', '.install-strip', '.install-steps',
+  '.stage-detail .kf-body-grid', '.stage-detail .kf-canvas-wrap',
+  '.monitor-column .timeline-card', '.popup-panel .main-tab.active .tab-name'
+];
+
+let dead = 0;
+const deadList = [];
+const seen = new Set();
+for (const sel of rules) {
+  const each = sel.split(',').map((s) => s.trim()).filter(Boolean);
+  for (const one of each) {
+    if (seen.has(one)) continue;
+    seen.add(one);
+    if (/[:@]/.test(one)) continue;          // pseudo states need interaction
+    let hits = 0;
+    try { hits = doc.querySelectorAll(one).length; } catch { hits = -1; }
+    if (hits === 0) { dead++; deadList.push(one); }
+  }
+}
+console.log(`rules: ${seen.size}   matching nothing: ${dead}`);
+console.log(deadList.slice(0, 40).join('\n'));
+const missing = critical.filter((sel) => doc.querySelectorAll(sel).length === 0);
+console.log('\ncritical selectors missing from the DOM:', missing.length ? missing : 'none');
+process.exit(missing.length ? 1 : 0);
