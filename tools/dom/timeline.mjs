@@ -196,6 +196,29 @@ check('adding a second clip appends it instead of stacking on top', () => {
     `${P.tlClips().length} clips, second starts at ${second.startSec}s`];
 });
 
+check('a clip that has not finished loading lands on V1 by itself', () => {
+  resetTimeline([]);
+  let d = 0;
+  Object.defineProperty(vid, 'duration', { configurable: true, get: () => d });
+  const refused = P.tlAddClipFromStage();
+  const waited = P.state.tl.waitingForMeta === true && P.tlClips().length === 0;
+  d = 9;
+  vid.dispatchEvent(new window.Event('loadedmetadata'));
+  const clip = P.tlClips()[0];
+  const added = !!clip && Math.abs(T.len(clip) - 9) < 1e-6;
+  Object.defineProperty(vid, 'duration', { configurable: true, get: () => 14 });
+  return [refused === null && waited && added,
+    `click did nothing but waited=${waited}, then ${added ? T.len(clip) + 's clip' : 'nothing'} appeared`];
+});
+
+check('every refused click says something', () => {
+  const src = fs.readFileSync(path.join(PUB, 'app.js'), 'utf8');
+  const body = src.slice(src.indexOf('function tlAddClipFromStage()'), src.indexOf('function tlRenderRuler'));
+  const returns = (body.match(/return null;/g) || []).length;
+  const toasts = (body.match(/showToast\(/g) || []).length;
+  return [toasts >= returns, `${returns} early returns, ${toasts} messages`];
+});
+
 check('the empty-state note disappears once there is an edit', () => {
   return [$('#tlEmptyNote').classList.contains('hidden'), `hidden=${$('#tlEmptyNote').classList.contains('hidden')}`];
 });
@@ -335,12 +358,12 @@ check('delete removes the selected clip and nothing else', () => {
 check('nothing lands on the timeline by itself', () => {
   const src = fs.readFileSync(path.join(PUB, 'app.js'), 'utf8');
   // adding a clip may only be triggered by the button (and the test seam)
-  const calls = (src.match(/tlAddClipFromStage\(\)/g) || []).length;
+  const calls = (src.match(/[^.\w]tlAddClipFromStage\(\)/g) || []).length;
   const bound = /getElementById\('tlAddClipBtn'\)[\s\S]{0,80}addEventListener\('click'[\s\S]{0,60}tlAddClipFromStage/.test(src);
   const note = /getElementById\('tlEmptyNote'\)[\s\S]{0,120}addEventListener\('click'[\s\S]{0,60}tlAddClipFromStage/.test(src);
   // and the boot sequence never seeds the lane on its own
   const seeded = /DOMContentLoaded[\s\S]{0,900}tlSetClips/.test(src);
-  return [calls <= 3 && bound && note && !seeded,
+  return [calls <= 4 && bound && note && !seeded,
     `${calls} calls, add button=${bound}, empty note=${note}, seeded at boot=${seeded}`];
 });
 

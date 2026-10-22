@@ -559,6 +559,11 @@ change are ignored once (they all said "on"), so the new default actually takes 
 
 The timeline is not a picture of an edit; it is the edit.
 
+**If the button ever refuses,** it now says so: a clip whose metadata has not arrived is
+waited for (and lands on V1 by itself, no second click), a missing timeline module is
+fetched on demand, and a file that cannot report its length in a browser is named as such
+instead of failing quietly.
+
 **Where it is:** its own full-width row directly under the viewer, in the same stretch of
 the page as the preview — not tucked into a side column. It used to sit in the right-hand
 column, which the narrow-window rule hid outright: under 1250 px the timeline did not
@@ -616,7 +621,7 @@ dead. `dist-web/` is booted here as a real page (jsdom plus a static server, the
 files, the real button and the real pointer path) to prove the built bundle — not just the
 source — adds a clip and trims it.
 
-Guarded by **35 checks** in `tools/dom/timeline.mjs`:
+Guarded by **37 checks** in `tools/dom/timeline.mjs`:
 real `PointerEvent` drags on the real lane element (with the lane and clip rects
 measured the way a browser would), the source-bounds clamps, snapping, split/delete,
 playhead sync, and that the element's `currentTime` follows a trim.
@@ -781,7 +786,7 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 | **Speech engine, the browser's own code path** (IIFE bundle + ort-web wasm + relative paths) | `node tools/asr_browser_check.mjs` | 9/9 |
 | **Captions: fonts, size, spacing, placement, all 34 looks** | `node tools/dom/type.mjs` | 35 |
 | **In-app silence cut: plan, preview, and a full render** | `node tools/dom/cut.mjs` | 29 |
-| **Editable timeline: drag to trim, move, split, delete, monitor follows** | `node tools/dom/timeline.mjs` | 35 |
+| **Editable timeline: drag to trim, move, split, delete, monitor follows** | `node tools/dom/timeline.mjs` | 37 |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified

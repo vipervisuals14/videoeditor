@@ -10182,6 +10182,20 @@ function stageSourceTime(timelineSec) {
   return m ? m.sourceSec : null;      // null = a gap in the timeline
 }
 
+/** Fetch public/timeline.js once if the page somehow booted without it. */
+function tlLoadModelOnce() {
+  if (window.TIMELINE || tlLoadModelOnce.tried) return;
+  tlLoadModelOnce.tried = true;
+  const s = document.createElement('script');
+  s.src = '/timeline.js?v=7';
+  s.onload = () => {
+    showToast('Timeline ready — press ＋ Add clip', 'ok');
+    renderTimelineTracks();
+  };
+  s.onerror = () => showToast('The timeline file could not be fetched — reload the page', 'error');
+  document.head.appendChild(s);
+}
+
 /** The source's own length, so a trim can never run past the footage. */
 function sourceDuration() {
   const vid = document.getElementById('customVideoElement');
@@ -10219,9 +10233,12 @@ function updateTransportEnabled() {
 }
 
 function tlAddClipFromStage() {
-  const t = tlModel();
+  let t = tlModel();
   if (!t) {
-    showToast('The timeline module did not load — reload the page', 'warn');
+    // The model is a separate file. If it is missing (a stale cache, a partial
+    // deploy) fetch it once and carry on, rather than doing nothing.
+    tlLoadModelOnce();
+    showToast('Starting the timeline — press ＋ Add clip again in a second', 'warn');
     return null;
   }
   const vid = document.getElementById('customVideoElement');
@@ -10234,9 +10251,29 @@ function tlAddClipFromStage() {
   // A loaded video is enough; the scene flag has been wrong in the past when a
   // clip arrived by drag-and-drop, and that used to make this button do nothing.
   if (state.scene !== 'custom_video') state.scene = 'custom_video';
-  const srcDur = sourceDuration();
+  // The element's own length is the only honest source for a clip window. The
+  // stage-wide fallback belongs to older paths and would let a not-yet-loaded
+  // file borrow the length of a clip that is no longer on the stage.
+  const elDur = vid ? Number(vid.duration) : NaN;
+  const srcDur = Number.isFinite(elDur) && elDur > 0.05 ? elDur : 0;
   if (!(srcDur > 0.05)) {
-    showToast('That clip is still loading — press ＋ Add clip again in a second', 'warn');
+    // Metadata may not have landed yet. Wait for it instead of asking the user
+    // to press the button again — and say so, so the click never looks ignored.
+    if (!state.tl.waitingForMeta) {
+      state.tl.waitingForMeta = true;
+      showToast('Reading the clip’s length — it will drop onto V1 by itself in a moment', 'warn');
+      const retry = () => {
+        state.tl.waitingForMeta = false;
+        if (!tlClips().length) tlAddClipFromStage();
+      };
+      vid.addEventListener('loadedmetadata', retry, { once: true });
+      vid.addEventListener('durationchange', retry, { once: true });
+      // and a last look, in case the events already fired before we listened
+      setTimeout(() => {
+        if (!state.tl.waitingForMeta) return;
+        if (sourceDuration() > 0.05) retry();
+      }, 1200);
+    }
     return null;
   }
   const name = (state.plateFile && state.plateFile.name) || 'Clip';
