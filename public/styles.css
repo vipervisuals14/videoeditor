@@ -3259,7 +3259,7 @@ body.mask-brush #livePreviewCanvas.mask-drawing { cursor: cell; }
 /* Empty timeline: say so once, quietly, instead of showing invented clips */
 .tl-empty-note {
   position: absolute;
-  inset: 0 0 0 104px;
+  inset: 0 0 0 80px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5955,3 +5955,238 @@ body:has(.workspace.compact-dock) { grid-template-columns: 460px minmax(0, 1fr);
   font: 500 9.5px/1.45 var(--font-mono);
   color: var(--dim);
 }
+
+/* ---------------------------------------------------------------------------
+ * EDITABLE TIMELINE
+ * One geometry for every part: a 64 px label gutter, then the lane. The ruler
+ * and the playhead are positioned from the same gutter constant, so a drag on a
+ * clip and a click on the ruler agree to the pixel.
+ * -------------------------------------------------------------------------*/
+.timeline-card { --tl-gutter: 64px; }
+
+#tlRuler,
+.tl-track-lane {
+  position: relative;
+}
+
+.tl-title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tl-duration {
+  font: 500 9.5px/1 var(--font-mono);
+  color: var(--dim);
+  letter-spacing: 0.04em;
+}
+
+.timeline-header .tl-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ruler --------------------------------------------------------------- */
+.tl-ruler-row {
+  display: grid;
+  grid-template-columns: var(--tl-gutter) minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  padding: 0 10px;
+  margin-top: 6px;
+}
+
+.tl-ruler-gutter {
+  font: 600 8.5px/1 var(--font-mono);
+  color: #4f5b60;
+  letter-spacing: 0.08em;
+}
+
+.tl-ruler {
+  height: 16px;
+  cursor: ew-resize;
+  border-radius: 2px;
+  background: repeating-linear-gradient(90deg, #1b2024 0 1px, transparent 1px 100%);
+}
+
+.tl-ruler .tl-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #2b3438;
+  pointer-events: none;
+}
+
+.tl-ruler .tl-tick-label {
+  position: absolute;
+  top: 1px;
+  font: 500 8px/1 var(--font-mono);
+  color: #5d6a70;
+  padding-left: 3px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* lanes --------------------------------------------------------------- */
+#timelineTracksContainer {
+  padding: 6px 10px 8px;
+  position: relative;
+}
+
+#timelineTracksContainer .tl-track {
+  grid-template-columns: var(--tl-gutter) minmax(0, 1fr);
+  gap: 6px;
+}
+
+#timelineTracksContainer .tl-track-label {
+  font: 600 9px/1.1 var(--font-mono);
+  letter-spacing: 0.03em;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 6px;
+  background: #0e1214;
+  border-left-width: 2px;
+}
+
+#timelineTracksContainer .tl-track-label span {
+  font-size: 8px;
+  opacity: 0.7;
+  letter-spacing: 0.08em;
+}
+
+#timelineTracksContainer .tl-track-lane {
+  height: 30px;
+  background: #0a0d0f;
+  border: 1px solid #171c1f;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#timelineTracksContainer .tl-track[data-track="V1"] .tl-track-lane {
+  height: 38px;
+  background: #0b0f11;
+}
+
+/* clips --------------------------------------------------------------- */
+#timelineTracksContainer .tl-clip {
+  top: 2px;
+  bottom: 2px;
+  padding: 0 8px;
+  font: 600 9.5px/1.1 var(--font-mono);
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+#timelineTracksContainer .tl-clip:active { cursor: grabbing; }
+
+#timelineTracksContainer .tl-clip.v1-item {
+  background: linear-gradient(180deg, #2b4a63, #1d3547);
+  color: #d6e9f5;
+  border-color: #3a6c8e;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+#timelineTracksContainer .tl-clip.is-selected {
+  border-color: #7cc4ee;
+  box-shadow: 0 0 0 1px #7cc4ee, inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  z-index: 4;
+}
+
+#timelineTracksContainer .tl-clip.is-dragging {
+  opacity: 0.92;
+  z-index: 6;
+}
+
+/* the grab zones: visible only on hover, so a clip still reads as a block */
+#timelineTracksContainer .tl-clip::before,
+#timelineTracksContainer .tl-clip::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  background: rgba(124, 196, 238, 0.0);
+  border-left: 2px solid rgba(124, 196, 238, 0.0);
+  cursor: ew-resize;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+#timelineTracksContainer .tl-clip::before { left: 0; }
+#timelineTracksContainer .tl-clip::after { right: 0; border-left: none; border-right: 2px solid rgba(124, 196, 238, 0); }
+
+#timelineTracksContainer .tl-clip:hover::before,
+#timelineTracksContainer .tl-clip.is-selected::before {
+  background: rgba(124, 196, 238, 0.22);
+  border-left-color: #7cc4ee;
+}
+
+#timelineTracksContainer .tl-clip:hover::after,
+#timelineTracksContainer .tl-clip.is-selected::after {
+  background: rgba(124, 196, 238, 0.22);
+  border-right-color: #7cc4ee;
+}
+
+#timelineTracksContainer .tl-clip .tl-clip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* A tiny trim readout appears while dragging an edge. */
+.tl-trim-badge {
+  position: absolute;
+  z-index: 30;
+  transform: translate(-50%, -100%);
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: #0b1013;
+  border: 1px solid #3a6c8e;
+  color: #b9e2f7;
+  font: 600 9px/1 var(--font-mono);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* playhead ------------------------------------------------------------ */
+#timelineTracksContainer .tl-playhead {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #e0603f;
+  box-shadow: 0 0 6px rgba(224, 96, 63, 0.7);
+  z-index: 20;
+}
+
+#timelineTracksContainer .tl-playhead::before {
+  content: "";
+  top: 0;
+  left: -4px;
+  width: 9px;
+  height: 5px;
+  background: #e0603f;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  font-size: 0;
+}
+
+/* selection readout --------------------------------------------------- */
+.tl-selection {
+  padding: 5px 10px 7px;
+  border-top: 1px solid #14191c;
+  font: 500 9.5px/1.4 var(--font-mono);
+  color: var(--dim);
+  min-height: 22px;
+}
+
+.tl-selection strong { color: var(--paper); font-weight: 600; }
+.tl-selection .tl-sel-num { color: #9fc9e2; }
+.tl-selection-hint { color: #556268; }

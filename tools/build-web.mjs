@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'dist-web');
 
-const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'depth.js', 'audio-lab.js', 'silence-cut.js', 'asr.js', 'depth-live-worker.js', 'depth-ai-worker.js', 'render.js', 'lua-export.js'];
+const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'depth.js', 'audio-lab.js', 'silence-cut.js', 'timeline.js', 'asr.js', 'depth-live-worker.js', 'depth-ai-worker.js', 'render.js', 'lua-export.js'];
 
 // The speech model (Whisper tiny, int8) and its runtime. 52 MB, shipped with the
 // site so the transcription never leaves the machine and needs no API key.
@@ -41,7 +41,7 @@ const VENDOR_FILES = [
 function rewriteHtml(html, stamp) {
   // The cache-buster matters: a browser holding yesterday's app.js shows a bug
   // that was fixed, and there is no way to tell from the page.
-  const assets = '(styles\\.css|app\\.js|touchdesigner\\.js|depth\\.js|audio-lab\\.js|silence-cut\\.js|asr\\.js|render\\.js|lua-export\\.js|vendor/asr/transformers\\.bundle\\.js)';
+  const assets = '(styles\\.css|app\\.js|touchdesigner\\.js|depth\\.js|audio-lab\\.js|silence-cut\\.js|timeline\\.js|asr\\.js|render\\.js|lua-export\\.js|vendor/asr/transformers\\.bundle\\.js)';
   return html
     .replace(new RegExp('(href|src)="\\/?' + assets + '(\\?v=[^"]*)?"', 'g'), '$1="$2?v=' + stamp + '"')
     .replace(/\/download\/bridge\.lua/g, 'VFXKit_ResolveFree_Bridge.lua')

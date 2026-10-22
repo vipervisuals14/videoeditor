@@ -1433,6 +1433,15 @@ const state = {
   // Timeline tracks state
   // Edits appear here only after you make them — the timeline starts blank.
   timelineTracks: { v3: [], v2: [], v1: [], sub: [], a1: [] },
+  // The editable timeline: clips with a real window on the source (see
+  // public/timeline.js). `spanSec` is the visible time span; it is frozen while
+  // a drag is in progress so the scale under the pointer never shifts.
+  tl: {
+    clips: [],
+    spanSec: 6,
+    selectedId: null,
+    drag: null
+  },
 };
 
 // Offscreen frame buffer for authentic 360° Shutter Step-Printing / Motion Trail accumulation
@@ -1460,6 +1469,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initLayers();
   initRenderBay();
   initMonitorAndTimeline();
+  initTimelineEditing();
   initModules();
   initBridgeModal();
   initConsoleModal();
@@ -2165,8 +2175,15 @@ function initSceneSwitcher() {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       const url = URL.createObjectURL(file);
+      const changedMedia = !state.plateFile || state.plateFile.name !== file.name;
       state.plateFile = file;      // kept so the lyrics tab can listen to it
       state.lyricAnalysis = null;  // a new clip means the old timing is gone
+      if (changedMedia && tlClips().length) {
+        // the clips pointed at the old footage: keeping them would show trims of
+        // a file that is no longer on the stage
+        tlSetClips([]);
+        showToast('New clip loaded — the old timeline edit cleared with it', 'warn');
+      }
       videoEl.src = url;
       videoEl.pause();
       const trackAspect = () => {
@@ -2412,6 +2429,10 @@ function initMonitorDropZone() {
       }
       const vid = document.getElementById('customVideoElement');
       if (vid) {
+        if ((!state.plateFile || state.plateFile.name !== file.name) && tlClips().length) {
+          tlSetClips([]);
+          showToast('New clip loaded — the old timeline edit cleared with it', 'warn');
+        }
         state.plateFile = file;
         state.lyricAnalysis = null;
         vid.src = URL.createObjectURL(file);
@@ -3609,23 +3630,46 @@ function executeSilenceCut() {
   const kept = state.silenceSegments.filter((s) => !isSegmentCut(s));
   const autoZoom = document.getElementById('autoZoomJumpCut').checked;
 
-  let cursor = 0;
-  const newV1 = [];
+  // The cut becomes real clips on V1: each kept run is a window on the source,
+  // back to back, so every join can be trimmed or moved afterwards. That is the
+  // whole difference between a picture of an edit and an edit.
+  const t = tlModel();
+  const srcDur = sourceDuration();
   const totalKeptDur = kept.reduce((acc, s) => acc + (s.end - s.start), 0) || 1;
-
-  kept.forEach((s, idx) => {
-    const widthPct = Math.max(8, Math.round(((s.end - s.start) / totalKeptDur) * 100));
-    const zoomLabel = autoZoom && idx % 2 === 1 ? ' (1.08x 2-Cam)' : '';
-    newV1.push({
-      left: Math.min(92, cursor),
-      width: Math.min(100 - cursor, widthPct),
-      label: `Subclip #${idx + 1}${zoomLabel}`
+  const baseName = (state.plateFile && state.plateFile.name)
+    ? state.plateFile.name.replace(/\.[^.]+$/, '')
+    : 'Clip';
+  let cursor = 0;
+  const newClips = kept.map((s, idx) => {
+    const lenSec = Math.max(0.1, s.end - s.start);
+    const clip = t.makeClip({
+      id: 'sc' + (idx + 1) + '_' + Math.random().toString(36).slice(2, 6),
+      track: 'V1',
+      name: `${baseName} ${idx + 1}`,
+      startSec: cursor,
+      srcIn: s.start,
+      srcOut: s.end,
+      srcDur: srcDur > 0 ? srcDur : s.end,
+      mediaKey: baseName
     });
-    cursor += widthPct;
+    cursor += lenSec;
+    return clip;
   });
 
-  state.timelineTracks.v1 = newV1;
-  renderTimelineTracks();
+  state.timelineTracks.v1 = newClips.map((c, idx) => ({
+    left: Math.min(92, (c.startSec / totalKeptDur) * 100),
+    width: Math.max(3, (t.len(c) / totalKeptDur) * 100),
+    label: `Subclip #${idx + 1}${autoZoom && idx % 2 === 1 ? ' (1.08x 2-Cam)' : ''}`
+  }));
+
+  if (newClips.length) {
+    tlSetClips(newClips);
+    state.tl.selectedId = newClips[0].id;
+    renderTimelineSelection();
+    showToast(`${newClips.length} trimmed clip${newClips.length === 1 ? '' : 's'} on V1 — drag the edges to adjust`, 'ok');
+  } else {
+    renderTimelineTracks();
+  }
 
   const resolveSegments = kept.map((s) => ({
     startFrame: Math.round(s.start * 24),
@@ -10055,13 +10099,251 @@ function initMonitorAndTimeline() {
   });
 }
 
+// ============================================================================
+// THE TIMELINE
+// ----------------------------------------------------------------------------
+// V1 is the editable track: clips carry a window on the source, so dragging an
+// edge trims the footage instead of sliding a box. The other lanes show what
+// the rest of the panel has put on the timeline (FX badges, the lyric lane,
+// b-roll, audio) and are deliberately not draggable — nothing here pretends an
+// edit happened that the user did not make.
+// ============================================================================
+const TL_GUTTER = 64;          // px of label column, matches --tl-gutter in CSS
+const TL_PAD = 10;             // #timelineTracksContainer horizontal padding
+const TL_GAP = 6;              // gap between the label column and the lane
+
+function tlModel() {
+  return window.TIMELINE || null;
+}
+
+function tlClips() {
+  return (state.tl && state.tl.clips) || [];
+}
+
+function tlLaneEl() {
+  return document.getElementById('laneV1');
+}
+
+function tlLaneWidth(el) {
+  const lane = el || tlLaneEl();
+  if (!lane) return 0;
+  const rect = lane.getBoundingClientRect ? lane.getBoundingClientRect() : null;
+  const w = rect && rect.width ? rect.width : lane.clientWidth;
+  // jsdom and a hidden panel both report 0; fall back to the laid-out width so
+  // the maths is still sane and the checks do not divide by zero.
+  return Math.max(1, Math.round(w || 300));
+}
+
+function tlSpan() {
+  const t = tlModel();
+  if (!t) return 6;
+  // Frozen for the duration of a drag, so the scale under the pointer never
+  // shifts mid-gesture; otherwise the whole timeline always fits the lane.
+  if (state.tl && state.tl.drag && state.tl.drag.spanSec) return state.tl.drag.spanSec;
+  return t.spanFor(tlClips(), 4);
+}
+
+function tlDuration() {
+  const t = tlModel();
+  return t ? t.duration(tlClips()) : 0;
+}
+
+/** Timeline time → the time in the source clip the monitor should show. */
+function stageSourceTime(timelineSec) {
+  const t = tlModel();
+  const clips = tlClips();
+  if (!t || !clips.length) return timelineSec;
+  const m = t.sourceAt(clips, timelineSec);
+  return m ? m.sourceSec : null;      // null = a gap in the timeline
+}
+
+/** The source's own length, so a trim can never run past the footage. */
+function sourceDuration() {
+  const vid = document.getElementById('customVideoElement');
+  const d = vid ? Number(vid.duration) : 0;
+  if (Number.isFinite(d) && d > 0.05) return d;
+  if (state.totalDurSec > 0) return state.totalDurSec;
+  return state.measuredAnalysis ? state.measuredAnalysis.durationSec : 0;
+}
+
+function tlSelected() {
+  const t = tlModel();
+  return t && state.tl.selectedId ? t.find(tlClips(), state.tl.selectedId) : null;
+}
+
+function tlSetClips(clips) {
+  const t = tlModel();
+  state.tl.clips = t ? t.normalise(clips) : clips;
+  // The transport runs on the timeline now, not on the raw clip.
+  const dur = tlDuration();
+  state.totalDurSec = dur > 0 ? dur : (state.scene === 'custom_video' ? sourceDuration() : 0);
+  if (state.playheadSec > state.totalDurSec) state.playheadSec = state.totalDurSec;
+  renderTimelineTracks();
+  renderTimelineSelection();
+  updateTransportEnabled();
+}
+
+function updateTransportEnabled() {
+  const dur = state.totalDurSec || 0;
+  ['playPauseBtn', 'transportPauseBtn', 'transportStopBtn'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !(dur > 0);
+  });
+  const scrub = document.getElementById('timelineScrubber');
+  if (scrub) scrub.disabled = !(dur > 0);
+}
+
+function tlAddClipFromStage() {
+  const t = tlModel();
+  if (!t) return null;
+  const vid = document.getElementById('customVideoElement');
+  if (!vid || state.scene !== 'custom_video' || !videoHasSource(vid)) {
+    showToast('Load a video clip on the stage first', 'warn');
+    return null;
+  }
+  const srcDur = sourceDuration();
+  if (!(srcDur > 0.05)) {
+    showToast('That clip has not finished loading — try again in a moment', 'warn');
+    return null;
+  }
+  const name = (state.plateFile && state.plateFile.name) || 'Clip';
+  const at = tlDuration();
+  const clip = t.makeClip({
+    id: 'tl' + (state.tl.clips.length + 1) + '_' + Math.random().toString(36).slice(2, 6),
+    track: 'V1',
+    name: name.replace(/\.[^.]+$/, ''),
+    startSec: at,
+    srcIn: 0,
+    srcOut: srcDur,
+    srcDur,
+    mediaKey: name
+  });
+  tlSetClips(tlClips().concat([clip]));
+  state.tl.selectedId = clip.id;
+  renderTimelineSelection();
+  showToast(`Added “${clip.name}” to V1 — drag its edges to trim`, 'ok');
+  return clip;
+}
+
+function tlRenderRuler(span, widthPx) {
+  const ruler = document.getElementById('tlRuler');
+  if (!ruler) return;
+  const t = tlModel();
+  const steps = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
+  let step = steps[steps.length - 1];
+  for (let i = 0; i < steps.length; i++) {
+    if ((widthPx / (span / steps[i])) >= 46) { step = steps[i]; break; }
+  }
+  let html = '';
+  for (let s = 0; s <= span + 1e-6; s += step) {
+    const x = t ? t.timeToX(s, span, widthPx) : 0;
+    html += `<span class="tl-tick" style="left:${x.toFixed(1)}px"></span>`;
+    if (x < widthPx - 22) {
+      html += `<span class="tl-tick-label" style="left:${x.toFixed(1)}px">${t ? t.formatTime(s) : s}</span>`;
+    }
+  }
+  ruler.innerHTML = html;
+  ruler.dataset.span = String(span);
+  ruler.dataset.width = String(widthPx);
+}
+
+function tlPlayheadX(span, widthPx) {
+  const t = tlModel();
+  if (!t) return 0;
+  return t.timeToX(state.playheadSec || 0, span, widthPx);
+}
+
+/** Everything that has to move when the playhead moves. */
+function tlSyncPlayhead() {
+  const head = document.getElementById('tlPlayhead');
+  const lane = tlLaneEl();
+  if (!head || !lane) return;
+  const span = tlSpan();
+  const width = tlLaneWidth(lane);
+  const x = tlPlayheadX(span, width);
+  head.style.left = `${TL_PAD + TL_GUTTER + TL_GAP + x}px`;
+  head.dataset.x = String(Math.round(x));
+}
+
+// Keeps the element in step with the timeline while it plays: same clip, same
+// source time, and a real stop at the end instead of a jump back to zero.
+function tlPlaybackTick() {
+  const clips = tlClips();
+  if (!clips.length) return false;
+  const dur = tlDuration();
+  if (state.playheadSec >= dur - 1e-3) {
+    state.playheadSec = dur;
+    state.isPlaying = false;
+    const play = document.getElementById('playPauseBtn');
+    if (play) { play.classList.remove('is-live'); play.title = 'Play'; }
+    const vid = document.getElementById('customVideoElement');
+    if (vid && !vid.paused) { try { vid.pause(); } catch (_e) { /* ignore */ } }
+    return true;
+  }
+  const vid = document.getElementById('customVideoElement');
+  if (!vid || state.scene !== 'custom_video') return false;
+  const mapped = stageSourceTime(state.playheadSec);
+  if (mapped == null) {
+    if (!vid.paused) { try { vid.pause(); } catch (_e) { /* ignore */ } }
+    return true;
+  }
+  if (Math.abs(Number(vid.currentTime) - mapped) > 0.22) {
+    try { vid.currentTime = mapped; } catch (_e) { /* ignore */ }
+  }
+  if (vid.paused) {
+    const p = vid.play();
+    if (p && p.catch) p.catch(() => {});
+  }
+  return true;
+}
+
+function renderTimelineSelection() {
+  const el = document.getElementById('tlSelection');
+  if (!el) return;
+  const c = tlSelected();
+  const t = tlModel();
+  if (!c || !t) {
+    el.innerHTML = '<span class="tl-selection-hint">Click a clip to select it. '
+      + 'Drag its edges to trim, drag the middle to move.</span>';
+    return;
+  }
+  el.innerHTML = `<strong>${escapeAttr(c.name)}</strong> · `
+    + `<span class="tl-sel-num">in ${t.formatTime(c.srcIn)}</span> · `
+    + `<span class="tl-sel-num">out ${t.formatTime(c.srcOut)}</span> · `
+    + `<span class="tl-sel-num">length ${t.formatLen(t.len(c))}</span> · `
+    + `<span class="tl-sel-num">starts ${t.formatTime(c.startSec)}</span>`;
+}
+
 function renderTimelineTracks() {
+  const t = tlModel();
+  const lane = tlLaneEl();
+  const clips = tlClips();
+  const span = tlSpan();
+  const width = tlLaneWidth(lane);
+
+  // ---- the editable track ------------------------------------------------
+  if (lane) {
+    lane.innerHTML = clips.map((c) => {
+      const left = t.timeToX(c.startSec, span, width);
+      const w = Math.max(2, (t.len(c) / span) * width);
+      const sel = c.id === state.tl.selectedId ? ' is-selected' : '';
+      return `<div class="tl-clip v1-item${sel}" data-clipid="${escapeAttr(c.id)}" `
+        + `data-left="${left.toFixed(1)}" data-width="${Math.min(w, width - left).toFixed(1)}" `
+        + `style="left:${left.toFixed(1)}px; width:${Math.min(w, width - left).toFixed(1)}px" `
+        + `title="${escapeAttr(c.name)} — drag the edges to trim, drag the middle to move">`
+        + `<span class="tl-clip-label">${escapeAttr(c.name)}</span></div>`;
+    }).join('');
+    lane.dataset.span = String(span);
+    lane.dataset.width = String(width);
+  }
+
+  // ---- the read-only lanes ----------------------------------------------
   const renderLane = (laneId, items, cls) => {
     const el = document.getElementById(laneId);
     if (!el) return;
-    el.innerHTML = items.map((it, idx) => `
-      <div class="tl-clip ${cls}" style="left:${it.left}%; width:${it.width}%;" data-idx="${idx}" title="${it.label}">
-        ${it.label}
+    el.innerHTML = (items || []).map((it) => `
+      <div class="tl-clip ${cls}" style="left:${it.left}%; width:${it.width}%;" title="${escapeAttr(it.label || '')}">
+        ${escapeAttr(it.label || '')}
       </div>
     `).join('');
   };
@@ -10072,11 +10354,9 @@ function renderTimelineTracks() {
   if (wrap) wrap.classList.toggle('is-live', !!live);
 
   if (live) {
-    // connected: show the timeline that is actually open in Resolve instead of
-    // the demo arrangement, so nothing in the panel is pretending
-    const clips = live.clips || [];
-    const end = clips.reduce((m, c) => Math.max(m, c.endFrame || 0), 0) || 1;
-    renderLane('laneV1', clips.map((c) => ({
+    const liveClips = live.clips || [];
+    const end = liveClips.reduce((m, c) => Math.max(m, c.endFrame || 0), 0) || 1;
+    renderLane('laneV1', liveClips.map((c) => ({
       left: Math.max(0, ((c.startFrame || 0) / end) * 100),
       width: Math.max(1.5, (((c.endFrame || 0) - (c.startFrame || 0)) / end) * 100),
       label: c.name || 'Clip'
@@ -10092,27 +10372,264 @@ function renderTimelineTracks() {
         ? `Apply targets: ${state.bridge.target}`
         : 'Bridge connected';
     }
-    return;
+  } else {
+    const anyEdits = ['v3', 'v2', 'v1', 'sub', 'a1']
+      .some((k) => Array.isArray(state.timelineTracks[k]) && state.timelineTracks[k].length);
+    const emptyNote = document.getElementById('tlEmptyNote');
+    if (emptyNote) emptyNote.classList.toggle('hidden', clips.length > 0 || anyEdits);
+
+    if (titleEl) {
+      titleEl.textContent = clips.length
+        ? `Timeline 1 — ${clips.length} clip${clips.length === 1 ? '' : 's'}`
+        : anyEdits ? 'Timeline 1 — your edits' : 'No edits yet';
+      titleEl.title = clips.length
+        ? 'Drag a clip edge to trim it, drag the middle to move it'
+        : 'Nothing has been added to this timeline';
+    }
+    renderLane('laneV3', state.timelineTracks.v3, 'vfx-item');
+    renderLane('laneSub', state.timelineTracks.sub, 'sub-item');
+    renderLane('laneV2', state.timelineTracks.v2, 'v2-item');
+    renderLane('laneA1', state.timelineTracks.a1, 'a1-item');
   }
 
-  const anyEdits = ['v3', 'v2', 'v1', 'sub', 'a1']
-    .some((lane) => Array.isArray(state.timelineTracks[lane]) && state.timelineTracks[lane].length);
-  const emptyNote = document.getElementById('tlEmptyNote');
-  if (emptyNote) emptyNote.classList.toggle('hidden', anyEdits);
+  const durLabel = document.getElementById('tlDurationLabel');
+  if (durLabel) durLabel.textContent = t ? t.formatTime(tlDuration()) : '';
+  tlRenderRuler(span, width);
+  tlSyncPlayhead();
+}
 
-  if (titleEl) {
-    titleEl.textContent = anyEdits
-      ? 'Timeline 1 — your edits'
-      : 'No edits yet';
-    titleEl.title = anyEdits
-      ? 'Clips appear here as you apply effects'
-      : 'Nothing has been added to this timeline';
+// ---------------------------------------------------------------- dragging
+function tlPointX(e) {
+  if (e && typeof e.clientX === 'number') return e.clientX;
+  if (e && e.touches && e.touches[0]) return e.touches[0].clientX;
+  return 0;
+}
+
+function tlClipOffsetX(e, clipEl) {
+  const rect = clipEl.getBoundingClientRect ? clipEl.getBoundingClientRect() : { left: 0, width: 0 };
+  return tlPointX(e) - rect.left;
+}
+
+const TL_EDGE_PX = 8;          // how near an edge counts as grabbing it
+
+function tlHitMode(e, clipEl, clip) {
+  const rect = clipEl.getBoundingClientRect ? clipEl.getBoundingClientRect() : { width: 0 };
+  // A zero-width rect means the element is not laid out yet (or there is no
+  // layout at all): fall back to the width the renderer just wrote.
+  const styleW = el => {
+    const m = /width:\s*([\d.]+)px/.exec((el && el.getAttribute && el.getAttribute('style')) || '');
+    return m ? Number(m[1]) : 0;
+  };
+  const w = rect.width || clipEl.offsetWidth || styleW(clipEl) || 100;
+  const left = rect.width ? rect.left : Number(clipEl.dataset && clipEl.dataset.left) || 0;
+  const off = tlPointX(e) - left;
+  // a narrow clip is all handles; a wide one reserves the middle for moving
+  if (off <= Math.min(TL_EDGE_PX, w * 0.34)) return 'in';
+  if (off >= w - Math.min(TL_EDGE_PX, w * 0.34)) return 'out';
+  return 'move';
+}
+
+function tlBeginDrag(e, clipId, mode, clipEl) {
+  const t = tlModel();
+  const clip = t.find(tlClips(), clipId);
+  if (!clip) return;
+  state.tl.selectedId = clipId;
+  state.tl.drag = {
+    id: clipId,
+    mode,
+    startX: tlPointX(e),
+    spanSec: tlSpan(),                 // frozen: the scale must not move mid-drag
+    width: tlLaneWidth(clipEl ? clipEl.parentElement : null),
+    origin: { startSec: clip.startSec, srcIn: clip.srcIn, srcOut: clip.srcOut },
+    applied: 0,
+    moved: false
+  };
+  if (clipEl) clipEl.classList.add('is-dragging');
+  document.body.classList.add('tl-dragging');
+}
+
+function tlDragTo(e) {
+  const drag = state.tl && state.tl.drag;
+  if (!drag) return false;
+  const t = tlModel();
+  const dx = tlPointX(e) - drag.startX;
+  const dSec = (dx / Math.max(1, drag.width)) * drag.spanSec;
+  if (Math.abs(dx) > 1) drag.moved = true;
+
+  const clips = tlClips();
+  if (!t.find(clips, drag.id)) return false;
+
+  // Every move is measured from where the clip was when the drag started, not
+  // from where the last move left it: otherwise each pointer event compounds
+  // and a 3-second trim runs away to nothing.
+  const restored = t.normalise(clips.map((c) => (c.id === drag.id
+    ? Object.assign({}, c, drag.origin)
+    : c)));
+  const clip = t.find(restored, drag.id);
+
+  // snap the edge being dragged, not the pointer: an edge landing exactly on
+  // another clip's edge is the whole point of snapping
+  const targets = t.snapTargets(restored, drag.id, [state.playheadSec]);
+  const tol = (6 / Math.max(1, drag.width)) * drag.spanSec;
+
+  let result;
+  if (drag.mode === 'in') {
+    const wantStart = t.snap(Math.max(0, clip.startSec + dSec), targets, tol);
+    result = t.trimIn(restored, drag.id, wantStart - clip.startSec);
+  } else if (drag.mode === 'out') {
+    const wantEnd = t.snap(clip.startSec + t.len(clip) + dSec, targets, tol);
+    result = t.trimOut(restored, drag.id, wantEnd - (clip.startSec + t.len(clip)));
+  } else {
+    const wantStart = t.snap(Math.max(0, clip.startSec + dSec), targets, tol);
+    result = t.move(restored, drag.id, wantStart - clip.startSec);
   }
-  renderLane('laneV3', state.timelineTracks.v3, 'vfx-item');
-  renderLane('laneSub', state.timelineTracks.sub, 'sub-item');
-  renderLane('laneV2', state.timelineTracks.v2, 'v2-item');
-  renderLane('laneV1', state.timelineTracks.v1, 'v1-item');
-  renderLane('laneA1', state.timelineTracks.a1, 'a1-item');
+
+  state.tl.clips = result.clips;
+  drag.applied += result.applied || 0;
+  tlPaintClip(result.clip);
+  renderTimelineSelection();
+  return true;
+}
+
+/** Move just this clip's box. Cheap enough to run on every pointer event. */
+function tlPaintClip(clip) {
+  const t = tlModel();
+  const el = document.querySelector(`#laneV1 .tl-clip[data-clipid="${clip.id}"]`);
+  if (!t || !el) { renderTimelineTracks(); return; }
+  const span = tlSpan();
+  const width = tlLaneWidth(tlLaneEl());
+  const left = t.timeToX(clip.startSec, span, width);
+  const w = Math.max(2, Math.min((t.len(clip) / span) * width, width - left));
+  el.style.left = `${left.toFixed(1)}px`;
+  el.style.width = `${w.toFixed(1)}px`;
+  el.dataset.left = left.toFixed(1);
+  el.dataset.width = w.toFixed(1);
+  const label = document.getElementById('tlDurationLabel');
+  if (label) label.textContent = t.formatTime(tlDuration());
+}
+
+function tlEndDrag() {
+  const drag = state.tl && state.tl.drag;
+  if (!drag) return false;
+  state.tl.drag = null;
+  document.body.classList.remove('tl-dragging');
+  const clip = tlModel().find(tlClips(), drag.id);
+  state.totalDurSec = Math.max(tlDuration(), 0) || state.totalDurSec;
+  renderTimelineTracks();
+  renderTimelineSelection();
+  // show the frame the new cut lands on, so the trim is visible immediately
+  if (clip && drag.moved) {
+    state.playheadSec = Math.min(clip.startSec, Math.max(0, tlDuration() - 0.01));
+    seekTo(state.playheadSec);
+    showToast(`${clip.name} — in ${tlModel().formatTime(clip.srcIn)}, out ${tlModel().formatTime(clip.srcOut)}, `
+      + `length ${tlModel().formatLen(tlModel().len(clip))}`, 'ok');
+  }
+  return true;
+}
+
+function tlSplitAtPlayhead() {
+  const t = tlModel();
+  const clips = tlClips();
+  const sel = tlSelected();
+  const under = t.clipAt(clips, state.playheadSec) || sel;
+  if (!under) {
+    showToast('Put the playhead inside a clip first', 'warn');
+    return null;
+  }
+  const res = t.splitAt(clips, under.id, state.playheadSec);
+  if (!res.made.length) {
+    showToast('The playhead is at the clip edge — move it inside the clip', 'warn');
+    return null;
+  }
+  tlSetClips(res.clips);
+  state.tl.selectedId = res.made[1].id;
+  renderTimelineSelection();
+  showToast('Split into two clips you can trim independently', 'ok');
+  return res.made;
+}
+
+function tlDeleteSelected() {
+  const sel = tlSelected();
+  if (!sel) {
+    showToast('Select a clip first', 'warn');
+    return false;
+  }
+  const t = tlModel();
+  tlSetClips(t.remove(tlClips(), sel.id));
+  state.tl.selectedId = null;
+  renderTimelineSelection();
+  showToast(`Removed “${sel.name}”`);
+  return true;
+}
+
+function tlScrubTo(e) {
+  const t = tlModel();
+  const ruler = document.getElementById('tlRuler');
+  if (!t || !ruler) return;
+  const rect = ruler.getBoundingClientRect ? ruler.getBoundingClientRect() : { left: 0, width: 0 };
+  const width = tlLaneWidth(tlLaneEl());
+  const x = Math.max(0, Math.min(width, tlPointX(e) - rect.left));
+  const span = tlSpan();
+  seekTo(t.xToTime(x, span, width));
+}
+
+function initTimelineEditing() {
+  const lane = tlLaneEl();
+  if (lane) {
+    lane.addEventListener('pointerdown', (e) => {
+      const el = e.target && e.target.closest ? e.target.closest('.tl-clip') : null;
+      if (!el || !el.dataset.clipid) return;
+      if (e.preventDefault) e.preventDefault();
+      state.tl.selectedId = el.dataset.clipid;
+      const mode = tlHitMode(e, el, el.dataset.clipid);
+      tlBeginDrag(e, el.dataset.clipid, mode, el);
+      renderTimelineTracks();
+      renderTimelineSelection();
+    });
+  }
+
+  const ruler = document.getElementById('tlRuler');
+  if (ruler) {
+    ruler.addEventListener('pointerdown', (e) => {
+      if (e.preventDefault) e.preventDefault();
+      state.tl.scrubbing = true;
+      tlScrubTo(e);
+    });
+  }
+
+  document.addEventListener('pointermove', (e) => {
+    if (state.tl.drag) { tlDragTo(e); return; }
+    if (state.tl.scrubbing) tlScrubTo(e);
+  });
+  document.addEventListener('pointerup', () => {
+    if (state.tl.drag) tlEndDrag();
+    state.tl.scrubbing = false;
+  });
+  document.addEventListener('pointercancel', () => {
+    if (state.tl.drag) tlEndDrag();
+    state.tl.scrubbing = false;
+  });
+
+  const addBtn = document.getElementById('tlAddClipBtn');
+  if (addBtn) addBtn.addEventListener('click', () => tlAddClipFromStage());
+  const splitBtn = document.getElementById('tlSplitBtn');
+  if (splitBtn) splitBtn.addEventListener('click', () => tlSplitAtPlayhead());
+  const delBtn = document.getElementById('tlDeleteBtn');
+  if (delBtn) delBtn.addEventListener('click', () => tlDeleteSelected());
+
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && state.tl.selectedId) {
+      e.preventDefault();
+      tlDeleteSelected();
+    } else if ((e.key === 's' || e.key === 'S') && !e.metaKey && !e.ctrlKey && state.tl.selectedId) {
+      e.preventDefault();
+      tlSplitAtPlayhead();
+    }
+  });
+
+  window.addEventListener('resize', () => renderTimelineTracks());
 }
 
 // ============================================================================
@@ -10131,17 +10648,20 @@ function renderLivePreviewLoop(now) {
   }
 
   if (state.isPlaying && state.motion && state.totalDurSec > 0) {
-    state.playheadSec = (state.playheadSec + dt) % state.totalDurSec;
+    if (tlClips().length) {
+      // A timeline ends. It does not loop back to the start mid-sentence.
+      state.playheadSec = Math.min(state.totalDurSec, state.playheadSec + dt);
+    } else {
+      state.playheadSec = (state.playheadSec + dt) % state.totalDurSec;
+    }
     silenceSkipTick();
+    tlPlaybackTick();
     const pct = (state.playheadSec / state.totalDurSec) * 100;
     const scrubber = document.getElementById('timelineScrubber');
     if (scrubber && document.activeElement !== scrubber) {
       scrubber.value = Math.round(pct * 10);
     }
-    const ph = document.getElementById('tlPlayhead');
-    if (ph) {
-      ph.style.left = `calc(104px + ${(pct / 100) * 82}%)`;
-    }
+    tlSyncPlayhead();
   }
 
   if (state.hitFlashBurst > 0) {
@@ -10197,9 +10717,15 @@ function syncVideoTransport() {
     return;
   }
   if (state.scene !== 'custom_video') return;
+  const mapped = stageSourceTime(state.playheadSec);
   const dur = Number(vid.duration);
+  if (mapped == null) {
+    // the playhead is over a gap in the timeline: nothing to show, so hold
+    try { vid.pause(); } catch (_e) { /* ignore */ }
+    return;
+  }
   if (Number.isFinite(dur) && dur > 0.05) {
-    try { vid.currentTime = state.playheadSec % dur; } catch (_e) { /* ignore */ }
+    try { vid.currentTime = mapped % dur; } catch (_e) { /* ignore */ }
   }
   const p = vid.play();
   if (p && p.catch) p.catch(() => {});
@@ -10212,8 +10738,15 @@ function seekTo(seconds) {
   state.playheadSec = clamped;
   const vid = document.getElementById('customVideoElement');
   const dur = vid ? Number(vid.duration) : 0;
+  // With clips on the timeline the playhead is timeline time and the element
+  // needs source time: this is what makes a trim change the picture.
+  const mapped = stageSourceTime(clamped);
   if (vid && state.scene === 'custom_video' && Number.isFinite(dur) && dur > 0.05) {
-    try { vid.currentTime = clamped % dur; } catch (_e) { /* ignore */ }
+    if (mapped == null) {
+      try { vid.pause(); } catch (_e) { /* ignore */ }
+    } else {
+      try { vid.currentTime = mapped % dur; } catch (_e) { /* ignore */ }
+    }
   }
   const scrub = document.getElementById('timelineScrubber');
   if (scrub && state.totalDurSec > 0) {
@@ -13579,6 +14112,25 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     applyLyricsState,
     segmentsFromAnalysis,
     renderSilenceSegments,
+    // editable timeline
+    TIMELINE: () => window.TIMELINE,
+    tlClips,
+    tlSpan,
+    tlDuration,
+    tlAddClipFromStage,
+    tlSetClips,
+    tlBeginDrag,
+    tlDragTo,
+    tlEndDrag,
+    tlHitMode,
+    tlSplitAtPlayhead,
+    tlDeleteSelected,
+    tlScrubTo,
+    stageSourceTime,
+    tlPlaybackTick,
+    seekTo,
+    renderTimelineTracks,
+    renderTimelineSelection,
     // in-app cutter
     silenceKeptPlan,
     remeasureSilenceSegments,

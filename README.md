@@ -555,6 +555,55 @@ for text. Two switches drive the same state — **`Lyrics on monitor: OFF / ON`*
 `LYRC: off` rather than naming a style that is not drawing. Saved preferences from before this
 change are ignored once (they all said "on"), so the new default actually takes effect.
 
+## The timeline — drag an edge, change the cut
+
+The timeline is not a picture of an edit; it is the edit.
+
+**Put a clip on it.** Load a video on the stage, then press **+ Add clip** in the
+timeline header. The whole clip lands on **V1**. *Cut Silences* also fills V1 by itself,
+one clip per kept run, so a silenced clip arrives already editable.
+
+**Drag to shorten or lengthen.** Hover a clip and the left and right edges light up. Grab
+one and drag:
+
+- the **right edge** sets the out point — drag left to shorten, right to lengthen;
+- the **left edge** sets the in point — dragging it right shows *less of the start*, and
+  the clip gets shorter from the left, the way a trim works in an NLE. The clip also
+  slides, so its neighbour on the left is not left with a gap;
+- the **middle** moves the whole clip along the timeline, keeping the same footage.
+
+Nothing can be dragged past the first or last frame of the source, and no clip can be
+dragged shorter than 0.1 s. The readout under the lanes — `take_03 · in 0:02.0 · out
+0:12.0 · length 10.0s · starts 0:00.0` — always shows what the model actually did, and
+it updates while you drag.
+
+While a drag is in progress the scale under your pointer is frozen, so the pixels do not
+shift mid-gesture. Edges snap to the other clips' edges and to the playhead within 6 px.
+
+**The monitor follows.** Timeline time is not source time. `stageSourceTime(t)` maps the
+playhead through the clip it lands in, so a trim really shows a different frame: with a
+clip trimmed to start at source 0:04, parking the playhead at 0:02 puts the element at
+0:06. Over a gap between clips there is nothing to show, so the element holds its last
+frame instead of guessing.
+
+**Also on the header:** `Split` at the playhead (or press **S**), `Delete` (or
+**Delete/Backspace**), and the playhead can be dragged anywhere on the ruler
+(**scrub**) to seek. Playback stops at the end of the last clip instead of looping back to
+the start mid-sentence.
+
+**Honesty rules, same as everywhere else:** nothing is added to the timeline on load, on
+hover, or on upload — only when you press a button. Loading a different file clears an
+edit that pointed at the old footage (and says so), because clips of a file that is no
+longer on the stage would be a lie.
+
+The maths lives in `public/timeline.js` (no DOM, no state): `trimIn`, `trimOut`, `move`,
+`splitAt`, `remove`, `snap`, `timeToX`/`xToTime`, `spanFor`, `sourceAt`. Every operation
+returns `{ clips, clip, applied }` — what it *did*, after clamping — which is what the
+readout and the tests assert on. Guarded by **30 checks** in `tools/dom/timeline.mjs`:
+real `PointerEvent` drags on the real lane element (with the lane and clip rects
+measured the way a browser would), the source-bounds clamps, snapping, split/delete,
+playhead sync, and that the element's `currentTime` follows a trim.
+
 ## Cut Silences happens in the page
 
 `03 • Silences` no longer needs Resolve. Load a clip, press **◉ Detect pauses**, then
@@ -715,6 +764,7 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 | **Speech engine, the browser's own code path** (IIFE bundle + ort-web wasm + relative paths) | `node tools/asr_browser_check.mjs` | 9/9 |
 | **Captions: fonts, size, spacing, placement, all 34 looks** | `node tools/dom/type.mjs` | 35 |
 | **In-app silence cut: plan, preview, and a full render** | `node tools/dom/cut.mjs` | 29 |
+| **Editable timeline: drag to trim, move, split, delete, monitor follows** | `node tools/dom/timeline.mjs` | 30 |
 
 The pixel suite is the one that matters for "does it actually look right": it backs every
 `<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified
