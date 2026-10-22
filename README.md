@@ -499,6 +499,11 @@ practice you already have the words:
 | Talking head, no script | press `◉ Detect from clip` and get one empty block per spoken phrase, already timed. Click a block, type over it. The timing stays. |
 | You already have a transcript (phone captions, CapCut, a client .srt) | `Load .srt / .txt` → `◉ Detect from clip` to retime it to this clip |
 
+Pressing Detect with words already in the box **turns the captions on** and parks the playhead on
+the first one, so you can see the result immediately instead of wondering whether anything
+happened. Typing into an empty block does the same. Captions still start **off** on a fresh page —
+a deliberate Detect (or typing) is what switches them on.
+
 Typing over a block **keeps its measured start and end** — you are correcting a word, not
 re-timing a caption. Every block also stores per-word timings, so the kinetic typography lands
 each word on its own beat instead of dividing the line evenly.
@@ -512,6 +517,7 @@ each word on its own beat instead of dividing the line evenly.
 | `.SRT` export of zero-length blocks | export refuses until something is actually timed |
 | silence list hardcoded (`36.0s`, `31%`, five invented pauses) | the same measurement, per clip — dashes until measured |
 | a generated sine drawn as the "waveform" | the clip's real level envelope, with cut zones over it |
+| detection found phrases but left captions off, so nothing appeared anywhere | Detect switches them on, seeks to the first block and fills the timeline lane |
 
 The same engine now drives **`Cut Silences ▸ ◉ Detect pauses`**: talking runs and dead air are
 measured from the audio, the waveform is the real envelope, and the stats (`original`, `tight

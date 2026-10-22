@@ -5549,3 +5549,10 @@ body:has(.workspace.compact-dock) { grid-template-columns: 460px minmax(0, 1fr);
   font: 500 9px/1 var(--font-mono);
   color: #6b7579;
 }
+
+/* A detected block with no words yet is an invitation, not an empty row. */
+#tab-captions .cue-item.is-empty .cue-input::placeholder { color: #8ab4d0; font-weight: 600; }
+#tab-captions .cue-item.is-empty:focus-within {
+  border-color: rgba(76, 159, 216, 0.75);
+  background: #131b21;
+}

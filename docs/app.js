@@ -3609,6 +3609,9 @@ function renderCueList() {
       if (!cue) return;
       cue.text = input.value;
       cue.placeholder = false;
+      // There is now a caption to show: put it on the monitor instead of leaving
+      // the user typing into a panel that draws nothing.
+      if (String(cue.text).trim() && !state.showLyricsOverlay) setLyricsOverlay(true);
       // keep the word timings in step with what was typed
       if (window.AudioLab && cue.timed !== false) {
         cue.words = window.AudioLab.wordTimes(cue.text, cue.startSec, cue.endSec, 0.25);
@@ -3796,11 +3799,45 @@ function lyricAnalyzeAudio(audio) {
 
   const hadLines = lyricLines().length > 0;
   syncLyricsToBeatCues();
+  // now that the blocks exist, say plainly whether they have words in them
+  if (analysis.mode !== 'silent' && state.cues.length
+      && !state.cues.some((c) => String(c.text || '').trim())) {
+    lyricSetChips(chips.concat([{ text: 'needs the words — type in the blocks', tone: 'warn' }]));
+  }
+
+  const spoken = state.cues.filter((c) => c.timed !== false && String(c.text || '').trim());
+  let note;
+  if (analysis.mode === 'silent') {
+    note = '';
+  } else if (spoken.length) {
+    // Asking for subtitles and then being shown nothing is the bug this fixes:
+    // a measuring pass that produces captions turns them on.
+    if (!state.showLyricsOverlay) {
+      setLyricsOverlay(true);
+      note = ' Subtitles are ON — the monitor shows them now.';
+    }
+    if (!state.isPlaying && typeof seekTo === 'function') {
+      seekTo(Math.max(0, spoken[0].startSec + 0.05));
+    }
+    note = note || '';
+  } else {
+    note = ' No words yet: each block is a place you spoke — type into it (or paste your script and press Re-sync). The monitor stays clean until there is text to draw.';
+    // A block you cannot type into is a dead end: focus the first one so the
+    // next keystroke is the transcript.
+    const first = document.querySelector('#captionCuesList .cue-input');
+    if (first) {
+      first.focus();
+      if (first.select) first.select();
+    }
+    const box = document.getElementById('lyricsRawInput');
+    if (box && !box.value) box.setAttribute('placeholder', 'Type here instead if you prefer one line at a time — or paste your script and press Re-sync to grid.');
+  }
+
   lyricSetStatus(
-    hadLines
-      ? `${lyricDescribe(analysis)}. Your lines are placed on those positions — check the blocks and fix the text if a line landed early.`
-      : `${lyricDescribe(analysis)}. Each block is a place where something was said — click one and type it.`,
-    analysis.mode === 'silent' ? 'warn' : 'good',
+    !note
+      ? lyricDescribe(analysis)
+      : `${lyricDescribe(analysis)}.${hadLines ? '' : ''}${note}`,
+    analysis.mode === 'silent' ? 'warn' : (spoken.length ? 'good' : 'warn'),
     1
   );
   return analysis;
@@ -9133,9 +9170,12 @@ function refreshLyricsPill() {
 
 function setLyricsOverlay(on, persist) {
   state.showLyricsOverlay = !!on;
-  if (!state.showLyricsOverlay) state.timelineTracks.sub = [];
   applyLyricsState(persist !== false);
-  renderTimelineTracks();
+  // The subtitle lane on the timeline strip follows the same switch, so it is
+  // rebuilt here rather than only cleared: turning captions on has to show them
+  // everywhere they are drawn.
+  if (typeof lyricPushTimeline === 'function') lyricPushTimeline();
+  else renderTimelineTracks();
 }
 
 // When the 9:16 slot first appears, choose a crop instead of blindly centring.
@@ -12082,6 +12122,9 @@ if (typeof window !== 'undefined' && window.__PULSE_TEST__) {
     setLyricDetectMode,
     loadTranscriptFile,
     renderCueList,
+    drawLyrcStudioTypography,
+    setLyricsOverlay,
+    applyLyricsState,
     segmentsFromAnalysis,
     renderSilenceSegments,
     drawSilenceWaveform,

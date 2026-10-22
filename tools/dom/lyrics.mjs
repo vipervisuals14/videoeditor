@@ -18,6 +18,8 @@ const { window, document } = boot({ beforeScripts: (w) => { w.__PULSE_TEST__ = t
 const P = window.PulseTest;
 const Lab = window.AudioLab;
 const $ = (sel) => document.querySelector(sel);
+// As loaded, before anything is clicked: captions must not be on.
+const OPENED_WITH_OVERLAY_OFF = P.state.showLyricsOverlay === false;
 
 const SR = 16000;
 
@@ -303,8 +305,11 @@ check('clicking a block time moves the playhead there', () => {
   return [Math.abs(P.state.playheadSec - cue.startSec) < 0.2, `playhead=${P.state.playheadSec.toFixed(2)} cue=${cue.startSec}`];
 });
 
-check('the lyrics overlay stays off until it is switched on', () => {
-  return [P.state.showLyricsOverlay === false, `overlay=${P.state.showLyricsOverlay}`];
+// The page must load clean; a deliberate Detect is what switches captions on.
+// (An earlier version left them off after detection too, so the words existed
+// but were never drawn anywhere -- the bug this suite now guards.)
+check('the page loads with captions off', () => {
+  return [OPENED_WITH_OVERLAY_OFF, `opened with overlay=${OPENED_WITH_OVERLAY_OFF ? 'off' : 'ON'}`];
 });
 
 check('a music-video clip puts its tempo into the shared beat clock', () => {
@@ -359,6 +364,98 @@ check('the describe line names the mode and the evidence', () => {
   const speech = P.lyricDescribe(Lab.analyze(talkingClip(TALK_SPANS, 14), SR, { mode: 'auto' }));
   const ok = /^Music/.test(text) && /BPM/.test(text) && /^Talking/.test(speech) && /speech/.test(speech);
   return [ok, `${text} || ${speech}`];
+});
+
+// ---------------------------------------------------------------------------
+// 4. the subtitles actually reach the picture
+//    Reported bug: detection ran, phrases were found, and nothing showed on the
+//    monitor, because the overlay switch was still off.
+// ---------------------------------------------------------------------------
+function fakeCtx(sink) {
+  return new Proxy({
+    canvas: { width: 1280, height: 720 },
+    measureText: () => ({ width: 40 }),
+    createLinearGradient: () => ({ addColorStop() {} }),
+    createRadialGradient: () => ({ addColorStop() {} }),
+    getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+    createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+    fillText: (t) => sink.push(t),
+    strokeText: (t) => sink.push(t)
+  }, { get(t, k) { return k in t ? t[k] : () => undefined; } });
+}
+
+check('detecting a talking head turns the subtitles on', () => {
+  P.setLyricsOverlay(false);
+  document.querySelector('.rail-sub[data-group="captions"]').click();
+  const box = $('#lyricsRawInput');
+  box.value = 'hello everyone\ntoday I want to show you three things\nfirst\nsecond';
+  box.dispatchEvent(new window.Event('input', { bubbles: true }));
+  P.lyricAnalyzeAudio({ samples: talkingClip(TALK_SPANS, 14), sampleRate: SR, durationSec: 14, source: 'test' });
+  const label = document.getElementById('lyricsTabToggleBtn').textContent;
+  return [P.state.showLyricsOverlay === true && /ON/.test(label), `overlay=${P.state.showLyricsOverlay} label="${label}"`];
+});
+
+check('the words are actually drawn on the monitor', () => {
+  const cue = P.state.cues[0];
+  P.state.playheadSec = cue.startSec + 0.15;
+  const painted = [];
+  P.drawLyrcStudioTypography(fakeCtx(painted), 1280, 720, P.state.playheadSec, 0.2);
+  return [painted.length > 0 && painted.join(' ').length > 0, `painted: ${painted.slice(0, 4).join(' ')}`];
+});
+
+check('the subtitle lane on the timeline fills up too', () => {
+  const subs = P.state.timelineTracks.sub.length;
+  return [subs === P.state.cues.filter((c) => c.timed !== false).length && subs > 0, `${subs} lane blocks`];
+});
+
+check('turning captions off clears the lane and the picture', () => {
+  P.setLyricsOverlay(false);
+  const painted = [];
+  const cue = P.state.cues[0];
+  P.drawLyrcStudioTypography(fakeCtx(painted), 1280, 720, cue.startSec + 0.15, 0.2);
+  const lane = P.state.timelineTracks.sub.length;
+  // the monitor gates on the flag, so nothing is asked to draw at all
+  const gated = P.state.showLyricsOverlay === false && lane === 0;
+  P.setLyricsOverlay(true);
+  return [gated, `lane=${lane} overlay=${P.state.showLyricsOverlay}`];
+});
+
+check('a talking head with no words says so instead of going silent', () => {
+  P.setLyricsOverlay(false);
+  const box = $('#lyricsRawInput');
+  box.value = '';
+  box.dispatchEvent(new window.Event('input', { bubbles: true }));
+  const a = P.lyricAnalyzeAudio({ samples: talkingClip(TALK_SPANS, 14), sampleRate: SR, durationSec: 14, source: 'test' });
+  const status = document.getElementById('lyrcDetectStatus');
+  const chips = [...document.querySelectorAll('#lyrcDetectChips .lyrc-chip')].map((c) => c.textContent);
+  const blocks = document.querySelectorAll('#captionCuesList .cue-input').length;
+  return [a.mode === 'speech' && blocks > 0 && P.state.showLyricsOverlay === false,
+    `${blocks} blocks, overlay=${P.state.showLyricsOverlay}, status="${status.textContent.slice(0, 70)}", chips=${chips.join('/')}`];
+});
+
+check('the first empty block is focused so typing is the next keystroke', () => {
+  const active = document.activeElement;
+  return [!!active && active.classList.contains('cue-input'), active ? active.className : 'none'];
+});
+
+check('typing into a block turns the subtitles on by itself', () => {
+  const input = document.querySelector('#captionCuesList .cue-input');
+  input.value = 'the words I actually said';
+  input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  const painted = [];
+  const cue = P.state.cues[0];
+  P.state.playheadSec = cue.startSec + 0.2;
+  P.drawLyrcStudioTypography(fakeCtx(painted), 1280, 720, P.state.playheadSec, 0.2);
+  return [P.state.showLyricsOverlay === true && painted.join(' ').includes('the'), `overlay=${P.state.showLyricsOverlay} painted=${painted.join(' ').slice(0, 30)}`];
+});
+
+check('a music video turns its subtitles on as well', () => {
+  P.setLyricsOverlay(false);
+  const box = $('#lyricsRawInput');
+  box.value = 'blame it all on you\nwhen the midnight city fades';
+  box.dispatchEvent(new window.Event('input', { bubbles: true }));
+  P.lyricAnalyzeAudio({ samples: musicClip(120, 12), sampleRate: SR, durationSec: 12, source: 'test' });
+  return [P.state.showLyricsOverlay === true && P.state.cues.length === 2, `overlay=${P.state.showLyricsOverlay} cues=${P.state.cues.length}`];
 });
 
 check.summary('lyrics auto-detect');
