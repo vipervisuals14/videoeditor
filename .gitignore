@@ -8,3 +8,4 @@ preview-shots/
 # generated static web bundle (CI builds it)
 dist-web/
 node_modules/
+style-sheet.png
