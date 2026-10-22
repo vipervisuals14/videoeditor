@@ -18,7 +18,19 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'dist-web');
 
-const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'depth.js', 'depth-live-worker.js', 'render.js', 'lua-export.js'];
+const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'depth.js', 'depth-live-worker.js', 'depth-ai-worker.js', 'render.js', 'lua-export.js'];
+
+// The AI depth model + ONNX Runtime, copied verbatim. They are large (40 MB) and
+// deliberately not part of PUBLIC_FILES: only the depth tab ever asks for them,
+// and only when someone picks the AI engine.
+const VENDOR_DIR = 'vendor/depth';
+const VENDOR_FILES = [
+  'ort.wasm.min.mjs',
+  'ort-wasm-simd-threaded.mjs',
+  'ort-wasm-simd-threaded.wasm',
+  'depth-anything-v2-small-int8.onnx',
+  'NOTICE.md'
+];
 
 // index.html is shared with the local server build (absolute /paths). The web
 // build only rewrites those, so both variants stay in sync from one source.
@@ -39,6 +51,12 @@ async function main() {
   for (const file of PUBLIC_FILES) {
     if (file === 'index.html') continue;
     await cp(path.join(ROOT, 'public', file), path.join(OUT, file));
+  }
+
+  // vendored AI runtime + model
+  await mkdir(path.join(OUT, VENDOR_DIR), { recursive: true });
+  for (const file of VENDOR_FILES) {
+    await cp(path.join(ROOT, 'public', VENDOR_DIR, file), path.join(OUT, VENDOR_DIR, file));
   }
 
   const html = await readFile(path.join(ROOT, 'public', 'index.html'), 'utf8');
@@ -78,11 +96,16 @@ async function main() {
 
   const files = await readdir(OUT);
   let total = 0;
-  for (const file of files) {
-    const info = await stat(path.join(OUT, file));
-    total += info.size;
-    console.log('  ' + (info.size / 1024).toFixed(1).padStart(7) + ' KB  ' + file);
-  }
+  const report = async (dir, prefix) => {
+    for (const file of await readdir(dir)) {
+      const full = path.join(dir, file);
+      const info = await stat(full);
+      if (info.isDirectory()) { await report(full, prefix + file + '/'); continue; }
+      total += info.size;
+      console.log('  ' + (info.size / 1024).toFixed(1).padStart(7) + ' KB  ' + prefix + file);
+    }
+  };
+  await report(OUT, '');
   console.log('\ndist-web/ ready — ' + files.length + ' files, ' + (total / 1024 / 1024).toFixed(1) + ' MB');
   console.log('Serve it with any static host, e.g.  npx serve dist-web');
 }

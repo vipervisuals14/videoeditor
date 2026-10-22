@@ -297,57 +297,60 @@ layer 2 → Merge → … → MediaOut`, with every layer's opacity and blend op
 set, and a BezierSpline per animated layer. Distance/see-through rendering uses
 the browser's own compositing, so what you see is what the graph builds.
 
-## Depth map — real detail, and it follows the clip
+## Depth map — a real model, not a guess
 
-`06 • Depth Map` drives 11 effects from a depth map. Two things decide whether those effects
-look like a lens or like a smudge, and both were wrong before:
+`06 • Depth Map` drives 11 effects from a depth map, so the map decides whether the result looks
+like a lens or like a smudge. There are now two engines, and the tab says which one produced the
+map you are looking at.
+
+| | **🧠 AI depth** (default) | **⚡ Fast estimate** |
+|---|---|---|
+| How | **Depth Anything V2 Small**, int8 ONNX, executed in the browser | image heuristics (position, colour, texture) |
+| Look | crisp silhouettes, smooth interiors, correct ground plane | approximate; brightness bleeds into depth |
+| Cost | one-time **40 MB** download, then cached; ~5 s per frame on one WASM thread | instant, no download |
+| Honest use | anything that will be exported or graded | a rough read, and the fallback |
+
+![Fast estimate versus Depth Anything V2](docs/depth-ai-vs-fast.png)
+
+*Left: the source. Top right: the old heuristic, which reads the bright window and the blind
+slats as "near" and the subject's face as "far". Bottom: the AI model, which returns the subject's
+volume, her face relief, the wall behind her and the window recessed to the right.*
+
+### What runs where
+
+- `public/depth-ai-worker.js` — a **module worker** that imports the vendored ONNX Runtime, feeds
+  the model, and posts back a `Float32Array`. Runs off the main thread, so the 60 fps monitor and
+  the lyric animation keep going.
+- `public/vendor/depth/` — the int8 model (26 MB), ONNX Runtime Web (52 KB of JS), its WASM backend
+  (14 MB) and `NOTICE.md` with provenance and licences (Apache-2.0 model, MIT runtime).
+- The model is **not** downloaded at page load. It is fetched when you open the depth tab, switch a
+  depth effect on, or click the AI card — and only once, because the browser caches it.
+
+### Measured, not claimed
+
+`node tools/test_depth_ai.mjs` loads the vendored model through the vendored runtime and checks it
+on a procedurally rendered perspective scene:
+
+| Check | Result |
+|---|---|
+| Output shape | `[1, 364, 518]` — read as H,W, not a channel dim |
+| All values finite | yes (a 3-D/4-D mix-up is exactly how this used to fail) |
+| Ordering | block **8.61** > near floor **5.30** > sky **0.00** |
+| Panel convention (0 = near) | block **0.016**, sky **1.000** |
+| Session load / inference | 0.6 s / 5.4 s on one WASM thread |
+
+Against the fp32 Python reference on a real photograph, the browser path correlates **0.9991**
+(mean absolute error 0.0104); the whole residual is image resampling, PIL bicubic versus canvas.
+
+### Where the map detail comes from
 
 | | Before | Now |
 |---|---|---|
-| Map resolution | 160×90 (shared with the Magic Mask buffer) | **480×270**, and a loaded map keeps its own detail up to 960 px |
+| Map resolution | 160×90 (shared with the Magic Mask buffer) | 480×270 (AI) or loaded maps up to 960 px |
 | Effect pass | 480×270, blown up to the monitor | the monitor's own resolution |
-| Freshness | built once when the tab opened | **`Live depth: ON`** re-estimates from the current frame |
-| Cost | 69 ms of main-thread work per estimate | the estimate runs in **`depth-live-worker.js`**, off-thread |
+| Freshness | built once when the tab opened | **`Live depth: ON`** re-reads the current frame |
 
-The worker is a plain `importScripts('depth.js')` module: the panel posts a frame's RGBA buffer
-(transferred, not copied), the worker posts back a `Float32Array` depth map. If workers are
-unavailable (some `file://` setups, strict CSP), the panel falls back to a 320×180 estimate on
-the main thread every 260 ms — lower detail, still live.
-
-`Preview:` chooses what the monitor shows: **picture only** (default, so you see the graded
-result), **depth overlay**, the raw **depth map**, or **split compare**. Effects still run with
-the preview off.
-
-## Bring your own images
-
-The monitor accepts a **still image** as the plate, not just video. Three ways in:
-
-| Where | What to do |
-|---|---|
-| Top bar | **`🖼 Load Image`** next to `📂 Load Video` |
-| The monitor itself | **drag a file onto the preview** — image or video, it works out which |
-| `07 • 4K Render` | drop the image on the import box; it becomes the plate *and* the export source |
-
-Accepted: PNG, JPEG, WebP, AVIF, TIFF, BMP. The chip in the top bar then shows the file name,
-and the panel reports the image's **real pixel size** (a 3840×2160 still is reported as 4K).
-
-Once an image is loaded it behaves like footage everywhere: the optical shader grades it, the
-depth map is estimated **from that image**, Magic Mask samples it, Effect Layers stack on it,
-and the 4K exporter renders stills and PNG sequences from it at any size. Nothing is uploaded —
-the file is read locally with `createObjectURL`.
-
-**It is never stretched.** Images and video are scaled to *cover* the frame and centre-cropped,
-the same way `object-fit: cover` works, so aspect ratio is preserved and the 16:9 default lands
-a 16:9 still 1:1.
-
-**9:16 framing.** Turning `9:16: ON` puts the plate into a vertical slot with the side bars left
-dark instead of cutting a portrait photo to a thin slice. Because a 16:9 still loses about 70% of
-its width in that slot, switching to 9:16 with a wide plate **auto-picks a subject-friendly crop**
-(left third) rather than blindly centring — and **`Framing: Centre / Left / Right`** in the viewer
-bar moves the crop where you want it. Your manual choice is remembered; a portrait image is never
-re-framed because it already fits.
-
-## Lyrics are opt-in
+## Lyrics are opt-in## Lyrics are opt-in
 
 The monitor used to start with LYRC typography already burned onto the picture, and a saved
 preference kept it that way. Now the overlay starts **off**: footage plays clean until you ask

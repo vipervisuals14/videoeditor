@@ -1226,6 +1226,7 @@ function saveUiPrefs() {
       v: 2,
       motion: state.motion,
       lyrics: state.showLyricsOverlay,
+      depthEngine: (state.depth && state.depth.engine) || state.depthEnginePref || 'ai',
       hidden: state.hiddenModules || {}
     }));
   } catch (_e) { /* private mode, ignore */ }
@@ -1241,6 +1242,7 @@ function loadUiPrefs() {
     // "on" because the app used to default to on, so they are ignored once.
     if (prefs.v >= 2 && typeof prefs.lyrics === 'boolean') state.showLyricsOverlay = prefs.lyrics;
     if (prefs.hidden && typeof prefs.hidden === 'object') state.hiddenModules = prefs.hidden;
+    if (prefs.depthEngine === 'ai' || prefs.depthEngine === 'fast') state.depthEnginePref = prefs.depthEngine;
   } catch (_e) { /* ignore corrupt prefs */ }
 }
 
@@ -1371,7 +1373,13 @@ function initTabs() {
       document.getElementById(`tab-${tab}`).classList.add('active');
       if (tab === 'silences') drawSilenceWaveform();
       if (tab === 'mask') maskSyncUI();
-      if (tab === 'depth') depthSyncUI();
+      if (tab === 'depth') {
+        depthSyncUI();
+        depthRenderAiStamp();
+        // opening the tab is the moment to bring the model up
+        const dd = ensureDepthState();
+        if (dd.engine === 'ai' && dd.source === 'estimate' && !dd.aiBusy) depthAiRun();
+      }
       if (tab === 'render') { rbSyncSourceUI(); rbSyncMemory(); }
     });
   });
@@ -3782,6 +3790,12 @@ const DEPTH_LIVE_INTERVAL_MS = 160;
 function defaultDepthState() {
   return {
     source: 'estimate',      // estimate | mask | upload
+    engine: state.depthEnginePref || 'ai',   // ai (Depth Anything V2) | fast (heuristic)
+    aiStatus: '',            // human-readable state of the model
+    aiBusy: false,
+    aiProgress: -1,          // 0..1 while downloading, -1 when unknown
+    aiReady: false,
+    aiFailed: false,
     view: 'off',             // off | overlay | map | split
     live: true,              // re-estimate from the current frame while it plays
     invert: false,
@@ -3831,6 +3845,30 @@ function depthSamplePlate(timeSec) {
 function depthRescan(opts) {
   const d = ensureDepthState();
   const o = opts || {};
+  // AI engine: hand the frame to Depth Anything V2 and let it answer. The
+  // heuristic below stays as the instant preview and the fallback.
+  //
+  // The model is a one-time 40 MB download, so it only runs when it is actually
+  // wanted: the depth tab is open, a depth effect is switched on, or the user
+  // just picked the AI engine. Loading a photo must not silently pull 40 MB.
+  if (d.engine === 'ai' && d.source === 'estimate' && !o.forceFast && !o.silent) {
+    const wanted = state.activeTab === 'depth' || depthEffectsOn().count > 0;
+    if (wanted || o.ai) {
+      d.status = 'AI depth: running Depth Anything V2 on this frame…';
+      depthSyncUI();
+      depthAiRun();
+      return;
+    }
+    if (!d.map) {
+      // paint the instant preview so nothing looks broken, and say why
+      d.previewOnly = true;
+      depthRescan({ forceFast: true, timeSec: o.timeSec });
+      d.status = 'Instant preview. Open 06 • Depth Map to run the AI model on this frame.';
+      depthSyncUI();
+      return;
+    }
+    return;
+  }
   if (!window.DEPTH_ENGINE) {
     d.status = 'Depth engine did not load — check that depth.js is present.';
     depthSyncUI();
@@ -4021,6 +4059,16 @@ function depthLiveWanted() {
 function depthLiveTick(nowMs) {
   if (!state.motion || !state.isPlaying || document.hidden) return;
   if (!depthLiveWanted()) return;
+  const dd = ensureDepthState();
+  if (dd.engine === 'ai') {
+    // a full model pass takes seconds, not milliseconds: refresh only when the
+    // worker is free and the last one is old enough to be worth replacing
+    if (dd.aiBusy) return;
+    if (nowMs - depthAiLastRun < DEPTH_AI_MIN_INTERVAL_MS) return;
+    depthAiLastRun = nowMs;
+    depthAiRun();
+    return;
+  }
   const interval = depthWorkerDead ? DEPTH_FALLBACK_INTERVAL_MS : DEPTH_LIVE_INTERVAL_MS;
   if (nowMs - depthLiveLast < interval) return;
   depthLiveLast = nowMs;
@@ -4071,6 +4119,171 @@ function depthLiveUiTick(nowMs) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// AI depth: Depth Anything V2 Small, int8 ONNX, executed in a module worker
+// against the vendored ONNX Runtime in vendor/depth/. This is a real monocular
+// depth model — the same family Instant Depth Map uses — not a brightness
+// heuristic. It is opt-in because the model is a 40 MB one-time download.
+// ---------------------------------------------------------------------------
+let depthAiWorker = null;
+let depthAiJobId = 0;
+let depthAiPendingFrame = null;
+let depthAiLastRun = 0;
+const DEPTH_AI_MIN_INTERVAL_MS = 2500;
+
+function depthAiSetStatus(text, busy) {
+  const d = ensureDepthState();
+  d.aiStatus = text;
+  d.aiBusy = !!busy;
+  const el = document.getElementById('depthEngineStatus');
+  if (el) el.textContent = text;
+  const wrap = document.getElementById('depthEngineProgressWrap');
+  const fill = document.getElementById('depthEngineProgressFill');
+  if (wrap) {
+    wrap.classList.toggle('hidden', !busy);
+    if (busy) wrap.classList.remove('hidden');
+  }
+  if (fill) {
+    if (busy && (d.aiProgress < 0 || d.aiProgress >= 1)) {
+      fill.classList.add('is-busy');
+      fill.style.width = '';
+    } else if (busy) {
+      fill.classList.remove('is-busy');
+      fill.style.width = Math.max(2, Math.round(d.aiProgress * 100)) + '%';
+    } else {
+      fill.classList.remove('is-busy');
+      fill.style.width = '0%';
+    }
+  }
+}
+
+function depthAiWorkerRef() {
+  if (depthAiWorker) return depthAiWorker;
+  if (typeof Worker !== 'function') return null;
+  try {
+    depthAiWorker = new Worker('depth-ai-worker.js', { type: 'module' });
+  } catch (_e) {
+    depthAiWorker = null;
+    return null;
+  }
+  depthAiWorker.onmessage = (e) => depthAiOnMessage(e.data || {});
+  depthAiWorker.onerror = () => {
+    depthAiFail('The AI model could not start in this browser.');
+  };
+  return depthAiWorker;
+}
+
+function depthAiFail(message) {
+  const d = ensureDepthState();
+  d.aiFailed = true;
+  d.aiBusy = false;
+  d.engine = 'fast';
+  depthAiSetStatus(`${message} Falling back to Fast estimate.`, false);
+  depthSyncUI();
+  depthRenderEngineButtons();
+  showToast(message, 'error');
+  depthRescan();
+}
+
+function depthAiOnMessage(msg) {
+  const d = ensureDepthState();
+  if (msg.type === 'progress') {
+    if (msg.phase === 'download') {
+      d.aiProgress = msg.total ? msg.loaded / msg.total : -1;
+      const mb = (msg.loaded / 1048576).toFixed(1);
+      const totalMb = msg.total ? (msg.total / 1048576).toFixed(0) : '40';
+      depthAiSetStatus(`Downloading the depth model — ${mb} / ${totalMb} MB (one time, then cached).`, true);
+    } else if (msg.phase === 'runtime') {
+      d.aiProgress = -1;
+      depthAiSetStatus('Starting the AI runtime…', true);
+    } else if (msg.phase === 'compile') {
+      d.aiProgress = -1;
+      depthAiSetStatus('Preparing the model (this takes a few seconds once)…', true);
+    }
+    return;
+  }
+  if (msg.type === 'init') {
+    d.aiReady = true;
+    depthAiSetStatus('AI depth ready.', false);
+    return;
+  }
+  if (msg.type === 'infer') {
+    d.aiBusy = false;
+    d.aiReady = true;
+    d.aiProgress = -1;
+    if (msg.map && msg.width && msg.height) {
+      d.map = msg.map instanceof Float32Array ? msg.map : new Float32Array(msg.map);
+      d.mapW = msg.width;
+      d.mapH = msg.height;
+      d.dirty = false;
+      d.status = `AI depth from Depth Anything V2 (${((msg.ms || 0) / 1000).toFixed(1)}s). Every effect below is now driven by real geometry.`;
+    }
+    depthAiSetStatus('AI depth ready.', false);
+    depthSyncUI();
+    depthRenderAiStamp();
+    if (depthAiPendingFrame) {
+      const next = depthAiPendingFrame;
+      depthAiPendingFrame = null;
+      depthAiRun(next.label);
+    }
+    return;
+  }
+  if (msg.type === 'error') {
+    depthAiFail(`AI depth failed: ${msg.message || 'unknown error'}.`);
+  }
+}
+
+// Sample the frame that is on screen and hand it to the model.
+function depthAiRun(label) {
+  const d = ensureDepthState();
+  const worker = depthAiWorkerRef();
+  if (!worker) { depthAiFail('This browser has no worker support.'); return; }
+  const frame = depthLiveSample(state.playheadSec);
+  if (!frame) {
+    depthAiSetStatus('Nothing to read on the monitor yet — press Play once, then retry.', false);
+    return;
+  }
+  if (d.aiBusy) {
+    depthAiPendingFrame = { label };
+    return;
+  }
+  d.aiBusy = true;
+  d.aiProgress = d.aiReady ? -1 : d.aiProgress;
+  depthAiJobId += 1;
+  depthAiSetStatus(d.aiReady ? 'Running the depth model…' : 'Loading Depth Anything V2 — one-time 40 MB download…', true);
+  try {
+    const copy = new Uint8ClampedArray(frame.data);
+    worker.postMessage({
+      type: 'infer',
+      id: depthAiJobId,
+      data: copy.buffer,
+      width: frame.width,
+      height: frame.height,
+      mapW: DEPTH_W,
+      mapH: DEPTH_H
+    }, [copy.buffer]);
+  } catch (_e) {
+    depthAiFail('Could not hand the frame to the model.');
+  }
+}
+
+function depthRenderAiStamp() {
+  const el = document.getElementById('depthAiStamp');
+  if (!el) return;
+  const d = state.depth;
+  const on = d && d.engine === 'ai' && d.map && !d.dirty;
+  el.classList.toggle('hidden', !on);
+  if (on) el.textContent = `AI · Depth Anything V2 · ${d.mapW}×${d.mapH}`;
+}
+
+function depthRescanAi() {
+  const d = ensureDepthState();
+  if (d.source !== 'estimate') return false;
+  if (d.engine !== 'ai') return false;
+  depthAiRun();
+  return true;
+}
+
 function depthEffectsOn() {
   const d = ensureDepthState();
   const out = {};
@@ -4102,6 +4315,7 @@ function depthSyncUI() {
   setText('depthFocusVal', d.focus + '%');
   setText('depthApertureVal', d.aperture + '%');
   setText('depthSourceLabel', d.source === 'mask' ? 'Magic Mask' : d.source === 'upload' ? 'Loaded map' : 'Plate');
+  setText('depthEngineLabel', d.source !== 'estimate' ? '—' : d.engine === 'ai' ? 'Depth Anything V2' : 'Fast estimate');
   setText('depthActiveCount', String(depthEffectsOn().count));
   setText('depthKeyCount', String(depthTotalKeys()));
   const st = document.getElementById('depthStatus');
@@ -4121,6 +4335,11 @@ function depthSyncUI() {
   }
   const viewSel = document.getElementById('depthViewSelect');
   if (viewSel && viewSel.value !== d.view) viewSel.value = d.view;
+
+  // keep the engine card + status line in step with the state
+  document.querySelectorAll('#depthEngineGroup .depth-engine').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-depth-engine') === d.engine);
+  });
 
   document.querySelectorAll('#depthSourceGroup .depth-source').forEach((btn) => {
     btn.classList.toggle('active', btn.getAttribute('data-depth-source') === d.source);
@@ -4447,6 +4666,46 @@ function depthLoadFile(file) {
   img.src = url;
 }
 
+function depthRenderEngineButtons() {
+  const d = ensureDepthState();
+  document.querySelectorAll('#depthEngineGroup .depth-engine').forEach((btn) => {
+    btn.classList.toggle('active', btn.getAttribute('data-depth-engine') === d.engine);
+    btn.setAttribute('aria-pressed', btn.getAttribute('data-depth-engine') === d.engine ? 'true' : 'false');
+  });
+  const aiBtn = document.querySelector('#depthEngineGroup [data-depth-engine="ai"]');
+  if (aiBtn) {
+    const sub = aiBtn.querySelector('.depth-engine-sub');
+    if (sub) sub.textContent = d.aiFailed ? 'unavailable here' : d.aiReady ? 'ready · on-device' : 'Depth Anything V2';
+  }
+  if (!d.aiStatus) {
+    d.aiStatus = d.engine === 'ai'
+      ? 'AI depth selected — press ↻ Re-scan or play to generate.'
+      : 'Fast estimate — instant, no download.';
+  }
+  const el = document.getElementById('depthEngineStatus');
+  if (el) el.textContent = d.aiStatus;
+}
+
+function depthSetEngine(mode) {
+  const d = ensureDepthState();
+  if (mode === d.engine) return;
+  d.engine = mode;
+  state.depthEnginePref = mode;
+  d.dirty = true;
+  if (mode === 'fast') {
+    depthAiSetStatus('Fast estimate — instant, no download.', false);
+    depthRescan({ forceFast: true });
+  } else {
+    depthAiSetStatus(d.aiReady
+      ? 'AI depth ready.'
+      : 'Loading Depth Anything V2 — one-time 40 MB download, then cached…', !d.aiReady);
+    depthAiRun();
+  }
+  depthRenderAiStamp();
+  depthRenderEngineButtons();
+  saveUiPrefs();
+}
+
 function depthRenderRack() {
   const rack = document.getElementById('depthEffectRack');
   if (!rack || !window.DEPTH_ENGINE) return;
@@ -4485,6 +4744,11 @@ function depthRenderRack() {
 function initDepthTab() {
   const d = ensureDepthState();
   depthRenderRack();
+  depthRenderEngineButtons();
+
+  document.querySelectorAll('#depthEngineGroup .depth-engine').forEach((btn) => {
+    btn.addEventListener('click', () => depthSetEngine(btn.getAttribute('data-depth-engine')));
+  });
 
   document.querySelectorAll('#depthSourceGroup .depth-source').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -4568,8 +4832,15 @@ function initDepthTab() {
   if (applyAll) applyAll.addEventListener('click', depthApplyAll);
 
   depthSyncUI();
-  // build a first map right away so the tab is never empty
-  depthRescan();
+  // Paint an instant preview so the tab is never empty, but never start the
+  // model download at page load — that happens when the tab is opened or a
+  // depth effect is switched on.
+  depthRescan({ forceFast: true });
+  if (d.engine === 'ai') {
+    depthAiSetStatus(d.aiReady
+      ? 'AI depth ready.'
+      : 'AI depth is selected — open this tab or switch on an effect to run Depth Anything V2 (one-time 40 MB download).', false);
+  }
 }
 
 // ============================================================================

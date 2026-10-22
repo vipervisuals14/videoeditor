@@ -668,6 +668,26 @@
             </div>
           </div>
 
+          <!-- WHICH ENGINE BUILDS THE MAP -->
+          <div class="depth-engine-row">
+            <div class="depth-engine-group" id="depthEngineGroup">
+              <button class="depth-engine" data-depth-engine="ai" title="Run Depth Anything V2 in this browser. Real monocular depth — crisp silhouettes, correct ground plane. One-time 40 MB download, then cached.">
+                <span class="depth-engine-name">🧠 AI depth</span>
+                <span class="depth-engine-sub">Depth Anything V2</span>
+              </button>
+              <button class="depth-engine active" data-depth-engine="fast" title="Estimate depth from the picture with no download. Instant, but it guesses — use it for a rough read, not for a finishing job.">
+                <span class="depth-engine-name">⚡ Fast estimate</span>
+                <span class="depth-engine-sub">no download · instant</span>
+              </button>
+            </div>
+            <div class="depth-engine-status">
+              <span id="depthEngineStatus">Fast estimate — instant, no download.</span>
+              <div class="depth-engine-progress hidden" id="depthEngineProgressWrap">
+                <div class="depth-engine-progress-fill" id="depthEngineProgressFill"></div>
+              </div>
+            </div>
+          </div>
+
           <div class="depth-source-row">
             <div class="depth-source-group" id="depthSourceGroup">
               <button class="depth-source active" data-depth-source="estimate" title="Read the plate and estimate depth from haze, height, detail and saturation">Auto estimate</button>
@@ -688,9 +708,13 @@
 
           <div class="depth-body">
             <div class="depth-left">
-              <canvas id="depthThumbCanvas" class="mask-thumb" width="320" height="180"></canvas>
+              <div class="depth-thumb-wrap">
+                <canvas id="depthThumbCanvas" class="mask-thumb" width="320" height="180"></canvas>
+                <span class="depth-ai-stamp hidden" id="depthAiStamp">AI · Depth Anything V2</span>
+              </div>
               <div class="mask-stat-strip">
                 <div class="mask-stat"><span>Source</span><strong id="depthSourceLabel">Plate</strong></div>
+                <div class="mask-stat"><span>Engine</span><strong id="depthEngineLabel">Fast</strong></div>
                 <div class="mask-stat"><span>Effects on</span><strong id="depthActiveCount">0</strong></div>
                 <div class="mask-stat"><span>Keyframes</span><strong id="depthKeyCount">0</strong></div>
               </div>

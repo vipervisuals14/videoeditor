@@ -244,7 +244,16 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 
 **`06 • Depth Map`** — depth of field and 10 more depth-driven looks.
 
-- **`↻ Re-scan plate`** builds a depth map from the picture (haze, height, detail, saturation).
+- **Pick an engine first.** Two cards sit at the top of the tab:
+  - **🧠 AI depth** (default) — runs **Depth Anything V2** in your browser. This is the real thing:
+    it understands what is in the picture, so faces, hair and object edges come out sharp and the
+    ground recedes properly. The first time you use it, it downloads a **40 MB model** — once. A
+    progress bar shows the download, then it is cached and starts instantly after that.
+  - **⚡ Fast estimate** — no download, instant. It guesses from position, colour and texture, so
+    it is fine for a quick look and wrong often enough that you should not export from it.
+- In a browser that blocks background workers (a few locked-down setups), the AI card says
+  **unavailable here** and the tab falls back to the fast estimate instead of failing silently.
+- **`↻ Re-scan plate`** rebuilds the map for the current frame with whichever engine is selected.
 - **`Live depth: ON`** (on by default) re-reads the frame while the clip plays, so the map always
   describes what is on screen instead of the frame that happened to be up when the tab opened.
   The estimate runs in a background worker (`depth-live-worker.js`), so the monitor keeps its

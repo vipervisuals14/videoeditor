@@ -13,6 +13,7 @@ DaVinci Resolve.
 | 72 live effect cards + shaders | yes | **yes** — identical code, runs in your browser |
 | Your own photos as the plate (upload or drag-and-drop) | yes | **yes** — read locally, never uploaded |
 | Magic Mask, Depth Map, Effect Layers | yes | **yes** — depth runs live in a background worker |
+| Real AI depth (Depth Anything V2, on-device) | n/a | **yes** — 40 MB model cached after first use, no server call |
 | 4K import + 4K still / PNG-sequence export | yes | **yes** — rendered in your browser, nothing uploaded |
 | Native 4K final render (ProRes/DNxHR) | yes, one click | **yes, one paste** — sets your project to 3840×2160 and Resolve renders |
 | Intensity sliders 0–200% + keyframe curve editor | yes | **yes** |
@@ -24,6 +25,11 @@ DaVinci Resolve.
 Why: a web page is not allowed to read or write files inside DaVinci Resolve, and it cannot
 run Lua in it. Resolve's Console can — so the web build prepares the exact Lua and you paste
 it. One click, one paste, per effect.
+
+**Hosting note.** The depth model is the only large asset: 40 MB of vendored model + runtime in
+`vendor/depth/`, which is inside the same static folder. Every host in this guide serves files
+that size (GitHub Pages allows 100 MB per file, Netlify 5 GB per deploy). If you never open the AI
+engine's download, a visitor transfers none of it — the files are fetched only when requested.
 
 Nothing you import ever leaves your machine: the 4K renderer reads the file locally, composes
 frames on a canvas, and hands you the finished ZIP. There is no upload endpoint to leak to.
