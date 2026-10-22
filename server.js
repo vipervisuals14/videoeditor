@@ -167,7 +167,13 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.setting': 'text/plain; charset=utf-8',
-  '.lua': 'text/plain; charset=utf-8'
+  '.lua': 'text/plain; charset=utf-8',
+  // Needed by the depth engine: the worker is an ES module (.mjs), ONNX Runtime
+  // streams a .wasm backend, and the model itself is a .onnx file. A wrong type
+  // on the .mjs makes the browser refuse to start the module worker at all.
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.wasm': 'application/wasm',
+  '.onnx': 'application/octet-stream'
 };
 
 function sendJson(res, status, data) {
