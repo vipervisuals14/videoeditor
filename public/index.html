@@ -449,14 +449,14 @@
               </div>
               <button class="btn-primary lyrc-detect-btn" id="lyricsDetectBtn"
                       title="Read the audio track of the clip on the stage and place the words where they were said">
-                ◉ Detect from clip
+                ◉ Detect &amp; type captions
               </button>
               <button class="btn-secondary" id="lyricsTranscriptBtn"
                       title="Load a transcript you already have (.srt, .txt or .vtt) and time it to this clip">Load .srt / .txt</button>
               <input type="file" id="lyricsTranscriptInput" accept=".srt,.txt,.vtt,text/plain" hidden />
             </div>
             <div class="lyrc-detect-meta">
-              <span class="lyrc-detect-status" id="lyrcDetectStatus" data-kind="idle">Load a clip on the stage, then press Detect — it listens to the clip itself, nothing is uploaded.</span>
+              <span class="lyrc-detect-status" id="lyrcDetectStatus" data-kind="idle">Load a clip on the stage, then press Detect — it listens to the clip, types the words and times them. Nothing is uploaded.</span>
               <div class="lyrc-detect-track"><i id="lyrcDetectProgress"></i></div>
             </div>
             <div class="lyrc-detect-chips" id="lyrcDetectChips"></div>

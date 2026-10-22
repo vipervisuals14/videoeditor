@@ -4076,7 +4076,7 @@ async function lyricsDetect() {
     if (btn) {
       btn.disabled = false;
       btn.classList.remove('is-busy');
-      btn.textContent = '◉ Detect from clip';
+      btn.textContent = '◉ Detect & type captions';
     }
   }
 }
