@@ -221,6 +221,10 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 
 **`02 • LYRC Typography`** — 20 kinetic lyric styles (Bold / Layered / Minimal / Talking).
 
+- **Lyrics start switched off.** Your footage plays clean until you turn them on, so a new clip
+  never arrives with text burned onto it. There is a switch at the top of this tab —
+  **`Lyrics on monitor: OFF / ON`** — and the same switch sits in the viewer bar as
+  **`Lyrics: OFF`**. Either one turns the typography on and off, and the choice is remembered.
 - Type or paste your lyrics, press **`Sync to Beats`**, pick a style, press **`Variation`** to
   reshuffle the arrangement.
 - **`Place on Resolve Timeline`** builds real text cards: one `TextPlus` per line, each with a
@@ -241,8 +245,17 @@ it animates in Resolve exactly as it does in the panel preview. Nothing is faked
 **`06 • Depth Map`** — depth of field and 10 more depth-driven looks.
 
 - **`↻ Re-scan plate`** builds a depth map from the picture (haze, height, detail, saturation).
+- **`Live depth: ON`** (on by default) re-reads the frame while the clip plays, so the map always
+  describes what is on screen instead of the frame that happened to be up when the tab opened.
+  The estimate runs in a background worker (`depth-live-worker.js`), so the monitor keeps its
+  frame rate. Switch it to **OFF** when you want the map pinned to one frame.
+- **`Preview:`** at the top right chooses what the monitor shows: **picture only** (default — you
+  see just the graded result), **depth overlay**, the raw **depth map**, or a **split compare**.
+- The map is estimated at **480×270** and the effect pass runs at the monitor's own resolution,
+  so depth-of-field edges are not a blown-up 160×90 buffer.
 - **`From Magic Mask`** turns a mask you drew into the depth map; **`Load depth map`** takes a real one
-  (iPhone LiDAR, Depth Anything, MiDaS, or Resolve's own Depth Map export).
+  (iPhone LiDAR, Depth Anything, MiDaS, or Resolve's own Depth Map export). Loaded maps keep their
+  own detail up to 960 px wide instead of being squashed to thumbnail size.
 - Turn on any of the 11 effects with its slider (Depth of Field, Tilt-Shift, Atmosphere, Depth Grade,
   Parallax, Relight, Slice Offset, Contours, Point Cloud, Anaglyph, Echo), keyframe them with **`◆`**,
   and send one or all with **`Send Active Stack to Resolve`**.
@@ -273,6 +286,19 @@ saves a 1920×1080 black-and-white matte you can drop into Fusion if you would r
 it by hand.
 
 ---
+
+## The transport bar (play, pause, scrub)
+
+Under the Live Preview: **`Pause`**, **`Test Film Snip / Transient`**, and the scrubber with the
+timecode beside it.
+
+- **`Pause`** stops everything — the shader, the beat pulse, the lyric animation, **and your
+  video**. Pause a clip and the picture holds on that exact frame; press **`Play`** and it
+  resumes from the same place. (Older builds froze the shader clock but left the video element
+  playing underneath, so the picture kept moving.)
+- **Dragging the scrubber** moves the playhead and seeks your video to the same point, and
+  refreshes the depth map for that frame.
+- **`Motion: ON/OFF`** in the viewer bar is the same freeze, without changing the play state.
 
 ## Layering effects (stacking looks)
 

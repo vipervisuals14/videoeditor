@@ -168,6 +168,78 @@
     return out;
   }
 
+  // Separable minimum over a square window. Two passes (rows, then columns)
+  // instead of r*r samples per pixel, which keeps this inside the estimate's
+  // time budget. Used to fill flat foreground areas with the nearest surface
+  // found around them instead of the average of what is behind them.
+  function minFilterScalar(src, w, h, radius) {
+    var r = Math.max(0, Math.round(radius));
+    if (!r) return Float32Array.from(src);
+    var tmp = new Float32Array(w * h);
+    var out = new Float32Array(w * h);
+    var x, y, k, v, best, i;
+    for (y = 0; y < h; y++) {
+      var row = y * w;
+      for (x = 0; x < w; x++) {
+        best = Infinity;
+        for (k = x - r; k <= x + r; k++) {
+          v = src[row + clamp(k, 0, w - 1)];
+          if (v < best) best = v;
+        }
+        tmp[row + x] = best;
+      }
+    }
+    for (x = 0; x < w; x++) {
+      for (y = 0; y < h; y++) {
+        best = Infinity;
+        for (k = y - r; k <= y + r; k++) {
+          v = tmp[clamp(k, 0, h - 1) * w + x];
+          if (v < best) best = v;
+        }
+        i = y * w + x;
+        out[i] = best;
+      }
+    }
+    return out;
+  }
+
+  // Separable box blur over a single-channel float buffer (running sums, O(n)).
+  function boxBlurScalar(src, w, h, radius) {
+    var r = Math.max(0, Math.round(radius));
+    var tmp = new Float32Array(w * h);
+    var out = new Float32Array(w * h);
+    var x, y, sum, count, i, k;
+    // horizontal
+    for (y = 0; y < h; y++) {
+      var row = y * w;
+      for (x = 0; x < w; x++) {
+        sum = 0;
+        count = 0;
+        for (k = x - r; k <= x + r; k++) {
+          if (k < 0 || k >= w) continue;
+          sum += src[row + k];
+          count++;
+        }
+        tmp[row + x] = sum / count;
+      }
+    }
+    // vertical
+    for (x = 0; x < w; x++) {
+      for (y = 0; y < h; y++) {
+        sum = 0;
+        count = 0;
+        for (k = y - r; k <= y + r; k++) {
+          if (k < 0 || k >= h) continue;
+          sum += tmp[k * w + x];
+          count++;
+        }
+        i = y * w + x;
+        out[i] = sum / count;
+      }
+    }
+    return out;
+  }
+
   function percentileStretch(depth, loPct, hiPct) {
     var n = depth.length;
     var sorted = Float32Array.from(depth);
@@ -253,23 +325,13 @@
         detail[idx] = Math.sqrt(gx * gx + gy * gy);
       }
     }
-    var energy = new Float32Array(n);
-    for (var yb = 0; yb < h; yb++) {
-      for (var xb = 0; xb < w; xb++) {
-        var best = 0;
-        for (var wy = -2; wy <= 2; wy++) {
-          var yy = yb + wy;
-          if (yy < 0 || yy >= h) continue;
-          for (var wx = -2; wx <= 2; wx++) {
-            var xx = xb + wx;
-            if (xx < 0 || xx >= w) continue;
-            var d2 = detail[yy * w + xx];
-            if (d2 > best) best = d2;
-          }
-        }
-        energy[yb * w + xb] = best;
-      }
-    }
+    // Region texture, not edge presence: a 9x9 mean of the gradient magnitude.
+    // This used to be a 5x5 MAX, which lit up every sharp outline and left a
+    // bright "near" halo around the subject's rim while its face read flat —
+    // the depth map looked like a cutout and defocus sharpened edges instead of
+    // faces. Averaging measures how textured an area is, which is the cue that
+    // actually correlates with distance.
+    var energy = boxBlurScalar(detail, w, h, 4);
 
     // normalise detail to 0..1 using the 95th percentile so one hot edge
     // cannot flatten the whole map
@@ -289,19 +351,37 @@
         // Aerial perspective, the cues a colourist actually reads:
         //   ground low in frame is near, distance is hazy / desaturated /
         //   lifted, and sharp detailed areas are close.
+        // Weights re-tuned after measuring the real output: texture was
+        // weighted so heavily that a crisp subject outline read as "near
+        // texture" while the smooth body behind it read as "flat = far", which
+        // drew a glowing rim around every subject. Position and colour carry
+        // more signal than gradient energy on real footage.
         var far = 0.50 * (1 - yn)
-          + 0.20 * (1 - detailN)
-          + 0.20 * (1 - satN)
+          + 0.08 * (1 - detailN)
+          + 0.32 * (1 - satN)
           + 0.10 * lumaN;
         base[j] = clamp01(far);
       }
     }
 
+    // Nearest-surface fill. A flat area (a subject's back, a wall) carries no
+    // detail of its own, so its own cue value is mostly "no texture = far",
+    // which made a person's body read as distant while the crisp outline
+    // around it read as near — a halo instead of a depth ramp. Taking the
+    // local minimum hands the region the nearest evidence in its neighbourhood.
+    var filled = minFilterScalar(base, w, h, 5);
+    // ...then blend it back toward the raw estimate so open sky keeps its ramp
+    // instead of collapsing to a single flat value.
+    var work = new Float32Array(n);
+    for (var iFill = 0; iFill < n; iFill++) {
+      work[iFill] = filled[iFill] * 0.72 + base[iFill] * 0.28;
+    }
     var smoothRadius = clamp(Math.round(o.smooth === undefined ? 2 : o.smooth), 0, 4);
-    var work = base;
     for (var pass = 0; pass < 2; pass++) {
       if (!smoothRadius) break;
-      work = guidedSmooth(work, luma, w, h, smoothRadius, 18);
+      // sigma 9 (on 0..255 luma) instead of 18: at 18 a bright background
+      // bled across a subject's edge and drew a glowing "far" ring around it.
+      work = guidedSmooth(work, luma, w, h, smoothRadius, 9);
     }
 
     // Magic Mask (or an uploaded matte) as a hard "this is the subject" cue.

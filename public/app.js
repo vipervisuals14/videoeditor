@@ -761,7 +761,7 @@ const state = {
   mixStylized: 45,
   splitCompare: false,
   vertical916: false,
-  showLyricsOverlay: true,
+  showLyricsOverlay: false,   // clean picture by default — opt in from 02 • LYRC
   motion: true,
   frozenTime: 1.9,
   hiddenModules: {},
@@ -1219,6 +1219,9 @@ function setModuleVisible(id, visible, persist) {
 function saveUiPrefs() {
   try {
     localStorage.setItem(UI_PREFS_KEY, JSON.stringify({
+      // v2: lyrics became opt-in. Older saves forced the overlay on at every
+      // load, which is why a fresh clip kept coming up with lyrics burned on it.
+      v: 2,
       motion: state.motion,
       lyrics: state.showLyricsOverlay,
       hidden: state.hiddenModules || {}
@@ -1232,7 +1235,9 @@ function loadUiPrefs() {
     if (!raw) return;
     const prefs = JSON.parse(raw);
     if (typeof prefs.motion === 'boolean') state.motion = prefs.motion;
-    if (typeof prefs.lyrics === 'boolean') state.showLyricsOverlay = prefs.lyrics;
+    // Only honour a saved lyrics choice from v2 onwards. v1 saves always said
+    // "on" because the app used to default to on, so they are ignored once.
+    if (prefs.v >= 2 && typeof prefs.lyrics === 'boolean') state.showLyricsOverlay = prefs.lyrics;
     if (prefs.hidden && typeof prefs.hidden === 'object') state.hiddenModules = prefs.hidden;
   } catch (_e) { /* ignore corrupt prefs */ }
 }
@@ -1389,6 +1394,8 @@ function initSceneSwitcher() {
       document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.scene = btn.dataset.scene;
+      // a new plate means the old depth map describes a picture that is gone
+      if (state.depth) depthRescan({ timeSec: state.playheadSec });
       showToast(`Camera Plate switched to: ${btn.textContent.trim()}`);
     });
   });
@@ -1402,8 +1409,9 @@ function initSceneSwitcher() {
       if (!file) return;
       const url = URL.createObjectURL(file);
       videoEl.src = url;
-      videoEl.play().catch(() => {});
+      if (state.motion && state.isPlaying) videoEl.play().catch(() => {});
       state.scene = 'custom_video';
+      if (state.depth) setTimeout(() => depthRescan(), 260);
       document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
       showToast(`Loaded custom video "${file.name}" into real-time optical shader pipeline`);
     });
@@ -2255,6 +2263,16 @@ function initCaptionsTab() {
     });
   });
 
+  const tabLyricsSwitch = document.getElementById('lyricsTabToggleBtn');
+  if (tabLyricsSwitch) {
+    tabLyricsSwitch.addEventListener('click', () => {
+      setLyricsOverlay(!state.showLyricsOverlay);
+      showToast(state.showLyricsOverlay
+        ? 'LYRC typography ON — visible on the monitor and in exports'
+        : 'LYRC typography OFF — clean picture');
+    });
+  }
+
   document.getElementById('lyricVariationBtn').addEventListener('click', () => {
     if (!state.captionStyle.supportsVariation) {
       showToast(`"${state.captionStyle.name}" uses a fixed recipe and does not use Variation seeds.`);
@@ -2262,7 +2280,7 @@ function initCaptionsTab() {
     }
     state.variationSeed = (state.variationSeed % 6) + 1;
     document.getElementById('variationSeedBadge').textContent = `#${state.variationSeed}`;
-    document.getElementById('activeCapPill').textContent = `LYRC: ${state.captionStyle.name} (Var #${state.variationSeed})`;
+    refreshLyricsPill();
     showToast(`Generated Arrangement Variation #${state.variationSeed} for "${state.captionStyle.name}"`);
   });
 
@@ -2362,8 +2380,7 @@ function selectLyrcPreset(st) {
   else state.alignment = 'center';
   document.getElementById('lyrcAlignSelect').value = state.alignment;
 
-  const varTag = st.supportsVariation ? ` (Seed #${state.variationSeed})` : ' (Fixed)';
-  document.getElementById('activeCapPill').textContent = `LYRC: ${st.name}${varTag}`;
+  refreshLyricsPill();
   updateContextualBar();
   renderCaptionStyleStrip();
 }
@@ -3127,7 +3144,7 @@ function applyDepthStackTiled(ctx, w, h, t) {
     }
     if (!img || !img.data || img.width !== tile.sw) return;
     const depthRect = DEPTH_ENGINE.sampleDepthRect(
-      d.map, d.mapW || MASK_W, d.mapH || MASK_H,
+      d.map, d.mapW || DEPTH_W, d.mapH || DEPTH_H,
       tile.sx, tile.sy, tile.sw, tile.sh, w, h
     );
     const out = DEPTH_ENGINE.apply(
@@ -3310,6 +3327,7 @@ function rbImportFile(file) {
       state.scene = 'custom_video';
       document.querySelectorAll('.scene-btn').forEach((b) => b.classList.remove('active'));
       rbLogLine(`Clip ready: ${width} × ${height}, ${duration.toFixed(2)}s${RENDER_ENGINE.is4K(width, height) ? ' (4K)' : ''}.`);
+      if (state.depth) setTimeout(() => depthRescan(), 260);
       showToast(`${file.name} imported — ${width} × ${height}${RENDER_ENGINE.is4K(width, height) ? ' · 4K' : ''}`, 'ok');
       resolve(state.rbSource);
     };
@@ -3317,8 +3335,10 @@ function rbImportFile(file) {
     videoEl.src = url;
     videoEl.muted = true;
     videoEl.playsInline = true;
-    const p = videoEl.play();
-    if (p && p.catch) p.catch(() => {});
+    if (state.motion && state.isPlaying) {
+      const p = videoEl.play();
+      if (p && p.catch) p.catch(() => {});
+    }
     setTimeout(() => {
       if (!state.rbSource || state.rbSource.name !== file.name) {
         const w = videoEl.videoWidth || 0;
@@ -3411,10 +3431,10 @@ async function rbExportSequence() {
         depthCanvas.width = size.width;
         depthCanvas.height = size.height;
         const dctx = depthCanvas.getContext('2d');
-        const gray = DEPTH_ENGINE.toGray(state.depth.map, state.depth.mapW || MASK_W, state.depth.mapH || MASK_H, false);
+        const gray = DEPTH_ENGINE.toGray(state.depth.map, state.depth.mapW || DEPTH_W, state.depth.mapH || DEPTH_H, false);
         const tmp = document.createElement('canvas');
-        tmp.width = state.depth.mapW || MASK_W;
-        tmp.height = state.depth.mapH || MASK_H;
+        tmp.width = state.depth.mapW || DEPTH_W;
+        tmp.height = state.depth.mapH || DEPTH_H;
         const tctx = tmp.getContext('2d');
         const idata = tctx.createImageData(tmp.width, tmp.height);
         idata.data.set(gray);
@@ -3604,13 +3624,19 @@ function initRenderBay() {
 //
 // Depth convention everywhere: 0 = near, 1 = far.
 // ============================================================================
-const DEPTH_BASE_W = 480;   // effect pass resolution, scaled up to the monitor
-const DEPTH_BASE_H = 270;
+// The depth map itself is estimated at this resolution. It used to share the
+// 160x90 Magic Mask buffer, which threw away almost all the detail: an uploaded
+// 1920x1080 depth map was crushed to 160x90 and the effects looked like mush.
+const DEPTH_W = 480;
+const DEPTH_H = 270;
+const DEPTH_UPLOAD_MAX = 960;  // loaded maps keep native detail up to this width
+const DEPTH_LIVE_INTERVAL_MS = 160;
 
 function defaultDepthState() {
   return {
     source: 'estimate',      // estimate | mask | upload
-    view: 'overlay',         // off | overlay | map | split
+    view: 'off',             // off | overlay | map | split
+    live: true,              // re-estimate from the current frame while it plays
     invert: false,
     smooth: 2,
     contrast: 55,
@@ -3621,6 +3647,8 @@ function defaultDepthState() {
     mapW: 0,
     mapH: 0,
     loadedMap: null,         // Float32Array from an uploaded image
+    loadedMapW: 0,           // its real resolution, kept instead of downscaling
+    loadedMapH: 0,
     effects: {},             // id -> 0..100
     keys: {},                // id -> [{sec, value}]
     status: 'Press ↻ Re-scan plate to build the depth map.',
@@ -3638,16 +3666,16 @@ let depthSampleCanvas = null;
 function depthSamplePlate(timeSec) {
   if (!depthSampleCanvas) {
     depthSampleCanvas = document.createElement('canvas');
-    depthSampleCanvas.width = MASK_W;
-    depthSampleCanvas.height = MASK_H;
+    depthSampleCanvas.width = DEPTH_W;
+    depthSampleCanvas.height = DEPTH_H;
   }
   const sctx = depthSampleCanvas.getContext('2d');
   if (!sctx) return null;
   sctx.setTransform(1, 0, 0, 1, 0, 0);
-  sctx.clearRect(0, 0, MASK_W, MASK_H);
+  sctx.clearRect(0, 0, DEPTH_W, DEPTH_H);
   try {
-    drawCinematicPlate(sctx, MASK_W, MASK_H, timeSec, 0);
-    return sctx.getImageData(0, 0, MASK_W, MASK_H);
+    drawCinematicPlate(sctx, DEPTH_W, DEPTH_H, timeSec, 0);
+    return sctx.getImageData(0, 0, DEPTH_W, DEPTH_H);
   } catch (_e) {
     return null;
   }
@@ -3669,11 +3697,11 @@ function depthRescan(opts) {
       return;
     }
     d.map = d.loadedMap.slice();
-    d.mapW = d.mapW || MASK_W;
-    d.mapH = d.mapH || MASK_H;
+    d.mapW = d.loadedMapW || DEPTH_W;
+    d.mapH = d.loadedMapH || DEPTH_H;
     d.dirty = false;
     d.status = 'Using the loaded depth map. Every effect below is now accurate to that map.';
-    depthSyncUI();
+    if (!o.silent) depthSyncUI();
     return;
   }
   if (d.source === 'mask') {
@@ -3682,9 +3710,10 @@ function depthRescan(opts) {
       depthSyncUI();
       return;
     }
-    d.map = DEPTH_ENGINE.fromMask(m.soft, MASK_W, MASK_H, 0.35);
-    d.mapW = MASK_W;
-    d.mapH = MASK_H;
+    const small = DEPTH_ENGINE.fromMask(m.soft, MASK_W, MASK_H, 0.35);
+    d.map = DEPTH_ENGINE.resizeDepth(small, MASK_W, MASK_H, DEPTH_W, DEPTH_H);
+    d.mapW = DEPTH_W;
+    d.mapH = DEPTH_H;
     d.dirty = false;
     d.status = 'Depth from the Magic Mask: subject near, everything else far.';
     depthSyncUI();
@@ -3696,8 +3725,12 @@ function depthRescan(opts) {
     depthSyncUI();
     return;
   }
+  // Trust the frame that was actually sampled rather than the nominal size, so
+  // a differently-sized plate can never be read out of bounds.
+  const sw = img.width || DEPTH_W;
+  const sh = img.height || DEPTH_H;
   d.map = DEPTH_ENGINE.estimate(
-    { data: img.data, width: MASK_W, height: MASK_H },
+    { data: img.data, width: sw, height: sh },
     {
       smooth: d.smooth,
       contrast: d.contrast,
@@ -3708,13 +3741,187 @@ function depthRescan(opts) {
       maskH: MASK_H
     }
   );
-  d.mapW = MASK_W;
-  d.mapH = MASK_H;
+  d.mapW = sw;
+  d.mapH = sh;
   d.dirty = false;
+  if (o.silent) return;
   d.status = m && m.soft
     ? 'Depth estimated from the plate, with your Magic Mask pinning the subject to the front.'
     : 'Depth estimated from the plate (haze, height, detail, saturation).';
   depthSyncUI();
+}
+
+// Live depth: re-estimate from the frame that is on screen right now, throttled
+// to ~6 Hz. Without this the map was built once at boot and every effect was
+// driven by a depth map of a frame that no longer existed (worst case with a
+// video: the map described the starter plate, not the clip).
+let depthLiveLast = 0;
+let depthLiveUiLast = 0;
+
+// The live estimate runs in depth-live-worker.js. This flag flips after a few
+// failures (file://, CSP, an old browser) and the panel falls back to a smaller
+// main-thread estimate so live depth still works, just at lower detail.
+let depthWorker = null;
+let depthWorkerBusy = false;
+let depthWorkerDead = false;
+let depthWorkerSeq = 0;
+let depthWorkerPending = null;
+let depthFallbackCanvas = null;
+const DEPTH_FALLBACK_W = 320;
+const DEPTH_FALLBACK_H = 180;
+const DEPTH_FALLBACK_INTERVAL_MS = 260;
+
+function depthEstimateOpts(d) {
+  const m = state.mask;
+  return {
+    smooth: d.smooth,
+    contrast: d.contrast,
+    nearBias: d.nearBias,
+    invert: d.invert,
+    mask: m && m.soft ? m.soft : null,
+    maskW: MASK_W,
+    maskH: MASK_H
+  };
+}
+
+function depthTakeWorkerResult(msg) {
+  depthWorkerBusy = false;
+  const d = ensureDepthState();
+  if (msg && msg.map && msg.width && msg.height && d.source === 'estimate') {
+    d.map = new Float32Array(msg.map);
+    d.mapW = msg.width;
+    d.mapH = msg.height;
+    d.dirty = false;
+  }
+  if (msg && msg.error) {
+    depthWorkerDead = true;
+    depthWorker = null;
+  }
+  if (depthWorkerPending) {
+    const next = depthWorkerPending;
+    depthWorkerPending = null;
+    depthPostLiveJob(next);
+  }
+}
+
+function depthEnsureWorker() {
+  if (depthWorker || depthWorkerDead) return depthWorker;
+  if (typeof Worker !== 'function') { depthWorkerDead = true; return null; }
+  try {
+    depthWorker = new Worker('depth-live-worker.js');
+    depthWorker.onmessage = (e) => depthTakeWorkerResult(e.data);
+    depthWorker.onerror = () => { depthWorkerDead = true; depthWorker = null; depthWorkerBusy = false; };
+  } catch (_e) {
+    depthWorkerDead = true;
+    depthWorker = null;
+  }
+  return depthWorker;
+}
+
+function depthPostLiveJob(job) {
+  const worker = depthEnsureWorker();
+  if (!worker) return false;
+  if (depthWorkerBusy) { depthWorkerPending = job; return true; }
+  try {
+    depthWorkerSeq += 1;
+    depthWorkerBusy = true;
+    worker.postMessage({
+      id: depthWorkerSeq,
+      data: job.data.buffer,
+      width: job.width,
+      height: job.height,
+      opts: depthEstimateOpts(ensureDepthState())
+    }, [job.data.buffer]);
+    return true;
+  } catch (_e) {
+    depthWorkerBusy = false;
+    depthWorkerDead = true;
+    depthWorker = null;
+    return false;
+  }
+}
+
+// Grab the current frame at depth resolution and hand it to the worker.
+function depthLiveSample(timeSec) {
+  const w = DEPTH_W;
+  const h = DEPTH_H;
+  if (!depthSampleCanvas) {
+    depthSampleCanvas = document.createElement('canvas');
+    depthSampleCanvas.width = w;
+    depthSampleCanvas.height = h;
+  }
+  const sctx = depthSampleCanvas.getContext('2d');
+  if (!sctx) return null;
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
+  sctx.clearRect(0, 0, w, h);
+  try {
+    drawCinematicPlate(sctx, w, h, timeSec, 0);
+    const img = sctx.getImageData(0, 0, w, h);
+    return { data: img.data, width: w, height: h };
+  } catch (_e) {
+    return null;
+  }
+}
+
+function depthLiveWanted() {
+  const d = state.depth;
+  if (!d || !d.live) return false;
+  if (d.source !== 'estimate') return false;   // loaded / mask maps are fixed
+  if (state.activeTab !== 'depth' && !depthEffectsOn().count) return false;
+  return true;
+}
+
+function depthLiveTick(nowMs) {
+  if (!state.motion || !state.isPlaying || document.hidden) return;
+  if (!depthLiveWanted()) return;
+  const interval = depthWorkerDead ? DEPTH_FALLBACK_INTERVAL_MS : DEPTH_LIVE_INTERVAL_MS;
+  if (nowMs - depthLiveLast < interval) return;
+  depthLiveLast = nowMs;
+
+  if (!depthWorkerDead) {
+    const frame = depthLiveSample(state.playheadSec);
+    if (frame && depthPostLiveJob(frame)) {
+      depthLiveUiTick(nowMs);
+      return;
+    }
+  }
+  // fallback: a smaller estimate on the main thread, less often. The frame has
+  // to be sampled at this smaller size too, or the buffer would overrun.
+  const d = ensureDepthState();
+  if (!window.DEPTH_ENGINE) return;
+  if (!depthFallbackCanvas) {
+    depthFallbackCanvas = document.createElement('canvas');
+    depthFallbackCanvas.width = DEPTH_FALLBACK_W;
+    depthFallbackCanvas.height = DEPTH_FALLBACK_H;
+  }
+  const fctx = depthFallbackCanvas.getContext('2d');
+  if (!fctx) return;
+  try {
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.clearRect(0, 0, DEPTH_FALLBACK_W, DEPTH_FALLBACK_H);
+    drawCinematicPlate(fctx, DEPTH_FALLBACK_W, DEPTH_FALLBACK_H, state.playheadSec, 0);
+    const img = fctx.getImageData(0, 0, DEPTH_FALLBACK_W, DEPTH_FALLBACK_H);
+    if (d.source === 'estimate') {
+      d.map = DEPTH_ENGINE.estimate(
+        { data: img.data, width: DEPTH_FALLBACK_W, height: DEPTH_FALLBACK_H },
+        depthEstimateOpts(d)
+      );
+      d.mapW = DEPTH_FALLBACK_W;
+      d.mapH = DEPTH_FALLBACK_H;
+      d.dirty = false;
+    }
+  } catch (_e) {
+    return;
+  }
+  depthLiveUiTick(nowMs);
+}
+
+function depthLiveUiTick(nowMs) {
+  // keep the thumbnail and counters in step, but only a few times a second
+  if (state.activeTab === 'depth' && nowMs - depthLiveUiLast > 340) {
+    depthLiveUiLast = nowMs;
+    depthSyncUI();
+  }
 }
 
 function depthEffectsOn() {
@@ -3758,6 +3965,13 @@ function depthSyncUI() {
     inv.textContent = 'Invert: ' + (d.invert ? 'ON' : 'OFF');
     inv.classList.toggle('is-off', !d.invert);
   }
+  const liveBtn = document.getElementById('depthLiveBtn');
+  if (liveBtn) {
+    liveBtn.textContent = 'Live depth: ' + (d.live ? 'ON' : 'OFF');
+    liveBtn.classList.toggle('is-on', !!d.live);
+    liveBtn.classList.toggle('is-off', !d.live);
+    liveBtn.setAttribute('aria-pressed', d.live ? 'true' : 'false');
+  }
   const viewSel = document.getElementById('depthViewSelect');
   if (viewSel && viewSel.value !== d.view) viewSel.value = d.view;
 
@@ -3791,14 +4005,14 @@ function depthSyncUI() {
       tctx.fillStyle = '#05070d';
       tctx.fillRect(0, 0, thumb.width, thumb.height);
       if (d.map) {
-        const gray = DEPTH_ENGINE.toGray(d.map, d.mapW || MASK_W, d.mapH || MASK_H, false);
+        const gray = DEPTH_ENGINE.toGray(d.map, d.mapW || DEPTH_W, d.mapH || DEPTH_H, false);
         let canvas = depthThumbCache;
         if (!canvas) {
           canvas = document.createElement('canvas');
           depthThumbCache = canvas;
         }
-        canvas.width = d.mapW || MASK_W;
-        canvas.height = d.mapH || MASK_H;
+        canvas.width = d.mapW || DEPTH_W;
+        canvas.height = d.mapH || DEPTH_H;
         const cctx = canvas.getContext('2d');
         if (cctx) {
           const idata = cctx.createImageData(canvas.width, canvas.height);
@@ -3828,10 +4042,11 @@ function applyDepthStack(ctx, w, h, t) {
   const { effects, count } = depthEffectsOn();
   if (!count) return;
 
-  // fewer pixels when the stack is heavy: 3+ effects drops one step, 5+ two
-  const scale = count >= 5 ? 0.72 : count >= 3 ? 0.83 : 1;
-  const ww = Math.max(160, Math.round(DEPTH_BASE_W * scale));
-  const wh = Math.max(90, Math.round((DEPTH_BASE_H * scale * (h / w)) || 270));
+  // Run at the monitor's own resolution so the result is pixel-exact instead of
+  // a 480x270 buffer blown up 2x. A heavy stack steps down instead of overrunning.
+  const scale = count >= 6 ? 0.6 : count >= 4 ? 0.75 : 1;
+  const ww = Math.max(160, Math.round(w * scale));
+  const wh = Math.max(90, Math.round(h * scale));
 
   if (!depthWorkCanvas) depthWorkCanvas = document.createElement('canvas');
   depthWorkCanvas.width = ww;
@@ -3851,7 +4066,7 @@ function applyDepthStack(ctx, w, h, t) {
   } catch (_e) {
     return;
   }
-  const depthAt = DEPTH_ENGINE.resizeDepth(d.map, d.mapW || MASK_W, d.mapH || MASK_H, ww, wh);
+  const depthAt = DEPTH_ENGINE.resizeDepth(d.map, d.mapW || DEPTH_W, d.mapH || DEPTH_H, ww, wh);
   let out;
   try {
     out = DEPTH_ENGINE.apply(src, depthAt, effects, {
@@ -3877,8 +4092,8 @@ function drawDepthOverlay(ctx, w, h) {
   const d = state.depth;
   if (!d || !d.map || d.view === 'off' || !window.DEPTH_ENGINE) return;
   if (!depthGrayCanvas) depthGrayCanvas = document.createElement('canvas');
-  const mw = d.mapW || MASK_W;
-  const mh = d.mapH || MASK_H;
+  const mw = d.mapW || DEPTH_W;
+  const mh = d.mapH || DEPTH_H;
   depthGrayCanvas.width = mw;
   depthGrayCanvas.height = mh;
   const gctx = depthGrayCanvas.getContext('2d');
@@ -4021,8 +4236,8 @@ function depthExportPng() {
     canvas.width = W;
     canvas.height = H;
     const cctx = canvas.getContext('2d');
-    const mw = d.mapW || MASK_W;
-    const mh = d.mapH || MASK_H;
+    const mw = d.mapW || DEPTH_W;
+    const mh = d.mapH || DEPTH_H;
     const small = document.createElement('canvas');
     small.width = mw;
     small.height = mh;
@@ -4053,15 +4268,22 @@ function depthLoadFile(file) {
   const img = new Image();
   img.onload = () => {
     try {
+      // Keep the map's own detail (it is usually 1080p or better). Only very
+      // large maps get capped, and always by width so the aspect stays right.
+      const nativeW = img.naturalWidth || img.width || DEPTH_W;
+      const nativeH = img.naturalHeight || img.height || DEPTH_H;
+      const scale = Math.min(1, DEPTH_UPLOAD_MAX / Math.max(1, nativeW));
+      const mw = Math.max(2, Math.round(nativeW * scale));
+      const mh = Math.max(2, Math.round(nativeH * scale));
       const canvas = document.createElement('canvas');
-      canvas.width = MASK_W;
-      canvas.height = MASK_H;
+      canvas.width = mw;
+      canvas.height = mh;
       const cctx = canvas.getContext('2d');
-      cctx.drawImage(img, 0, 0, MASK_W, MASK_H);
-      const idata = cctx.getImageData(0, 0, MASK_W, MASK_H);
-      d.loadedMap = DEPTH_ENGINE.fromGray({ data: idata.data, width: MASK_W, height: MASK_H }, d.invert);
-      d.mapW = MASK_W;
-      d.mapH = MASK_H;
+      cctx.drawImage(img, 0, 0, mw, mh);
+      const idata = cctx.getImageData(0, 0, mw, mh);
+      d.loadedMap = DEPTH_ENGINE.fromGray({ data: idata.data, width: mw, height: mh }, d.invert);
+      d.loadedMapW = mw;
+      d.loadedMapH = mh;
       d.source = 'upload';
       depthRescan();
       showToast('Depth map loaded — effects are now driven by your map', 'ok');
@@ -4182,6 +4404,17 @@ function initDepthTab() {
 
   const rescan = document.getElementById('depthRescanBtn');
   if (rescan) rescan.addEventListener('click', () => depthRescan());
+  const liveBtn = document.getElementById('depthLiveBtn');
+  if (liveBtn) {
+    liveBtn.addEventListener('click', () => {
+      d.live = !d.live;
+      depthSyncUI();
+      if (d.live) depthRescan();
+      showToast(d.live
+        ? 'Live depth on — the map follows the current frame'
+        : 'Live depth off — the map stays where you scanned it');
+    });
+  }
   const exportBtn = document.getElementById('depthExportBtn');
   if (exportBtn) exportBtn.addEventListener('click', depthExportPng);
   const applyAll = document.getElementById('depthApplyAllBtn');
@@ -5186,8 +5419,7 @@ function initMonitorAndTimeline() {
   const lyricsToggleBtn = document.getElementById('toggleLyricsOverlayBtn');
   if (lyricsToggleBtn) {
     lyricsToggleBtn.addEventListener('click', () => {
-      state.showLyricsOverlay = !state.showLyricsOverlay;
-      applyLyricsState(true);
+      setLyricsOverlay(!state.showLyricsOverlay);
       if (!state.showLyricsOverlay) renderTimelineTracks();
     });
   }
@@ -5207,6 +5439,12 @@ function initMonitorAndTimeline() {
   const scrubber = document.getElementById('timelineScrubber');
   scrubber.addEventListener('input', (e) => {
     state.playheadSec = (Number(e.target.value) / 1000) * state.totalDurSec;
+    const vid = document.getElementById('customVideoElement');
+    const dur = vid ? Number(vid.duration) : 0;
+    if (vid && state.scene === 'custom_video' && Number.isFinite(dur) && dur > 0.05) {
+      try { vid.currentTime = state.playheadSec % dur; } catch (_e) { /* ignore */ }
+    }
+    if (state.depth) depthRescan({ silent: true, timeSec: state.playheadSec });
   });
 
   document.getElementById('clearVfxTrackBtn').addEventListener('click', () => {
@@ -5315,6 +5553,7 @@ function renderLivePreviewLoop(now) {
   document.getElementById('viewerTimecode').textContent = `01:00:${ss}:${ff}`;
   document.getElementById('transportDurLabel').textContent = `${state.playheadSec.toFixed(1)}s / ${state.totalDurSec.toFixed(1)}s`;
 
+  depthLiveTick(now);
   drawMonitorFrame(state.motion ? now / 1000 : state.frozenTime);
   requestAnimationFrame(renderLivePreviewLoop);
 }
@@ -5327,6 +5566,34 @@ function captureFrozenTime(nowSec) {
 
 // Applies the Motion button + body class. Turning motion back on resumes from
 // the frozen frame instead of jumping to a random beat.
+function videoHasSource(vid) {
+  if (!vid) return false;
+  if (vid.currentSrc) return true;
+  if (vid.src) return true;
+  const attr = vid.getAttribute && vid.getAttribute('src');
+  return !!attr;
+}
+
+function syncVideoTransport() {
+  const vid = document.getElementById('customVideoElement');
+  if (!vid || vid.tagName !== 'VIDEO') return;
+  // Nothing loaded yet: calling pause() on an empty element is pointless noise.
+  if (!videoHasSource(vid)) return;
+  if (!state.motion) {
+    // Pause the media element itself. Freezing the shader clock alone left the
+    // <video> playing underneath, so the monitor kept moving when paused.
+    try { vid.pause(); } catch (_e) { /* not seekable yet */ }
+    return;
+  }
+  if (state.scene !== 'custom_video') return;
+  const dur = Number(vid.duration);
+  if (Number.isFinite(dur) && dur > 0.05) {
+    try { vid.currentTime = state.playheadSec % dur; } catch (_e) { /* ignore */ }
+  }
+  const p = vid.play();
+  if (p && p.catch) p.catch(() => {});
+}
+
 function applyMotionState(persist) {
   const btn = document.getElementById('toggleMotionBtn');
   const play = document.getElementById('playPauseBtn');
@@ -5344,7 +5611,29 @@ function applyMotionState(persist) {
   } else if (typeof state.frozenTime !== 'number') {
     state.frozenTime = performance.now() / 1000;
   }
+  syncVideoTransport();
   if (persist) saveUiPrefs();
+}
+
+// The viewer-bar badge: names the active style when the overlay is on, and says
+// plainly when it is off instead of advertising a style that is not drawing.
+function refreshLyricsPill() {
+  const pill = document.getElementById('activeCapPill');
+  if (!pill) return;
+  if (!state.showLyricsOverlay) {
+    pill.textContent = 'LYRC: off';
+    pill.classList.add('is-off');
+    return;
+  }
+  pill.classList.remove('is-off');
+  const st = state.captionStyle || {};
+  const varTag = st.supportsVariation ? ` (Seed #${state.variationSeed})` : ' (Fixed)';
+  pill.textContent = `LYRC: ${st.name || 'Style'}${varTag}`;
+}
+
+function setLyricsOverlay(on, persist) {
+  state.showLyricsOverlay = !!on;
+  applyLyricsState(persist !== false);
 }
 
 function applyLyricsState(persist) {
@@ -5353,8 +5642,24 @@ function applyLyricsState(persist) {
     btn.textContent = state.showLyricsOverlay ? 'Lyrics: ON' : 'Lyrics: OFF';
     btn.classList.toggle('is-off', !state.showLyricsOverlay);
   }
+  // the switch at the top of 02 • LYRC drives the same state
+  const tabSwitch = document.getElementById('lyricsTabToggleBtn');
+  if (tabSwitch) {
+    tabSwitch.textContent = state.showLyricsOverlay ? 'Lyrics on monitor: ON' : 'Lyrics on monitor: OFF';
+    tabSwitch.classList.toggle('is-on', state.showLyricsOverlay);
+    tabSwitch.classList.toggle('is-off', !state.showLyricsOverlay);
+    tabSwitch.setAttribute('aria-pressed', state.showLyricsOverlay ? 'true' : 'false');
+  }
+  const tabHint = document.getElementById('lyricsTabHint');
+  if (tabHint) {
+    tabHint.textContent = state.showLyricsOverlay
+      ? 'Burned into the Live Preview and into every export.'
+      : 'Hidden — your footage plays clean. Turn it on when you want the typography.';
+  }
+  refreshLyricsPill();
   // keep the LYRC lane on the timeline strip in sync with the overlay
   document.body.classList.toggle('lyrics-off', !state.showLyricsOverlay);
+  renderTimelineTracks();
   if (persist) saveUiPrefs();
 }
 

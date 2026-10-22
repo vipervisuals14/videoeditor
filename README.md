@@ -297,6 +297,43 @@ layer 2 → Merge → … → MediaOut`, with every layer's opacity and blend op
 set, and a BezierSpline per animated layer. Distance/see-through rendering uses
 the browser's own compositing, so what you see is what the graph builds.
 
+## Depth map — real detail, and it follows the clip
+
+`06 • Depth Map` drives 11 effects from a depth map. Two things decide whether those effects
+look like a lens or like a smudge, and both were wrong before:
+
+| | Before | Now |
+|---|---|---|
+| Map resolution | 160×90 (shared with the Magic Mask buffer) | **480×270**, and a loaded map keeps its own detail up to 960 px |
+| Effect pass | 480×270, blown up to the monitor | the monitor's own resolution |
+| Freshness | built once when the tab opened | **`Live depth: ON`** re-estimates from the current frame |
+| Cost | 69 ms of main-thread work per estimate | the estimate runs in **`depth-live-worker.js`**, off-thread |
+
+The worker is a plain `importScripts('depth.js')` module: the panel posts a frame's RGBA buffer
+(transferred, not copied), the worker posts back a `Float32Array` depth map. If workers are
+unavailable (some `file://` setups, strict CSP), the panel falls back to a 320×180 estimate on
+the main thread every 260 ms — lower detail, still live.
+
+`Preview:` chooses what the monitor shows: **picture only** (default, so you see the graded
+result), **depth overlay**, the raw **depth map**, or **split compare**. Effects still run with
+the preview off.
+
+## Lyrics are opt-in
+
+The monitor used to start with LYRC typography already burned onto the picture, and a saved
+preference kept it that way. Now the overlay starts **off**: footage plays clean until you ask
+for text. Two switches drive the same state — **`Lyrics on monitor: OFF / ON`** at the top of
+`02 • LYRC Typography`, and **`Lyrics: OFF`** in the viewer bar. The viewer badge reads
+`LYRC: off` rather than naming a style that is not drawing. Saved preferences from before this
+change are ignored once (they all said "on"), so the new default actually takes effect.
+
+## The pause button pauses the video
+
+`Pause` freezes the shader clock, the beat pulse, the lyric animation **and the `<video>`
+element itself**. Freezing only the clock left the media playing underneath, so an imported clip
+kept running on the monitor while the panel claimed to be paused. Play resumes the element at
+the playhead position; dragging the scrubber seeks the video and refreshes the depth map.
+
 ## Magic Mask (Resolve Free has no Magic Mask — so the panel builds one)
 
 `05 • Magic Mask` reproduces the Studio-only click-to-matte workflow and ships the result as
@@ -326,9 +363,18 @@ real mailbox protocol inside LuaJIT, and `tools/e2e_sim.py` dispatches it over H
 
 | Suite | Command | Result |
 | --- | --- | --- |
-| Bridge scenarios (mock Resolve/Fusion, real bridge) | `/tmp/luaenv/bin/python tools/test_bridge.py --verbose` | **16/16** |
-| End-to-end (real server + real bridge + real prefs mailbox) | `/tmp/luaenv/bin/python tools/e2e_sim.py --verbose` | **22/22** |
-| Panel DOM suite (jsdom) | `timeout 200 node /tmp/domtest/run.js` | **13 PASS**, 72 presets, 0 failures |
+| Bridge scenarios (mock Resolve/Fusion, real bridge) | `/tmp/luaenv/bin/python tools/test_bridge.py --verbose` | **25/25** |
+| End-to-end (real server + real bridge + real prefs mailbox) | `/tmp/luaenv/bin/python tools/e2e_sim.py --verbose` | **43/43** |
+| Web-build smoke (every panel, every tab, zero console errors) | `node /tmp/domtest/smoke.js` | pass |
+| 4K render bay (import metadata, tiling, memory guard, ZIP, native snippet) | `node /tmp/domtest/render.js` | pass |
+| **Pixel suite** (real 2D canvas: lyrics, depth, transport, every effect) | `node /tmp/domtest/visual.js` | pass |
+| **Live-depth worker** (protocol, transferable buffer, map range) | `node /tmp/domtest/liveworker.js` | pass |
+| Effect layers · Depth · Magic Mask · 72 presets | `/tmp/domtest/{layers,depth,mask,presets}.js` | pass |
+
+The pixel suite is the one that matters for "does it actually look right": it backs every
+`<canvas>` with a real 2D rasteriser (Skia via `@napi-rs/canvas`), loads the unmodified
+`app.js`, draws the monitor at known timestamps and compares pixels. That is how the
+regressions below were caught — a stubbed canvas happily passes while the picture is wrong.
 
 `tools/e2e_sim.py` boots a throwaway `server.js` against a fake Mac home
 (`VFXKIT_HOME`) plus `tools/mock_resolve_daemon.py`, which runs the **unmodified bridge**

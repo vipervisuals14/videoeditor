@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'dist-web');
 
-const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'depth.js', 'render.js', 'lua-export.js'];
+const PUBLIC_FILES = ['index.html', 'app.js', 'styles.css', 'touchdesigner.js', 'depth.js', 'depth-live-worker.js', 'render.js', 'lua-export.js'];
 
 // index.html is shared with the local server build (absolute /paths). The web
 // build only rewrites those, so both variants stay in sync from one source.

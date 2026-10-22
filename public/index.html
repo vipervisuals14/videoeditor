@@ -270,6 +270,16 @@
             </div>
           </div>
 
+          <!-- OVERLAY SWITCH: lyrics are opt-in, so the tab says so up front -->
+          <div class="lyrc-overlay-bar">
+            <div class="lyrc-overlay-copy">
+              <strong>Kinetic typography on the monitor</strong>
+              <span id="lyricsTabHint">Hidden — your footage plays clean. Turn it on when you want the typography.</span>
+            </div>
+            <button class="lyrc-overlay-switch is-off" id="lyricsTabToggleBtn" aria-pressed="false"
+                    title="Show or hide LYRC typography on the Live Preview and in exports">Lyrics on monitor: OFF</button>
+          </div>
+
           <!-- LYRC SONG TEMPLATE & VARIATION BAR -->
           <div class="lyrc-template-bar">
             <div class="lyrc-template-info">
@@ -667,6 +677,7 @@
               <option value="split">Preview: split compare</option>
             </select>
             <input type="file" id="depthUploadInput" accept="image/*" hidden />
+            <button class="btn-mini is-on" id="depthLiveBtn" title="Re-read the current frame while the clip plays, so the depth map always matches what you see">Live depth: ON</button>
             <button class="btn-mini" id="depthInvertBtn" title="Flip near and far">Invert: OFF</button>
             <button class="btn-mini" id="depthExportBtn" title="Save the depth map as a grayscale PNG (white = near)">⬇ Depth .PNG</button>
           </div>

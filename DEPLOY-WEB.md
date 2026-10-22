@@ -11,11 +11,11 @@ DaVinci Resolve.
 | Feature | Desktop build (bridge) | **Web build** |
 | --- | --- | --- |
 | 72 live effect cards + shaders | yes | **yes** — identical code, runs in your browser |
-| Magic Mask, Depth Map, Effect Layers | yes | **yes** |
+| Magic Mask, Depth Map, Effect Layers | yes | **yes** — depth runs live in a background worker |
 | 4K import + 4K still / PNG-sequence export | yes | **yes** — rendered in your browser, nothing uploaded |
 | Native 4K final render (ProRes/DNxHR) | yes, one click | **yes, one paste** — sets your project to 3840×2160 and Resolve renders |
 | Intensity sliders 0–200% + keyframe curve editor | yes | **yes** |
-| 20 LYRC lyric styles, variation, 9:16 / 16:9 | yes | **yes** |
+| 20 LYRC lyric styles, variation, 9:16 / 16:9 | yes | **yes** — lyrics start **off**, switch them on in `02 • LYRC` |
 | Cut Silences / Media Pool auto-editor UI | yes | **yes** (the panel's own timeline preview) |
 | **Applying to your Resolve timeline** | one click, via the local bridge | **one paste** into `Workspace ▸ Console` |
 | Reading your real bins/clips | automatic | not possible from a browser (paste **Scan** Lua is read-only, see below) |
