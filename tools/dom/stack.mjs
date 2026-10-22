@@ -95,6 +95,12 @@ check('each layer carries a native recipe to build', () => {
   return layers.every((l) => l.recipe && Array.isArray(l.recipe.chain) && l.recipe.chain.length > 0)
     ? true : 'a layer is missing its chain';
 });
+check('the recipe is the look\'s own graph, not the generic fallback', () => {
+  const layers = (payload && payload.payload && payload.payload.layers) || [];
+  const tools = layers.flatMap((l) => (l.recipe.chain || []).map((s) => (typeof s === 'string' ? s : s.tool)));
+  const real = tools.filter((t) => t !== 'BrightnessContrast');
+  return real.length >= 2 ? true : `every chain fell back to BrightnessContrast (${tools.join(',')})`;
+});
 check('the send asks Resolve to replace our old nodes', () =>
   !!(payload && payload.payload && payload.payload.replace === true));
 
@@ -123,6 +129,9 @@ check('Clear empties the stack', () =>
   $$('#stackChips .stack-chip').length === 0 && $('#stackSummary').textContent === 'Nothing stacked yet');
 check('Clear does not touch the timeline', () => $$('#laneV3 .tl-clip').length === 1);
 
+// ---- the static path: no backend, so the panel must hand you real Lua -----
+check('the console generator is loaded', () => typeof window.LUA_EXPORT === 'object', 'LUA_EXPORT missing');
+check('the panel reports web mode when no server answers', () => String(window.document.getElementById('bridgeStatusText').textContent).length > 0);
 check.summary('stack/shell');
 window.close();
 process.exit(process.exitCode || 0);

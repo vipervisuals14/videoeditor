@@ -40,7 +40,7 @@ function rewriteHtml(html) {
     .replace(/\/download\/bridge\.lua/g, 'VFXKit_ResolveFree_Bridge.lua')
     .replace(
       '<script src="touchdesigner.js"></script>',
-      '<script src="web-config.js"></script>\n  <script src="lua-export.js"></script>\n  <script src="touchdesigner.js"></script>'
+      '<script src="web-config.js"></script>\n  <script src="touchdesigner.js"></script>'
     );
 }
 
@@ -74,7 +74,10 @@ async function main() {
   );
 
   // the panel reads its native Fusion graphs from here (same file the bridge uses)
+  // The same graph table the Node server serves, so the panel can build real
+  // Fusion chains even when it is opened as plain files with no backend.
   await cp(path.join(ROOT, 'resolve-bridge', 'preset-recipes.json'), path.join(OUT, 'preset-recipes.json'));
+  await cp(path.join(ROOT, 'resolve-bridge', 'preset-recipes.json'), path.join(ROOT, 'public', 'preset-recipes.json'));
 
   // so the "Download Bridge .lua" links keep working on the hosted site
   await cp(

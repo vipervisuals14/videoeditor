@@ -926,6 +926,8 @@ async function initBackend() {
 // Same lookup + fallback the Node server uses, so a card always gets a graph.
 function recipeForLocal(presetId, category) {
   const all = state.recipes && state.recipes.recipes ? state.recipes.recipes : null;
+  // The graph table is keyed by effectType (opt_halation), while a card carries
+  // its own id (opt_500t_halation). Both are tried before falling back.
   if (all && presetId && all[presetId]) return all[presetId];
   if (!category) return null;
   return {
@@ -3332,7 +3334,8 @@ function renderEffectLayers(ctx, w, h, t, onBeatPulse, grainAmount) {
 // ---------------------------------------------------------------------- rack
 
 function layerPayload(layer) {
-  const recipe = recipeForLocal(layer.presetId, layer.category);
+  const recipe = recipeForLocal(layer.effectType || layer.presetId, layer.category)
+    || recipeForLocal(layer.presetId, layer.category);
   const keys = (layer.keys || []).slice().sort((a, b) => a.sec - b.sec);
   return {
     id: layer.id,

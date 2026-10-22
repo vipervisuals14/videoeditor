@@ -59,6 +59,17 @@ export function boot({ html = path.join(PUB, 'index.html') } = {}) {
     let body = null;
     try { body = opts.body ? JSON.parse(opts.body) : null; } catch { body = opts.body; }
     calls.push({ url: String(url), method: opts.method || 'GET', body });
+    // serve the real graph table so the panel builds real chains, not fallbacks
+    if (/preset-recipes\.json/.test(String(url))) {
+      const file = path.join(PUB, 'preset-recipes.json');
+      if (fs.existsSync(file)) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: () => Promise.resolve(JSON.parse(fs.readFileSync(file, 'utf8'))),
+          text: () => Promise.resolve(fs.readFileSync(file, 'utf8'))
+        });
+      }
+    }
     return Promise.resolve({
       ok: true,
       status: 200,
@@ -99,7 +110,7 @@ export function boot({ html = path.join(PUB, 'index.html') } = {}) {
     .map((s) => s.getAttribute('src'))
     .filter((src) => src && !/^https?:/.test(src));
   for (const src of scripts) {
-    const file = path.join(PUB, src.replace(/^\.?\//, ''));
+    const file = path.join(PUB, src.replace(/^\.?\//, '').split('?')[0]);
     if (!fs.existsSync(file)) continue;
     try {
       window.eval(fs.readFileSync(file, 'utf8'));
